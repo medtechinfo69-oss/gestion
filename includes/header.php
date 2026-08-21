@@ -16,6 +16,7 @@ $user = current_user();
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= e($pageTitle) ?> · <?= e(APP_NAME) ?></title>
+<link rel="icon" type="image/jpeg" href="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg">
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= (int) filemtime(__DIR__ . '/../assets/css/style.css') ?>">
 </head>
 <body class="<?= defined('SECURITY_MODE') && SECURITY_MODE ? 'security-mode' : '' ?>">
@@ -38,7 +39,7 @@ $user = current_user();
 
     <nav class="nav-group">
       <a href="<?= e(APP_URL) ?>/dashboard.php" class="nav-item <?= $activePage === 'dashboard' ? 'active' : '' ?>">
-        <span class="ico">&#9635;</span> Tableau de bord
+        <span class="ico">&#128202;</span> Tableau de bord
       </a>
       <a href="<?= e(APP_URL) ?>/dossiers.php" class="nav-item <?= $activePage === 'dossiers' ? 'active' : '' ?>">
         <span class="ico">&#128193;</span> Dossiers
@@ -55,7 +56,7 @@ $user = current_user();
       <?php if (is_admin()): ?>
         <div class="nav-label">Administration</div>
         <a href="<?= e(APP_URL) ?>/vendeurs.php" class="nav-item <?= $activePage === 'vendeurs' ? 'active' : '' ?>">
-          <span class="ico">&#128101;</span> Vendeurs
+          <span class="ico ico-vendeur" aria-hidden="true"></span> Vendeurs
         </a>
       <?php endif; ?>
 

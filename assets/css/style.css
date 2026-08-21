@@ -245,6 +245,28 @@ p { margin: 0 0 1em; }
   border-radius: 0 3px 3px 0;
 }
 .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
+.nav-item .ico-vendeur {
+  width: 18px;
+  height: 18px;
+  position: relative;
+  flex-shrink: 0;
+}
+.ico-vendeur::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 5px 5px, currentColor 0 3px, transparent 3.5px),
+    radial-gradient(circle at 13px 5px, currentColor 0 3px, transparent 3.5px);
+}
+.ico-vendeur::after {
+  content: '';
+  position: absolute;
+  inset: 8px 0 0;
+  background:
+    radial-gradient(ellipse at 5px 9px, currentColor 0 6px, transparent 6.5px),
+    radial-gradient(ellipse at 13px 9px, currentColor 0 6px, transparent 6.5px);
+}
 
 .sidebar-footer {
   padding: 14px 20px 18px;
