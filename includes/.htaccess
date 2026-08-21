@@ -1,0 +1,3 @@
+# Ces fichiers sont uniquement destinés à être inclus par les scripts PHP
+# de l'application ; ils ne doivent jamais être accessibles directement.
+Require all denied

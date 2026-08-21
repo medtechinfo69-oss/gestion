@@ -1,0 +1,6 @@
+# Les fichiers téléversés ne sont JAMAIS servis directement : ils
+# transitent uniquement par actions/attachment_download.php, qui
+# vérifie les droits d'accès de l'utilisateur avant de les délivrer.
+# Ceci empêche également toute exécution de script malveillant qui
+# aurait pu être déposé dans ce dossier.
+Require all denied

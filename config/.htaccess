@@ -1,0 +1,4 @@
+# Empêche tout accès direct aux fichiers de configuration
+# (les identifiants de base de données ne doivent jamais être servis
+# directement, même par erreur).
+Require all denied

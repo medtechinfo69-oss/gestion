@@ -1,0 +1,13 @@
+# Local secrets and environment files
+config/config.php
+.env
+
+# Runtime data
+logs/*.log
+uploads/dossiers/*
+!uploads/dossiers/index.php
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/

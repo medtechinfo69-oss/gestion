@@ -1,0 +1,22 @@
+# =====================================================================
+# Gestion des Dossiers — .htaccess racine
+# =====================================================================
+
+# Désactive l'affichage du contenu des dossiers
+Options -Indexes
+
+# Empêche l'accès direct aux fichiers sensibles
+<FilesMatch "\.(sql|md|log|env)$">
+    Require all denied
+</FilesMatch>
+
+# En-têtes de sécurité (redondants avec les en-têtes PHP, utile si des
+# fichiers statiques sont servis directement par Apache)
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Désactive la signature du serveur
+ServerSignature Off
