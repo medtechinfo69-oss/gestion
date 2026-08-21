@@ -26,6 +26,42 @@ function import_date_value(string $value): string
     return $value;
 }
 
+function import_vendeur_id(PDO $db, string $sellerName, array &$vendeursByName): int
+{
+    $key = import_normalize_header($sellerName);
+    if ($key === '') {
+        return 0;
+    }
+    if (isset($vendeursByName[$key])) {
+        return $vendeursByName[$key];
+    }
+
+    $baseUsername = strtolower(preg_replace('/[^a-z0-9]+/i', '.', iconv('UTF-8', 'ASCII//TRANSLIT', $sellerName)) ?: 'vendeur');
+    $baseUsername = substr(trim($baseUsername, '.') ?: 'vendeur', 0, 50);
+    $username = $baseUsername;
+    $suffix = 2;
+    while (true) {
+        $check = $db->prepare('SELECT id FROM users WHERE username = :username');
+        $check->execute(['username' => $username]);
+        if (!$check->fetchColumn()) {
+            break;
+        }
+        $username = $baseUsername . $suffix++;
+    }
+
+    $stmt = $db->prepare(
+        'INSERT INTO users (username, password_hash, role, nom_complet, email, is_active, must_change_password)
+         VALUES (:username, :password_hash, "vendeur", :nom_complet, NULL, 0, 0)'
+    );
+    $stmt->execute([
+        'username' => $username,
+        'password_hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+        'nom_complet' => $sellerName,
+    ]);
+    $vendeursByName[$key] = (int) $db->lastInsertId();
+    return $vendeursByName[$key];
+}
+
 function import_xlsx_rows(string $path): array
 {
     if (!class_exists('ZipArchive')) {
@@ -156,20 +192,20 @@ try {
         }
     }
 
-    $vendeurs = $db->query("SELECT id, nom_complet FROM users")->fetchAll(PDO::FETCH_KEY_PAIR);
+    $vendeurs = $db->query("SELECT id, nom_complet FROM users WHERE role = 'vendeur'")->fetchAll(PDO::FETCH_KEY_PAIR);
     $vendeursByName = [];
     foreach ($vendeurs as $id => $name) {
         $vendeursByName[import_normalize_header($name)] = (int) $id;
     }
     $prepared = [];
     $errors = [];
+    $db->beginTransaction();
     foreach (array_slice($rows, 1) as $offset => $row) {
         $line = $offset + 2;
         $sellerName = import_cell($row, $indexes, 'Vendeur');
-        $sellerId = $vendeursByName[import_normalize_header($sellerName)] ?? 0;
+        $sellerId = import_vendeur_id($db, $sellerName, $vendeursByName);
         $courrierText = import_cell($row, $indexes, 'Courrier');
         $courrier = array_values(array_filter(array_map('trim', preg_split('/[,;|]+/', $courrierText) ?: [])));
-        $courrier = array_values(array_intersect(options_courrier(), $courrier));
         $post = [
             'vendeur_id' => $sellerId, 'ta_origine' => import_cell($row, $indexes, 'Origine'), 'p_prod' => import_cell($row, $indexes, 'Prod'),
             'date_vente' => import_date_value(import_cell($row, $indexes, 'Date vente')), 'civilite' => import_cell($row, $indexes, 'Civilité'),
@@ -194,7 +230,6 @@ try {
         throw new RuntimeException(implode(' ', array_slice($errors, 0, 8)) . (count($errors) > 8 ? ' D’autres erreurs existent.' : ''));
     }
 
-    $db->beginTransaction();
     foreach ($prepared as $data) {
         import_insert_row($db, $data, (int) current_user()['id']);
     }

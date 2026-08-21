@@ -201,8 +201,10 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
 
     $data['ta_origine'] = clean_str($post['ta_origine'] ?? '');
     $legacyOrigins = ['5ASSUR', '5 ASSUR', 'TRANSFERT', 'PARRAINAGE', 'FICHE PERSO'];
-    if (!in_array($data['ta_origine'], origines_valides(), true)
-        && !($allowImportCompatibility && in_array($data['ta_origine'], $legacyOrigins, true))) {
+    $originIsValid = $allowImportCompatibility
+        ? $data['ta_origine'] !== '' && mb_strlen($data['ta_origine']) <= 255
+        : in_array($data['ta_origine'], origines_valides(), true);
+    if (!$originIsValid && !($allowImportCompatibility && in_array($data['ta_origine'], $legacyOrigins, true))) {
         $errors['ta_origine'] = 'Origine invalide.';
     }
     $data['p_prod'] = clean_str($post['p_prod'] ?? '');
@@ -304,7 +306,11 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     }
 
     $courrier = $post['courrier'] ?? [];
-    $courrier = is_array($courrier) ? array_values(array_intersect(options_courrier(), array_map('clean_str', $courrier))) : [];
+    $courrier = is_array($courrier) ? array_map('clean_str', $courrier) : [];
+    if (!$allowImportCompatibility) {
+        $courrier = array_values(array_intersect(options_courrier(), $courrier));
+    }
+    $courrier = array_values(array_filter(array_unique($courrier), static fn (string $value): bool => $value !== ''));
     $data['courrier'] = json_encode(array_values(array_unique($courrier)), JSON_UNESCAPED_UNICODE);
     $data['etat_dossier'] = etat_dossier_from_courrier($courrier);
 
