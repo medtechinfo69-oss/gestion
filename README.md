@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # gestion
 =======
 # Gestion des Dossiers
@@ -233,4 +232,4 @@ vraie base MySQL et un vrai serveur Apache (règles `.htaccess` incluses) :
   les fichiers `.htaccess` — utilisez toujours Apache, comme fourni par
   XAMPP, pour tester ou exploiter cette protection).
 - Création d'un vendeur sans accès de connexion.
->>>>>>> 8b06129 (Initial project import)
+
