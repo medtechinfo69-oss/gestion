@@ -1,81 +1,150 @@
-# gestion
-=======
 # Gestion des Dossiers
 
-Application web de gestion des dossiers d'assurance, développée pour remplacer
-le classeur Excel `gestion_dossiers_final.xlsm`. Reprend l'intégralité des
-règles métier identifiées dans le classeur d'origine :
+Application PHP/MySQL de gestion des dossiers d'assurance.
 
-- Fiche dossier complète (vendeur, assuré, coordonnées, contrat, commentaire).
-- **Numéro de portable unique** entre tous les dossiers (règle de validation
-  Excel `COUNTIF(...)=1` reproduite côté serveur ET en base via une contrainte
-  `UNIQUE`).
-- **Courrier** avec les cases `Résiliation`, `RIB`, `Devoir de conseil` et
-  `Consentement`. Les quatre cases donnent automatiquement `Dossier complet`,
-  sinon `Dossier incomplet`.
-- **État du contrat** limité à `Actif`, `Renonciation`, `Résiliation infra-annuelle`,
-  `Résiliation à échéance`, `Radié pour non-paiement` et `CSS`. Les contrats
-  non actifs apparaissent dans `Dossiers annulés`.
-- **CA annuel = CA mensuel × 12**, calculé automatiquement (modifiable si besoin).
-- Bloc **statistiques** : total du CA annuel hors dossiers annulés, nombre de
-  dossiers complets / non complets / annulés — global et par vendeur.
-- Vue dédiée **« Dossiers annulés »**, équivalent de l'onglet `Annulation`.
-- Un vendeur est un contact sans accès, enregistré avec son nom et son e-mail.
-- Les superviseurs voient tous les dossiers et peuvent uniquement modifier
-  `Courrier` et `Commentaire dossier`. `État du dossier` est calculé automatiquement.
+Stack : PHP natif, PDO MySQL, HTML/CSS/JavaScript natif et Apache.
 
-Stack : **HTML / CSS / JavaScript natif / PHP natif (aucun framework) / MySQL**.
+## 1. Deployer sur InfinityFree
 
----
+### 1.1 Creer la base de donnees
 
-## 1. Structure du projet
+Dans le panneau InfinityFree :
 
+1. Ouvrez **MySQL Databases**.
+2. Creez une base de donnees.
+3. Notez le nom de la base, l'utilisateur, le mot de passe, le hostname MySQL
+   et le port indique par l'hebergeur (habituellement `3306`).
+4. N'utilisez pas `localhost` sauf si InfinityFree l'indique explicitement.
+
+Valeurs fournies pour ce site :
+
+```text
+Site : https://gestionassur.rf.gd/
+Utilisateur : if0_42713899
+Hostname : sql301.infinityfree.com
+Port : 3306
+Base : if0_42713899_gestion_dossiers
+Mot de passe : a saisir uniquement dans config/config.php
 ```
-gestion-dossiers/
-├── actions/            Scripts de traitement des formulaires (POST uniquement)
-├── assets/              CSS et JavaScript
-├── config/               Configuration (protégée, non accessible par le web)
-├── database/            Scripts SQL d'installation
-├── includes/             Fonctions PHP partagées (protégées)
-├── *.php                 Pages de l'application
-└── .htaccess             Règles de sécurité Apache
 
----
-## 2. Installation locale avec XAMPP
+Le mot de passe MySQL ne doit jamais etre committe dans GitHub, dans ce
+README, ni dans une capture d'ecran. Comme il a ete partage dans un fichier,
+changez-le dans InfinityFree avant la mise en production si possible. Les
+champs du fichier fourni semblaient inverses : `sql301.infinityfree.com` est
+utilise comme hostname et l'autre valeur comme mot de passe. Confirmez ces
+valeurs dans le panneau InfinityFree avant de televerser la configuration.
 
-- Extensions PHP requises (activées par défaut sur XAMPP) : `pdo_mysql`,
-Copiez le dossier `gestion-dossiers` complet dans le répertoire web de XAMPP :
+### 1.2 Importer la base avec phpMyAdmin
 
-- Windows : `C:\xampp\htdocs\gestion-dossiers`
-- macOS : `/Applications/XAMPP/htdocs/gestion-dossiers`
+InfinityFree ne permet generalement pas a un script SQL de creer une base ou
+un utilisateur. Le fichier `database/install.sql` contient des commandes
+locales `CREATE DATABASE`, `CREATE USER`, `GRANT` et `USE` qui peuvent etre
+refusees sur un hebergement mutualise.
 
-### Étape 2 — Créer la base de données
-1. Démarrez **Apache** et **MySQL** depuis le panneau de contrôle XAMPP.
-2. Ouvrez **phpMyAdmin** (`http://localhost/phpmyadmin`).
-3. Onglet **SQL**, collez le contenu du fichier `database/install.sql`, puis
-   exécutez. Cela crée :
-   - la base `gestion_dossiers` ;
-   - toutes les tables ;
-   - un compte MySQL applicatif dédié `gestion_app` (mot de passe
-     `ChangeMoi_2026!`) avec des droits limités à cette seule base ;
-   - un compte administrateur, Emma et Rabia comme superviseurs, et des
-     vendeurs de démonstration sans accès.
-4. *(Optionnel)* Pour tester avec des données d'exemple, exécutez ensuite le
-   contenu de `database/seed_demo_data.sql`.
+Dans phpMyAdmin InfinityFree :
 
-Pour une base déjà installée, exécutez aussi `database/migrate_superviseurs_vendeurs.sql`
-dans phpMyAdmin. Cette migration désactive les anciens comptes vendeurs et crée Emma
-et Rabia comme superviseurs.
+1. Selectionnez `if0_42713899_gestion_dossiers` dans la colonne de gauche.
+2. Ouvrez l'onglet **Importer**.
+3. Importez `database/install.sql`.
+4. Si l'import est refuse a cause de `CREATE DATABASE`, `CREATE USER`,
+   `GRANT` ou `USE`, ouvrez une copie du fichier et supprimez ces commandes :
 
-> **Remarque XAMPP** : si vous préférez utiliser directement le compte
-> `root` (mot de passe vide) pour aller plus vite en test local, ouvrez
-> `config/config.php` et remplacez `DB_USER`/`DB_PASS` par `'root'` et `''`.
-> Pour un usage au-delà d'un simple test, gardez le compte dédié `gestion_app`
-> (bonne pratique de sécurité : l'application ne doit jamais se connecter
-> avec un compte administrateur de la base).
+```sql
+CREATE DATABASE IF NOT EXISTS `gestion_dossiers` ...;
+USE `gestion_dossiers`;
+CREATE USER ...;
+GRANT ...;
+FLUSH PRIVILEGES;
+```
 
-### Étape 3 — Vérifier la configuration
-Ouvrez `config/config.php` et vérifiez :
+5. Relancez l'import avec la base deja selectionnee.
+6. Verifiez la presence des tables `users`, `dossiers`,
+   `dossier_historique`, `dossier_attachments` et `login_log`.
+
+`install.sql` installe le compte administrateur de demonstration. Connectez-
+vous avec `admin` et `Admin@2026`, puis changez immediatement ce mot de passe.
+
+Les scripts `database/seed_demo_data.sql` et `database/migrate_*.sql` sont
+optionnels. Importez-les uniquement apres `install.sql` et apres avoir verifie
+qu'ils correspondent a la structure de la base.
+
+### 1.3 Configurer la connexion PHP
+
+Sur le serveur, copiez `config/config.example.php` vers `config/config.php`,
+puis renseignez les valeurs InfinityFree :
+
+```php
+define('DB_HOST', 'sql301.infinityfree.com');
+define('DB_NAME', 'if0_42713899_gestion_dossiers');
+define('DB_USER', 'if0_42713899');
+define('DB_PASS', 'VOTRE_MOT_DE_PASSE_MYSQL');
+define('DB_CHARSET', 'utf8mb4');
+define('APP_URL', 'https://gestionassur.rf.gd');
+define('APP_ENV', 'production');
+```
+
+Points importants :
+
+- Utilisez le hostname MySQL affiche dans le panneau InfinityFree, meme s'il
+  semble inhabituel.
+- N'ajoutez pas de slash final a `APP_URL`.
+- Ne remplacez pas `DB_HOST` par `localhost` sans confirmation de l'hebergeur.
+- Ne televersez jamais `config/config.php` dans un depot public.
+- Si un mot de passe a deja ete committe, changez-le et retirez le secret de
+  l'historique Git.
+
+### 1.4 Televerser les fichiers
+
+Avec le gestionnaire de fichiers InfinityFree ou un client FTP :
+
+1. Televersez le contenu du projet dans le dossier web, souvent `htdocs/`.
+2. Placez `index.php` directement dans ce dossier, sauf installation dans un
+   sous-dossier.
+3. Televersez `config/config.php` configure pour la production.
+4. Conservez `assets/`, `actions/`, `includes/`, `uploads/` et `logs/`.
+5. Verifiez que `uploads/dossiers/` et `logs/` sont accessibles en ecriture
+   par PHP, selon les permissions autorisees par l'hebergeur.
+
+Si le site est installe dans un sous-dossier, adaptez par exemple :
+
+```php
+define('APP_URL', 'https://gestionassur.rf.gd/gestion-dossiers');
+```
+
+### 1.5 Verifier le site
+
+1. Ouvrez `https://gestionassur.rf.gd/`.
+2. Connectez-vous avec le compte administrateur initial.
+3. Changez son mot de passe.
+4. Testez la creation d'un dossier, une piece jointe et la deconnexion.
+5. Verifiez qu'un vendeur ne voit pas les boutons d'administration ou d'export.
+
+En cas d'erreur MySQL, comparez dans cet ordre avec le panneau InfinityFree :
+hostname, nom complet de la base, nom complet de l'utilisateur, mot de passe,
+port et permissions. N'utilisez pas les valeurs XAMPP locales en production.
+
+## 2. Deployer chez un autre hebergeur
+
+1. Creez une base MySQL et un utilisateur dans le panneau de l'hebergeur.
+2. Donnez a cet utilisateur les droits sur cette base.
+3. Selectionnez la base dans phpMyAdmin et importez `database/install.sql`.
+4. Si necessaire, supprimez du SQL les commandes `CREATE DATABASE`,
+   `CREATE USER`, `GRANT` et `USE`.
+5. Configurez `config/config.php` avec les valeurs de production.
+6. Televersez les fichiers dans le dossier web.
+7. Activez HTTPS et reglez `APP_URL` sur l'adresse publique exacte.
+8. Supprimez ou protegez `database/generate_password_hash.php` apres usage.
+
+Activez les extensions PHP `pdo_mysql`, `fileinfo` et `zip`, necessaires a la
+base de donnees, aux uploads et a l'export Excel.
+
+## 3. Installation locale avec XAMPP
+
+1. Copiez le projet dans `C:\xampp\htdocs\gestion-dossiers`.
+2. Demarrez Apache et MySQL.
+3. Ouvrez `http://localhost/phpmyadmin`.
+4. Executez `database/install.sql` depuis l'onglet **SQL**.
+5. Copiez `config/config.example.php` vers `config/config.php` et utilisez :
 
 ```php
 define('DB_HOST', 'localhost');
@@ -83,153 +152,29 @@ define('DB_NAME', 'gestion_dossiers');
 define('DB_USER', 'gestion_app');
 define('DB_PASS', 'ChangeMoi_2026!');
 define('APP_URL', 'http://localhost/gestion-dossiers');
-define('APP_ENV', 'development'); // repassez à 'production' avant mise en ligne
+define('APP_ENV', 'development');
 ```
 
-Adaptez `APP_URL` si vous avez copié le dossier sous un autre nom.
+6. Ouvrez `http://localhost/gestion-dossiers/`.
 
-### Étape 4 — Droits d'écriture
-Le dossier `uploads/dossiers/` doit être accessible en écriture par le
-serveur web (pièces jointes) :
+## 4. Securite avant la mise en production
 
-- Windows : généralement déjà correct par défaut avec XAMPP.
-- macOS/Linux : `chmod -R 755 uploads/ logs/`
+- Passez `APP_ENV` a `production`.
+- Changez le mot de passe administrateur de demonstration.
+- Utilisez un mot de passe MySQL unique et non partage.
+- Ne publiez jamais `config/config.php`, les mots de passe ou les exports.
+- Supprimez `database/generate_password_hash.php` apres utilisation.
+- Gardez HTTPS active et verifiez que `.htaccess` est pris en charge.
+- Faites une sauvegarde avant toute migration.
 
-### Étape 5 — Se connecter
-Rendez-vous sur `http://localhost/gestion-dossiers/`.
+## 5. Fichiers SQL
 
-**Comptes de démonstration** (mot de passe à changer à la première connexion) :
+| Fichier | Usage |
+|---|---|
+| `database/install.sql` | Tables et comptes initiaux |
+| `database/seed_demo_data.sql` | Donnees de demonstration optionnelles |
+| `database/migrate_courrier_etat_contrat.sql` | Migration de structure |
+| `database/migrate_superviseurs_vendeurs.sql` | Migration des roles et vendeurs |
 
-| Rôle          | Identifiant | Mot de passe   |
-|---------------|-------------|----------------|
-| Administrateur| `admin`     | `Admin@2026`   |
-| Superviseur   | `emma`      | `Superviseur@2026` |
-| Superviseur   | `rabia`     | `Superviseur@2026` |
-
-À la première connexion, un changement de mot de passe est **obligatoire**
-avant tout accès au reste de l'application.
-
----
-
-## 3. Utilisation
-
-### Administrateur
-- **Tableau de bord** : statistiques globales et par vendeur.
-- **Dossiers** : liste complète, recherche, filtres (état, vendeur,
-  compagnie, période), tri, pagination.
-- **Nouveau dossier / Modifier** : formulaire complet avec validation
-  (numéro de portable unique, champs obligatoires, calcul automatique du
-  CA annuel).
-- **Dossiers annulés** : vue dédiée avec motif d'annulation.
-- **Vendeurs** : création de nouveaux comptes vendeurs (identifiant + mot de
-  passe temporaire généré automatiquement et affiché une seule fois),
-  activation/désactivation, réinitialisation de mot de passe.
-- **Pièces jointes** : ajout/suppression de documents sur chaque dossier
-  (PDF, JPG, PNG, DOC, DOCX — 5 Mo maximum).
-- **Historique** : chaque création/modification de dossier est journalisée.
-
-### Superviseur
-- Accès en lecture à tous les dossiers et aux pièces jointes.
-- Peut uniquement modifier `Courrier` et `Commentaire dossier`.
-
----
-
-## 4. Sécurité mise en œuvre
-
-- **Injections SQL** : 100 % requêtes préparées PDO (`PDO::ATTR_EMULATE_PREPARES`
-  désactivé), aucune concaténation de valeurs utilisateur dans une requête.
-- **XSS** : toute donnée affichée passe par la fonction d'échappement `e()`
-  (`htmlspecialchars`) ; en-tête `Content-Security-Policy` appliqué.
-- **CSRF** : jeton unique par session, vérifié sur chaque formulaire POST.
-- **Mots de passe** : hachage `password_hash()` (bcrypt), jamais stockés en clair.
-- **Sessions** : cookies `HttpOnly`, `SameSite=Lax`, identifiant régénéré à la
-  connexion et périodiquement, expiration par inactivité.
-- **Brute force** : verrouillage temporaire d'un compte après 5 échecs de
-  connexion (15 minutes), journal des tentatives (`login_log`).
-- **Contrôle d'accès** : vérification du rôle sur chaque page et chaque
-  action serveur (jamais uniquement côté affichage) ; un vendeur ne peut
-  jamais accéder aux données d'un autre vendeur, y compris en devinant une URL.
-- **Upload de fichiers** : extension ET type MIME réel (`finfo`) vérifiés,
-  taille limitée, nom de fichier stocké aléatoire (jamais le nom d'origine),
-  fichiers stockés hors d'accès direct et livrés uniquement via un script
-  PHP qui revérifie les droits.
-- **En-têtes HTTP** : `X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy`, `Content-Security-Policy`, `Strict-Transport-Security`
-  (en production).
-- **Fichiers sensibles** : `config/`, `includes/`, `uploads/` et les fichiers
-  `.sql` sont bloqués par `.htaccess` (`Require all denied`) — testé et
-  vérifié en conditions réelles sous Apache.
-- **Compte base de données** : compte applicatif dédié aux droits limités
-  (`SELECT/INSERT/UPDATE/DELETE` uniquement sur la base concernée), et non
-  le compte administrateur MySQL.
-
----
-
-## 5. Passage en production
-
-1. Sur votre hébergement, créez une base MySQL et un utilisateur dédié
-   (privilèges minimaux) — adaptez `database/install.sql` si votre
-   hébergeur impose son propre nom de base/utilisateur.
-2. Copiez tous les fichiers du dossier `gestion-dossiers/` vers votre
-   répertoire web.
-3. Dans `config/config.php` :
-   - renseignez les identifiants de connexion à la base de production ;
-   - mettez `APP_URL` à l'adresse réelle du site (en `https://`) ;
-   - passez `APP_ENV` à `'production'` (désactive l'affichage des erreurs
-     PHP au public et active l'en-tête HSTS).
-4. Assurez-vous que le certificat HTTPS est actif (les cookies de session
-   passent alors automatiquement en mode sécurisé).
-5. Vérifiez que le module Apache `mod_headers` et le support des fichiers
-   `.htaccess` (`AllowOverride All`) sont actifs sur le serveur — sinon,
-   reportez manuellement les règles de `.htaccess` dans la configuration
-   du vhost.
-6. Changez immédiatement le mot de passe du compte `admin` de démonstration
-   (ou supprimez-le et créez votre propre compte administrateur directement
-   en base avec `database/generate_password_hash.php`).
-7. Supprimez ou protégez `database/generate_password_hash.php` après usage.
-
----
-
-## 6. Notes de conception
-
-- **Portable unique** : reprise exacte de la règle de validation de données
-  Excel `COUNTIF($J$2:$J$75,J2)=1`, appliquée à la fois côté formulaire
-  (message d'erreur clair) et par une contrainte `UNIQUE` en base (garantie
-  même en cas de contournement du formulaire).
-- **CA annuel automatique** : le classeur ne contenait pas de formule
-  explicite mais les données observées vérifient systématiquement
-  `CA-annuel = CA-mois × 12`. Le champ est pré-rempli automatiquement en
-  JavaScript et recalculé côté serveur si la valeur envoyée est absente ou
-  invalide, tout en restant modifiable pour les cas particuliers.
-- **Référentiel vendeurs** : remplace la macro VBA qui créait automatiquement
-  une feuille filtrée à chaque nouveau nom saisi. La page **Vendeurs** ajoute
-  maintenant un contact avec son nom et son e-mail, sans compte de connexion.
-- **Historique** et **pièces jointes** : fonctionnalités ajoutées par
-  rapport au classeur d'origine (qui ne les proposait pas), pour répondre
-  aux besoins réels de suivi d'un dossier d'assurance (justificatifs,
-  traçabilité des changements de statut) sans dénaturer aucune règle
-  métier existante.
-
----
-
-## 7. Tests effectués
-
-Cette application a été testée de bout en bout avant livraison, avec une
-vraie base MySQL et un vrai serveur Apache (règles `.htaccess` incluses) :
-
-- Connexion, changement de mot de passe obligatoire, déconnexion.
-- Rejet des requêtes POST sans jeton CSRF valide.
-- Création d'un dossier : succès, rejet en cas de portable en doublon,
-  calcul automatique du CA annuel.
-- Suppression d'un dossier (administrateur uniquement).
-- Un vendeur ne peut ni accéder aux pages réservées à l'administrateur, ni
-  consulter le dossier d'un autre vendeur, même en connaissant son URL.
-- Téléversement de pièce jointe : fichier `.php` déguisé en PDF rejeté,
-  fichier PDF valide accepté, téléchargement conforme au contenu d'origine.
-- Accès direct aux dossiers `config/`, `includes/`, `uploads/` et aux
-  fichiers `.sql` : bloqué (403) par les règles `.htaccess`, vérifié sous
-  Apache réel (le serveur de développement intégré de PHP ne respecte pas
-  les fichiers `.htaccess` — utilisez toujours Apache, comme fourni par
-  XAMPP, pour tester ou exploiter cette protection).
-- Création d'un vendeur sans accès de connexion.
-
+Pour une base deja en production, n'importez pas `install.sql` sans sauvegarde
+et sans verifier les `CREATE TABLE` et `INSERT` presents dans le fichier.
