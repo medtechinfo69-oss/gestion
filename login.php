@@ -44,12 +44,12 @@ unset($_SESSION['old_username']);
         <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
       </form>
 
-      <div class="login-demo">
+      <!-- <div class="login-demo">
         <strong>Comptes de démonstration :</strong><br>
         Admin — identifiant <span class="kbd">admin</span> / mot de passe <span class="kbd">Admin@2026</span><br>
         Superviseurs : <span class="kbd">emma</span> ou <span class="kbd">rabia</span> / mot de passe <span class="kbd">Superviseur@2026</span><br>
         <em>Un changement de mot de passe sera demandé à la première connexion.</em>
-      </div>
+      </div> -->
     </div>
   </div>
 </div>
