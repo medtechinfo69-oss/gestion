@@ -220,6 +220,7 @@ require __DIR__ . '/includes/header.php';
     <table class="data-table">
       <thead>
         <tr>
+          <?php if ($isAdmin): ?><th class="selection-cell"><input type="checkbox" data-select-all aria-label="Sélectionner tous les dossiers affichés"></th><?php endif; ?>
           <th>Vendeur</th><th>Origine</th><th>Prod</th>
           <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th>Civilité</th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
           <?php if (!$hideSupervisorColumns): ?><th>Mail</th><th>Téléphone 1</th><th>Téléphone 2</th><th>NB d'assurés</th><th>Date naissance assuré</th><?php endif; ?>
@@ -234,6 +235,7 @@ require __DIR__ . '/includes/header.php';
       <tbody>
         <?php foreach ($dossiers as $d): ?>
         <tr class="<?= row_class_etat($d['etat_dossier']) ?>">
+          <?php if ($isAdmin): ?><td class="selection-cell"><input type="checkbox" name="dossier_ids[]" value="<?= (int) $d['id'] ?>" data-dossier-select aria-label="Sélectionner le dossier <?= (int) $d['id'] ?>"></td><?php endif; ?>
           <td><?= e($d['vendeur_nom']) ?></td><td><?= e($d['ta_origine']) ?></td><td><?= e($d['p_prod']) ?></td>
           <td class="nowrap"><?= format_date($d['date_vente']) ?></td><td><?= e($d['civilite']) ?></td>
           <td><a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>"><?= e($d['nom']) ?></a></td><td><?= e($d['prenom']) ?></td>
@@ -255,6 +257,19 @@ require __DIR__ . '/includes/header.php';
     </table>
     <?php endif; ?>
   </div>
+
+  <?php if ($isAdmin && $dossiers): ?>
+  <div class="bulk-actions" data-bulk-actions>
+    <span class="bulk-count" data-selection-count>0 dossier sélectionné</span>
+    <div class="flex gap-8">
+      <button type="button" class="btn btn-outline btn-sm" data-bulk-edit disabled>Modifier la sélection</button>
+      <button type="button" class="btn btn-danger btn-sm" data-bulk-delete disabled>Supprimer la sélection</button>
+    </div>
+  </div>
+  <form action="<?= e(APP_URL) ?>/actions/dossier_bulk_delete.php" method="post" data-bulk-delete-form>
+    <?= csrf_field() ?>
+  </form>
+  <?php endif; ?>
 
   <?php if ($totalPages > 1): ?>
   <div class="pagination">

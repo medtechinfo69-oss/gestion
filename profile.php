@@ -44,6 +44,19 @@ require __DIR__ . '/includes/header.php';
         <button type="submit" class="btn btn-primary">Mettre à jour le mot de passe</button>
       </div>
     </form>
+
+    <?php if (is_admin()): ?>
+      <h3 style="margin-top:28px;">Sauvegarde</h3>
+      <p class="help-text">Téléchargez ou restaurez les données de l’application au format JSON.</p>
+      <div class="form-actions">
+        <a href="<?= e(APP_URL) ?>/actions/backup_export.php" class="btn btn-outline">Télécharger une sauvegarde</a>
+        <form action="<?= e(APP_URL) ?>/actions/backup_import.php" method="post" enctype="multipart/form-data" data-confirm="Importer cette sauvegarde peut ajouter ou remplacer des données. Continuer ?" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0;">
+          <?= csrf_field() ?>
+          <input type="file" name="backup" accept="application/json,.json" required>
+          <button type="submit" class="btn btn-danger">Importer une sauvegarde</button>
+        </form>
+      </div>
+    <?php endif; ?>
   </div>
 </div>
 

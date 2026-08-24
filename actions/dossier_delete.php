@@ -17,14 +17,9 @@ if (!$dossier) {
     redirect('dossiers.php');
 }
 
-// Supprime les fichiers physiques des pièces jointes avant suppression en base
-$attachStmt = $db->prepare('SELECT nom_fichier FROM dossier_attachments WHERE dossier_id = :id');
-$attachStmt->execute(['id' => $id]);
-$files = $attachStmt->fetchAll(PDO::FETCH_COLUMN);
-
 try {
     $db->beginTransaction();
-    // ON DELETE CASCADE supprime automatiquement les lignes attachments/historique liées
+    archive_dossier($db, $id, (int) current_user()['id']);
     $del = $db->prepare('DELETE FROM dossiers WHERE id = :id');
     $del->execute(['id' => $id]);
     $db->commit();
@@ -35,12 +30,5 @@ try {
     redirect('dossier_view.php?id=' . $id);
 }
 
-foreach ($files as $filename) {
-    $path = UPLOAD_DIR . basename($filename);
-    if (is_file($path)) {
-        @unlink($path);
-    }
-}
-
-set_flash('success', 'Dossier supprimé.');
+set_flash('success', 'Dossier déplacé dans la corbeille.');
 redirect('dossiers.php');

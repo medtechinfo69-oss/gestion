@@ -68,13 +68,27 @@ Les scripts `database/seed_demo_data.sql` et `database/migrate_*.sql` sont
 optionnels. Importez-les uniquement apres `install.sql` et apres avoir verifie
 qu'ils correspondent a la structure de la base.
 
+Pour une base existante, importez aussi `database/migrate_corbeille.sql` avant
+d'utiliser les suppressions. La rubrique **Corbeille** conserve les dossiers
+supprimes et permet a un administrateur de les restaurer.
+
 ### 1.3 Configurer la connexion PHP
 
-Sur le serveur, copiez `config/config.example.php` vers `config/config.php`,
-puis renseignez les valeurs InfinityFree :
+Le projet utilise deux fichiers locaux, non publies dans GitHub :
+
+- `config/config.local.php` pour XAMPP ;
+- `config/config.hosting.php` pour InfinityFree ou un autre hebergeur.
+
+Le depot contient `config/config.hosting.example.php` comme modele. Copiez-le
+sur le serveur sous le nom `config.hosting.php`, puis renseignez vos valeurs
+MySQL. Ce fichier de production est volontairement ignore par GitHub.
+
+Le fichier `config/config.php` choisit automatiquement le bon fichier selon
+l'adresse utilisee. Sur le serveur, ouvrez `config/config.hosting.php` et
+renseignez les valeurs InfinityFree :
 
 ```php
-define('DB_HOST', 'sql301.infinityfree.com');
+define('DB_HOST', 'HOSTNAME_MYSQL');
 define('DB_NAME', 'if0_42713899_gestion_dossiers');
 define('DB_USER', 'if0_42713899');
 define('DB_PASS', 'VOTRE_MOT_DE_PASSE_MYSQL');
@@ -100,10 +114,26 @@ Avec le gestionnaire de fichiers InfinityFree ou un client FTP :
 1. Televersez le contenu du projet dans le dossier web, souvent `htdocs/`.
 2. Placez `index.php` directement dans ce dossier, sauf installation dans un
    sous-dossier.
-3. Televersez `config/config.php` configure pour la production.
+3. Televersez `config/config.php` et le fichier local `config/config.hosting.php`
+   configure pour la production. Ne televersez pas seulement le contenu du
+   depot : le fichier hosting contenant les identifiants est ignore par Git.
 4. Conservez `assets/`, `actions/`, `includes/`, `uploads/` et `logs/`.
 5. Verifiez que `uploads/dossiers/` et `logs/` sont accessibles en ecriture
    par PHP, selon les permissions autorisees par l'hebergeur.
+
+### 1.5 Sauvegarder et restaurer les donnees
+
+Depuis **Mon profil** avec un compte administrateur :
+
+- **Télécharger une sauvegarde** exporte les tables applicatives dans un
+   fichier JSON.
+- **Importer une sauvegarde** ajoute ou met a jour les donnees du fichier dans
+   la base courante.
+
+Faites une sauvegarde avant chaque import et utilisez uniquement un fichier
+produit par cette application. Le fichier contient les hash des mots de passe
+pour restaurer les comptes : protegez-le comme une donnee sensible et
+supprimez-le apres transfert.
 
 Si le site est installe dans un sous-dossier, adaptez par exemple :
 
@@ -111,7 +141,7 @@ Si le site est installe dans un sous-dossier, adaptez par exemple :
 define('APP_URL', 'https://gestionassur.rf.gd/gestion-dossiers');
 ```
 
-### 1.5 Verifier le site
+### 1.6 Verifier le site
 
 1. Ouvrez `https://gestionassur.rf.gd/`.
 2. Connectez-vous avec le compte administrateur initial.
@@ -144,7 +174,8 @@ base de donnees, aux uploads et a l'export Excel.
 2. Demarrez Apache et MySQL.
 3. Ouvrez `http://localhost/phpmyadmin`.
 4. Executez `database/install.sql` depuis l'onglet **SQL**.
-5. Copiez `config/config.example.php` vers `config/config.php` et utilisez :
+5. Conservez `config/config.local.php` pour la configuration XAMPP. `config.php`
+   chargera automatiquement ce fichier sur `localhost`.
 
 ```php
 define('DB_HOST', 'localhost');
@@ -175,6 +206,7 @@ define('APP_ENV', 'development');
 | `database/seed_demo_data.sql` | Donnees de demonstration optionnelles |
 | `database/migrate_courrier_etat_contrat.sql` | Migration de structure |
 | `database/migrate_superviseurs_vendeurs.sql` | Migration des roles et vendeurs |
+| `database/migrate_corbeille.sql` | Ajout de la Corbeille et restauration |
 
 Pour une base deja en production, n'importez pas `install.sql` sans sauvegarde
 et sans verifier les `CREATE TABLE` et `INSERT` presents dans le fichier.

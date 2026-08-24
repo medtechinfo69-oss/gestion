@@ -71,6 +71,7 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 .security-mode {
@@ -306,6 +307,14 @@ p { margin: 0 0 1em; }
   z-index: 10;
 }
 
+#topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .topbar h1 { margin: 0; font-size: 1.3rem; }
 .topbar .subtitle { color: var(--color-ink-soft); font-size: 0.85rem; margin-top: 2px; }
 
@@ -321,6 +330,7 @@ p { margin: 0 0 1em; }
 .content {
   padding: 26px 28px 60px;
   flex: 1;
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------------
@@ -348,7 +358,7 @@ p { margin: 0 0 1em; }
 
 .dossier-form-card {
   width: auto;
-  margin: 0 20px 22px 0;
+  margin: 0 0 22px;
 }
 
 /* Cartes statistiques façon fiche cartonnée avec onglet coloré */
@@ -448,6 +458,28 @@ p { margin: 0 0 1em; }
 .btn-block { width: 100%; justify-content: center; }
 .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
 
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(22, 39, 61, 0.58);
+}
+.confirm-dialog {
+  width: min(100%, 420px);
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.confirm-dialog h2 { margin-bottom: 10px; font-size: 1.25rem; }
+.confirm-dialog p { color: var(--color-ink-soft); margin-bottom: 22px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
 /* ---------------------------------------------------------------------
    Formulaires
    --------------------------------------------------------------------- */
@@ -518,10 +550,12 @@ textarea { resize: vertical; min-height: 80px; }
 .table-wrap {
   max-height: calc(100vh - 210px);
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table.data-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
   font-size: 0.87rem;
 }
@@ -564,6 +598,23 @@ table.data-table {
   border-top: 1px solid var(--color-line);
   font-size: 0.88rem;
 }
+
+.selection-cell {
+  width: 42px;
+  text-align: center !important;
+}
+.selection-cell input { width: 16px; height: 16px; accent-color: var(--color-cabinet); }
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 22px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-surface-alt);
+}
+.bulk-count { color: var(--color-ink-soft); font-size: 0.82rem; font-weight: 600; }
 
 /* Badges de statut */
 .badge {
@@ -675,6 +726,7 @@ table.data-table {
   margin-bottom: 8px;
   font-size: 0.86rem;
 }
+.attachment-list li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------------------
    Page de connexion
@@ -775,7 +827,46 @@ table.data-table {
 }
 
 @media (max-width: 560px) {
-  .stat-grid { grid-template-columns: 1fr 1fr; }
+  body { font-size: 14px; }
+  .content { padding: 14px 12px 36px; }
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+  .topbar > .flex { width: 100%; }
+  .topbar h1 { font-size: 1.15rem; }
+  .topbar .subtitle { font-size: 0.78rem; }
+  #topbar-actions { width: 100%; justify-content: flex-start; }
+  #topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .card-header, .card-body { padding: 15px; }
+  .card-header { align-items: flex-start; }
+  .card-header .btn { width: 100%; justify-content: center; }
+  .stat-grid { grid-template-columns: 1fr; gap: 10px; }
+  .stat-card { padding: 15px 16px; }
+  .stat-card .value { font-size: 1.45rem; }
+  .form-grid, .detail-grid { grid-template-columns: 1fr; gap: 13px; }
+  .form-group.span-2, .form-group.span-full { grid-column: auto; }
+  .form-actions, .dossier-form-actions {
+    flex-direction: column;
+    padding: 15px !important;
+  }
+  .form-actions .btn, .dossier-form-actions .btn { width: 100%; justify-content: center; }
+  .confirm-dialog { padding: 20px; }
+  .confirm-actions { flex-direction: column-reverse; }
+  .confirm-actions .btn { width: 100%; justify-content: center; }
+  .toolbar { padding: 14px; gap: 12px; }
+  .toolbar .form-group, .toolbar .form-group.toolbar-action { min-width: 100%; }
+  .toolbar-action .btn { width: 100%; justify-content: center; }
+  .dossiers-totals { justify-content: flex-start; gap: 8px 20px; padding: 14px 15px 2px; }
+  .bulk-actions { align-items: stretch; padding: 12px 15px; }
+  .bulk-actions > .flex { width: 100%; }
+  .bulk-actions .btn { flex: 1; justify-content: center; }
+  .attachment-list li { align-items: stretch; flex-direction: column; gap: 10px; padding: 11px; }
+  .attachment-list li > .flex { justify-content: flex-start; flex-wrap: wrap; }
+  .login-shell { align-items: flex-start; padding: 12px; }
+  .login-card { margin: auto 0; }
   .login-card .top, .login-card .body { padding-left: 20px; padding-right: 20px; }
 }
 

@@ -1,5 +1,7 @@
 # Local secrets and environment files
 config/config.php
+config/config.local.php
+config/config.hosting.php
 .env
 
 # Runtime data

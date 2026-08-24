@@ -364,3 +364,33 @@ function log_dossier_history(PDO $db, int $dossierId, ?int $userId, string $acti
         'c' => $champ, 'old' => $ancienne, 'new' => $nouvelle,
     ]);
 }
+
+/** Archive un dossier et ses donnees liees avant sa suppression. */
+function archive_dossier(PDO $db, int $dossierId, int $deletedBy): void
+{
+    $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');
+    $stmt->execute(['id' => $dossierId]);
+    $dossier = $stmt->fetch();
+    if (!$dossier) {
+        return;
+    }
+
+    $stmt = $db->prepare('SELECT * FROM dossier_attachments WHERE dossier_id = :id');
+    $stmt->execute(['id' => $dossierId]);
+    $attachments = $stmt->fetchAll();
+
+    $stmt = $db->prepare('SELECT * FROM dossier_historique WHERE dossier_id = :id');
+    $stmt->execute(['id' => $dossierId]);
+    $historique = $stmt->fetchAll();
+
+    $stmt = $db->prepare('INSERT INTO dossier_trash
+        (original_dossier_id, dossier_data, attachments_data, historique_data, deleted_by)
+        VALUES (:id, :dossier, :attachments, :historique, :deleted_by)');
+    $stmt->execute([
+        'id' => $dossierId,
+        'dossier' => json_encode($dossier, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        'attachments' => json_encode($attachments, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        'historique' => json_encode($historique, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        'deleted_by' => $deletedBy,
+    ]);
+}

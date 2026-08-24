@@ -58,6 +58,9 @@ $user = current_user();
         <a href="<?= e(APP_URL) ?>/vendeurs.php" class="nav-item <?= $activePage === 'vendeurs' ? 'active' : '' ?>">
           <span class="ico ico-vendeur" aria-hidden="true"></span> Vendeurs
         </a>
+        <a href="<?= e(APP_URL) ?>/corbeille.php" class="nav-item <?= $activePage === 'corbeille' ? 'active' : '' ?>">
+          <span class="ico">&#128465;</span> Corbeille
+        </a>
       <?php endif; ?>
 
       <div class="nav-label">Compte</div>
