@@ -85,7 +85,7 @@ require __DIR__ . '/includes/header.php';
       <h3>Vendeur</h3>
       <div class="form-grid mb-16">
         <div class="form-group">
-          <label for="vendeur_id">Nom vendeur <span class="req">*</span></label>
+          <label for="vendeur_id">Vendeur <span class="req">*</span></label>
           <select id="vendeur_id" name="vendeur_id" class="<?= isset($formErrors['vendeur_id']) ? 'input-error' : '' ?>">
             <option value="">— Sélectionner —</option>
             <?php foreach ($vendeurs as $vd): ?>
@@ -98,7 +98,7 @@ require __DIR__ . '/includes/header.php';
           </div>
         </div>
         <div class="form-group">
-          <label for="ta_origine">TA / Origine</label>
+          <label for="ta_origine">Origine</label>
           <select id="ta_origine" name="ta_origine" class="<?= isset($formErrors['ta_origine']) ? 'input-error' : '' ?>">
             <option value="">— Sélectionner —</option>
             <?php foreach (origines_valides() as $origine): ?>
@@ -108,7 +108,7 @@ require __DIR__ . '/includes/header.php';
           <?php if (isset($formErrors['ta_origine'])): ?><div class="field-error"><?= e($formErrors['ta_origine']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
-          <label for="p_prod">P.PROD</label>
+          <label for="p_prod">PROD</label>
           <input type="text" id="p_prod" name="p_prod" value="<?= e($v('p_prod')) ?>" maxlength="100">
         </div>
         <div class="form-group">
@@ -144,17 +144,17 @@ require __DIR__ . '/includes/header.php';
           <?php if (isset($formErrors['mail'])): ?><div class="field-error"><?= e($formErrors['mail']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
-          <label for="telfix">Tél. fixe</label>
+          <label for="telfix">Téléphone 1</label>
           <input type="tel" id="telfix" name="telfix" value="<?= e($v('telfix')) ?>" maxlength="30">
         </div>
         <div class="form-group">
-          <label for="portable">Portable <span class="req">*</span></label>
+          <label for="portable">Téléphone 2 <span class="req">*</span></label>
           <input type="tel" id="portable" name="portable" value="<?= e($v('portable')) ?>" maxlength="30" class="<?= isset($formErrors['portable']) ? 'input-error' : '' ?>">
           <?php if (isset($formErrors['portable'])): ?><div class="field-error"><?= e($formErrors['portable']) ?></div><?php endif; ?>
           <div class="help-text">Doit être unique (règle reprise du classeur d'origine).</div>
         </div>
         <div class="form-group">
-          <label for="nombre_personnes">Nombre de personnes</label>
+          <label for="nombre_personnes">Nombre d'assurés</label>
           <input type="number" id="nombre_personnes" name="nombre_personnes" min="1" max="10" value="<?= e((string) $v('nombre_personnes', 1)) ?>">
         </div>
         <div class="form-group">

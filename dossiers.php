@@ -142,7 +142,7 @@ if ($isAdmin) {
   $topbarActions .= '<a href="' . e(APP_URL) . '/dossier_form.php" class="btn btn-accent">+ Nouveau dossier</a> '
     . '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
 }
-if ($canAccessAll) {
+if ($isAdmin) {
   $topbarActions .= '<a href="' . e($exportUrl) . '" class="btn btn-outline">Exporter Excel</a>';
 }
 require __DIR__ . '/includes/header.php';
