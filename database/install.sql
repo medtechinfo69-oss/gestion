@@ -11,21 +11,12 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ---------------------------------------------------------------------
 -- Base de données
 -- ---------------------------------------------------------------------
-CREATE DATABASE IF NOT EXISTS `gestion_dossiers`
-    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE `gestion_dossiers`;
+-- Sélectionnez la base cible dans phpMyAdmin avant l'import.
 
 -- ---------------------------------------------------------------------
--- Compte MySQL applicatif dédié (bonne pratique de sécurité : ne jamais
--- faire se connecter l'application avec le compte "root").
--- Ce compte n'a de droits QUE sur la base "gestion_dossiers".
--- Adaptez le mot de passe ci-dessous puis reportez-le dans
--- config/config.php (constantes DB_USER / DB_PASS).
+-- Le compte MySQL doit être créé dans le panneau de l'hébergeur ou dans
+-- l'environnement local, puis renseigné dans config/config.php.
 -- ---------------------------------------------------------------------
-CREATE USER IF NOT EXISTS 'gestion_app'@'localhost' IDENTIFIED BY 'ChangeMoi_2026!';
-GRANT SELECT, INSERT, UPDATE, DELETE ON `gestion_dossiers`.* TO 'gestion_app'@'localhost';
-FLUSH PRIVILEGES;
 
 -- ---------------------------------------------------------------------
 -- Table : users
@@ -197,7 +188,27 @@ INSERT INTO `users` (`username`, `password_hash`, `role`, `nom_complet`, `email`
 ('laurence',  '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Laurence',  NULL, 0, 0),
 ('nina',      '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Nina',      NULL, 0, 0);
 
--- NOTE : ces hashs correspondent bien aux mots de passe indiqués ci-dessus
--- (vérifiés avec password_verify() côté PHP). Si vous préférez régénérer
--- vos propres hashs, utilisez le script "database/generate_password_hash.php"
--- fourni (à supprimer après usage sur un serveur de production).
+-- =====================================================================
+-- Données de démonstration
+-- =====================================================================
+-- Les IDs correspondent à l'ordre des INSERT ci-dessus :
+-- admin=1, emma=2, rabia=3, christine=4, helene=5, justine=6,
+-- laurence=7, nina=8.
+INSERT INTO `dossiers`
+(`vendeur_id`, `ta_origine`, `p_prod`, `date_vente`, `civilite`, `nom`, `prenom`, `mail`, `telfix`, `portable`,
+ `nombre_personnes`, `date_naissance_assure`, `age_assure_principal`, `adresse`, `cp`, `ville`, `type_signature`,
+ `ca_mois`, `ca_annuel`, `date_effet`, `produit`, `compagnie`, `etat_dossier`, `commentaire`, `motif_annulation`,
+ `created_by`)
+VALUES
+(8, 'LEAD', '5 ASSUR', '2026-01-05', 'MME', 'MARTIN', 'SYLVIE', 'sylvie.martin@example.com', NULL, '0601020304', 2, '03/09/1958', NULL, '12 rue des Lilas', '75012', 'Paris', 'SMS', 207.34, 2488.08, '2026-02-01', 'SILVER 2', 'KIASSURE', 'Dossier complet', 'Dossier complet reçu par courrier le 20/01/2026', NULL, 1),
+(8, 'TRANSFERT', '5 ASSUR', '2026-01-06', 'MR', 'DUBOIS', 'MARC', 'marc.dubois@example.com', '0145123456', '0601020305', 1, '26/04/1963', NULL, '5 avenue Victor Hugo', '69003', 'Lyon', 'SMS', 66.83, 801.96, '2026-04-01', 'SILVER 1', 'KIASSURE', 'Dossier complet', 'Dossier complet reçu par courrier le 16/02/2026', NULL, 1),
+(8, 'LEAD', '5 ASSUR', '2026-01-14', 'MR', 'LAGARDE', 'ANDRE', 'andre.lagarde@example.com', NULL, '0601020306', 2, '15/12/1947 et 18/07/1950', NULL, '4 rue des Vergers', '43320', 'Sanssac-l’Eglise', 'SMS', 235.79, 2829.48, '2026-03-01', 'SILVER 3', 'KIASSURE', 'Dossier incomplet', 'Manque résiliation, RIB', NULL, 1),
+(4, '5ASSUR', '5 ASSUR', '2026-01-15', 'MR', 'VILLONI', 'ALAIN', 'alain.villoni@example.com', NULL, '0601020307', 2, '31/07/1962', '64 ans', '56 allée des Peupliers', '84460', 'Cheval-Blanc', 'MAIL+SMS', 158.12, 1897.44, '2027-02-01', 'FMA ESSENTIEL 2', 'FMA', 'Dossier incomplet', 'Attente pièces complémentaires', NULL, 1),
+(5, 'MMC 25', '5 ASSUR', '2025-05-27', 'MR', 'VOLLOT', 'ALAIN', 'alain.vollot@example.com', NULL, '0601020308', 1, '13/02/1953', '72 ans', '4 chemin de Lavau', '21340', 'Molinot', 'SMS', 67.05, 804.60, '2026-01-01', 'VITALIA HOSPI COMPLETE', 'FMA', 'Dossier incomplet', 'Assuré indécis', NULL, 1),
+(5, 'PARRAINAGE', '5 ASSUR', '2025-03-07', 'MR', 'FAURE', 'JEAN MARIE', 'jm.faure@example.com', NULL, '0601020309', 1, '11/09/1944', '81 ans', '31 rue de la Libération', '25420', 'Dampierre-sur-le-Doubs', 'SMS', 127.01, 1524.12, '2025-05-01', 'INSTASSUR 2', 'KIASSURE', 'Dossier incomplet', 'Contrat résilié', 'Radiation pour non paiement', 1),
+(8, 'MMC 12', '5 ASSUR', '2025-06-10', 'MME', 'YAOUE', 'NERGINIE', NULL, NULL, '0601020310', 1, '04/05/1978', NULL, '24 rue Eugène Boudin', '57000', 'Metz', 'SMS', 64.42, 773.04, '2025-07-01', 'ESSENTIEL 2', 'FMA', 'Dossier incomplet', 'Radiation pour non paiement', 'Radiation pour non paiement', 1),
+(7, 'FICHE PERSO', '5 ASSUR', '2025-09-15', 'MR', 'FENET', 'AIME', 'aime.fenet@example.com', NULL, '0601020311', 2, '02/07/1968', NULL, '55 rue de Voile Latine', '30240', 'Le Grau-du-Roi', 'SMS', 106.77, 1281.24, '2026-02-05', 'SILVER 1', 'KIASSURE', 'Dossier incomplet', 'En attente devoir de conseil', NULL, 1);
+
+UPDATE `dossiers`
+SET `etat_contrat` = 'Radié pour non-paiement'
+WHERE `portable` IN ('0601020309', '0601020310');

@@ -64,13 +64,10 @@ FLUSH PRIVILEGES;
 `install.sql` installe le compte administrateur de demonstration. Connectez-
 vous avec `admin` et `Admin@2026`, puis changez immediatement ce mot de passe.
 
-Les scripts `database/seed_demo_data.sql` et `database/migrate_*.sql` sont
-optionnels. Importez-les uniquement apres `install.sql` et apres avoir verifie
-qu'ils correspondent a la structure de la base.
-
-Pour une base existante, importez aussi `database/migrate_corbeille.sql` avant
-d'utiliser les suppressions. La rubrique **Corbeille** conserve les dossiers
-supprimes et permet a un administrateur de les restaurer.
+Toutes les tables, les comptes initiaux et les donnees de demonstration sont
+maintenant reunis dans `database/install.sql`. Pour une base existante, faites
+une sauvegarde avant de le reutiliser : il contient des `CREATE TABLE` et des
+`INSERT`.
 
 ### 1.3 Configurer la connexion PHP
 
@@ -163,7 +160,6 @@ port et permissions. N'utilisez pas les valeurs XAMPP locales en production.
 5. Configurez `config/config.php` avec les valeurs de production.
 6. Televersez les fichiers dans le dossier web.
 7. Activez HTTPS et reglez `APP_URL` sur l'adresse publique exacte.
-8. Supprimez ou protegez `database/generate_password_hash.php` apres usage.
 
 Activez les extensions PHP `pdo_mysql`, `fileinfo` et `zip`, necessaires a la
 base de donnees, aux uploads et a l'export Excel.
@@ -194,7 +190,6 @@ define('APP_ENV', 'development');
 - Changez le mot de passe administrateur de demonstration.
 - Utilisez un mot de passe MySQL unique et non partage.
 - Ne publiez jamais `config/config.php`, les mots de passe ou les exports.
-- Supprimez `database/generate_password_hash.php` apres utilisation.
 - Gardez HTTPS active et verifiez que `.htaccess` est pris en charge.
 - Faites une sauvegarde avant toute migration.
 
@@ -202,11 +197,7 @@ define('APP_ENV', 'development');
 
 | Fichier | Usage |
 |---|---|
-| `database/install.sql` | Tables et comptes initiaux |
-| `database/seed_demo_data.sql` | Donnees de demonstration optionnelles |
-| `database/migrate_courrier_etat_contrat.sql` | Migration de structure |
-| `database/migrate_superviseurs_vendeurs.sql` | Migration des roles et vendeurs |
-| `database/migrate_corbeille.sql` | Ajout de la Corbeille et restauration |
+| `database/install.sql` | Tables, roles, Corbeille et donnees de demonstration |
 
 Pour une base deja en production, n'importez pas `install.sql` sans sauvegarde
 et sans verifier les `CREATE TABLE` et `INSERT` presents dans le fichier.
