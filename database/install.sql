@@ -176,17 +176,17 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Hash généré avec password_hash('Admin@2026', PASSWORD_DEFAULT)
 -- ---------------------------------------------------------------------
 INSERT INTO `users` (`username`, `password_hash`, `role`, `nom_complet`, `email`, `is_active`, `must_change_password`)
-VALUES ('admin', '$2b$10$ychr4Y48ITt2PBhV7jeUDOVcBz/jPlzEE1zRvtFG7b5qSYNs0djaG', 'admin', 'Administrateur', 'admin@example.com', 1, 1);
+VALUES ('admin', '$2y$10$S8mFXMU6SdqjiHddKHHT7enaDcAyGobfoJ5Ih.oTK2mA.c8TAdKta', 'admin', 'Administrateur', 'admin@example.com', 1, 1);
 
 -- Les vendeurs sont des contacts sans accès à l'application.
 INSERT INTO `users` (`username`, `password_hash`, `role`, `nom_complet`, `email`, `is_active`, `must_change_password`) VALUES
-('emma',      '$2y$10$/xdpBg2S74eCsBCq67sXt.yG8IeBhaSB5G0FHen3TRm5BWqe1GMtC', 'superviseur', 'Emma',  NULL, 1, 1),
-('rabia',     '$2y$10$/xdpBg2S74eCsBCq67sXt.yG8IeBhaSB5G0FHen3TRm5BWqe1GMtC', 'superviseur', 'Rabia', NULL, 1, 1),
-('christine', '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Christine', NULL, 0, 0),
-('helene',    '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Hélène',    NULL, 0, 0),
-('justine',   '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Justine',   NULL, 0, 0),
-('laurence',  '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Laurence',  NULL, 0, 0),
-('nina',      '$2b$10$KOLosBo6YLJTWdedofsZUuOM1wIXXi1n8eqN06ZquRxZyibf.D4y6', 'vendeur', 'Nina',      NULL, 0, 0);
+('emma',      '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'superviseur', 'Emma',  NULL, 1, 1),
+('rabia',     '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'superviseur', 'Rabia', NULL, 1, 1),
+('christine', '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'vendeur', 'Christine', NULL, 0, 0),
+('helene',    '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'vendeur', 'Hélène',    NULL, 0, 0),
+('justine',   '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'vendeur', 'Justine',   NULL, 0, 0),
+('laurence',  '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'vendeur', 'Laurence',  NULL, 0, 0),
+('nina',      '$2y$10$de.8ocal3dUgOqY1hzAq9ef4ejW3YmHAmjEMWURQ7Kk/ecPUhCSgG', 'vendeur', 'Nina',      NULL, 0, 0);
 
 -- =====================================================================
 -- Données de démonstration
