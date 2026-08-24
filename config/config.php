@@ -15,3 +15,7 @@ if (!is_file($configFile)) {
 }
 
 require_once $configFile;
+
+if (!defined('ITEMS_PER_PAGE')) {
+    define('ITEMS_PER_PAGE', 25);
+}

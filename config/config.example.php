@@ -17,6 +17,7 @@ define('SECURITY_MODE', true);
 define('SESSION_LIFETIME', 7200);
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_LOCKOUT_TIME', 900);
+define('ITEMS_PER_PAGE', 25);
 define('IMPORT_MAX_SIZE', 10 * 1024 * 1024);
 define('UPLOAD_DIR', __DIR__ . '/../uploads/dossiers/');
 define('UPLOAD_MAX_SIZE', 5 * 1024 * 1024);
