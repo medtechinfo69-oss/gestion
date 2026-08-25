@@ -13,6 +13,7 @@
     initNewVendeurToggle();
     initBulkSelection();
     initVendeurSelection();
+    initTrashSelection();
     initSecurityMode();
   });
 
@@ -238,6 +239,55 @@
         deleteForm.submit();
       });
     });
+    refresh();
+  }
+
+  /** Gere la selection multiple des dossiers dans la corbeille. */
+  function initTrashSelection() {
+    var selectAll = document.querySelector('[data-trash-select-all]');
+    var checkboxes = Array.prototype.slice.call(document.querySelectorAll('[data-trash-select]'));
+    var count = document.querySelector('[data-trash-selection-count]');
+    var deleteButton = document.querySelector('[data-trash-delete-selected]');
+    var deleteForm = document.querySelector('[data-trash-delete-form]');
+    if (!selectAll || !checkboxes.length) return;
+
+    function selected() {
+      return checkboxes.filter(function (checkbox) { return checkbox.checked; });
+    }
+
+    function refresh() {
+      var selectedItems = selected();
+      var total = selectedItems.length;
+      if (count) {
+        count.textContent = total + (total === 1 ? ' dossier sélectionné' : ' dossiers sélectionnés');
+      }
+      selectAll.checked = total === checkboxes.length;
+      selectAll.indeterminate = total > 0 && total < checkboxes.length;
+      if (deleteButton) deleteButton.disabled = total === 0;
+    }
+
+    selectAll.addEventListener('change', function () {
+      checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+      refresh();
+    });
+    checkboxes.forEach(function (checkbox) { checkbox.addEventListener('change', refresh); });
+
+    if (deleteButton && deleteForm) {
+      deleteButton.addEventListener('click', function () {
+        var selectedItems = selected();
+        if (!selectedItems.length) return;
+        showConfirm('Supprimer définitivement les ' + selectedItems.length + ' dossier(s) sélectionné(s) de la corbeille ?', function () {
+          selectedItems.forEach(function (checkbox) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'trash_ids[]';
+            input.value = checkbox.value;
+            deleteForm.appendChild(input);
+          });
+          deleteForm.submit();
+        });
+      });
+    }
     refresh();
   }
 

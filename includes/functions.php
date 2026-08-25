@@ -229,7 +229,6 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     if (!$originIsValid && !($allowImportCompatibility && in_array($data['ta_origine'], $legacyOrigins, true))) {
         $errors['ta_origine'] = 'Origine invalide.';
     }
-
     $data['p_prod'] = clean_str($post['p_prod'] ?? '') ?: ($allowImportCompatibility ? '5 ASSUR' : '');
 
     $parsedDateVente = parse_date_fr($post['date_vente'] ?? '');
@@ -290,7 +289,7 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         }
     }
     if ($data['portable'] !== '' && !$allowImportCompatibility) {
-        // Règle métier : le numéro de portable doit être unique
+        // Règle métier reprise du classeur : le numéro de portable doit être unique
         $sql = 'SELECT id FROM dossiers WHERE portable = :p';
         $params = ['p' => $data['portable']];
         if ($excludeId) {

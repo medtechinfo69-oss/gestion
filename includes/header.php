@@ -93,7 +93,6 @@ $user = current_user();
 
     <div class="content">
       <?php foreach (get_flashes() as $flash): ?>
-        <div class="alert alert-<?= e($flash['type']) ?>" data-autohide>
         <div class="alert alert-<?= e($flash['type']) ?>" <?= $flash['type'] !== 'error' ? 'data-autohide' : '' ?>>
           <button type="button" class="alert-close" onclick="this.parentElement.remove()" aria-label="Fermer">&times;</button>
           <?= e($flash['message']) ?>
