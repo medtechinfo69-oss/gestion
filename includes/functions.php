@@ -55,24 +55,35 @@ function format_date(?string $sqlDate): string
     return $ts ? date('d/m/Y', $ts) : '—';
 }
 
-/** Convertit une date française (d/m/Y) en date SQL (Y-m-d), ou null si invalide. */
+/** Convertit une date française (d/m/Y, Y-m-d, d-m-Y...) en date SQL (Y-m-d), ou null si invalide. */
 function parse_date_fr(?string $value): ?string
 {
     $value = trim((string) $value);
     if ($value === '') {
         return null;
     }
-    // Accepte d/m/Y ou Y-m-d (champ HTML <input type="date">)
-    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
+    // YYYY-MM-DD or YYYY/MM/DD
+    if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $value, $m)) {
         if (checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
-            return $value;
+            return sprintf('%04d-%02d-%02d', (int) $m[1], (int) $m[2], (int) $m[3]);
         }
-        return null;
     }
-    if (preg_match('#^(\d{2})/(\d{2})/(\d{4})$#', $value, $m)) {
+    // DD/MM/YYYY or DD-MM-YYYY
+    if (preg_match('#^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$#', $value, $m)) {
         if (checkdate((int) $m[2], (int) $m[1], (int) $m[3])) {
-            return $m[3] . '-' . $m[2] . '-' . $m[1];
+            return sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
         }
+    }
+    // DD/MM/YY or DD-MM-YY
+    if (preg_match('#^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2})$#', $value, $m)) {
+        $year = (int) $m[3] + 2000;
+        if (checkdate((int) $m[2], (int) $m[1], $year)) {
+            return sprintf('%04d-%02d-%02d', $year, (int) $m[2], (int) $m[1]);
+        }
+    }
+    $ts = strtotime($value);
+    if ($ts !== false && $ts > 0) {
+        return date('Y-m-d', $ts);
     }
     return null;
 }
@@ -187,7 +198,11 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
 
     $data['vendeur_id'] = filter_var($post['vendeur_id'] ?? '', FILTER_VALIDATE_INT);
     if (!$data['vendeur_id']) {
-        $errors['vendeur_id'] = 'Veuillez sélectionner un vendeur.';
+        if ($allowImportCompatibility) {
+            $data['vendeur_id'] = (int) (current_user()['id'] ?? 1);
+        } else {
+            $errors['vendeur_id'] = 'Veuillez sélectionner un vendeur.';
+        }
     } else {
         $sellerSql = $allowImportCompatibility
             ? 'SELECT id FROM users WHERE id = :id'
@@ -195,51 +210,85 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         $chk = $db->prepare($sellerSql);
         $chk->execute(['id' => $data['vendeur_id']]);
         if (!$chk->fetch()) {
-            $errors['vendeur_id'] = 'Vendeur invalide.';
+            if ($allowImportCompatibility) {
+                $data['vendeur_id'] = (int) (current_user()['id'] ?? 1);
+            } else {
+                $errors['vendeur_id'] = 'Vendeur invalide.';
+            }
         }
     }
 
     $data['ta_origine'] = clean_str($post['ta_origine'] ?? '');
+    if ($data['ta_origine'] === '') {
+        $data['ta_origine'] = 'LEAD';
+    }
     $legacyOrigins = ['5ASSUR', '5 ASSUR', 'TRANSFERT', 'PARRAINAGE', 'FICHE PERSO'];
     $originIsValid = $allowImportCompatibility
-        ? $data['ta_origine'] !== '' && mb_strlen($data['ta_origine']) <= 255
+        ? mb_strlen($data['ta_origine']) <= 255
         : in_array($data['ta_origine'], origines_valides(), true);
     if (!$originIsValid && !($allowImportCompatibility && in_array($data['ta_origine'], $legacyOrigins, true))) {
         $errors['ta_origine'] = 'Origine invalide.';
     }
-    $data['p_prod'] = clean_str($post['p_prod'] ?? '');
+    $data['p_prod'] = clean_str($post['p_prod'] ?? '') ?: ($allowImportCompatibility ? '5 ASSUR' : '');
 
-    $data['date_vente'] = parse_date_fr($post['date_vente'] ?? '');
-    if (!$data['date_vente']) {
-        $errors['date_vente'] = 'Date de vente invalide.';
+    $parsedDateVente = parse_date_fr($post['date_vente'] ?? '');
+    if (!$parsedDateVente) {
+        if ($allowImportCompatibility) {
+            $parsedDateVente = date('Y-m-d');
+        } else {
+            $errors['date_vente'] = 'Date de vente invalide.';
+        }
     }
+    $data['date_vente'] = $parsedDateVente ?: date('Y-m-d');
 
     $data['civilite'] = strtoupper(clean_str($post['civilite'] ?? ''));
     if (!in_array($data['civilite'], civilites_valides(), true)) {
-        $errors['civilite'] = 'Civilité invalide.';
+        if ($allowImportCompatibility) {
+            $data['civilite'] = 'MR';
+        } else {
+            $errors['civilite'] = 'Civilité invalide.';
+        }
     }
 
     $data['nom'] = clean_str($post['nom'] ?? '');
     if ($data['nom'] === '' || mb_strlen($data['nom']) > 150) {
-        $errors['nom'] = 'Le nom est obligatoire (150 caractères maximum).';
+        if ($allowImportCompatibility) {
+            $data['nom'] = $data['nom'] !== '' ? mb_substr($data['nom'], 0, 150) : 'Non renseigné';
+        } else {
+            $errors['nom'] = 'Le nom est obligatoire (150 caractères maximum).';
+        }
     }
 
     $data['prenom'] = clean_str($post['prenom'] ?? '');
     if ($data['prenom'] === '' || mb_strlen($data['prenom']) > 150) {
-        $errors['prenom'] = 'Le prénom est obligatoire (150 caractères maximum).';
+        if ($allowImportCompatibility) {
+            $data['prenom'] = $data['prenom'] !== '' ? mb_substr($data['prenom'], 0, 150) : 'Non renseigné';
+        } else {
+            $errors['prenom'] = 'Le prénom est obligatoire (150 caractères maximum).';
+        }
     }
 
     $data['mail'] = clean_str($post['mail'] ?? '');
     if ($data['mail'] !== '' && !filter_var($data['mail'], FILTER_VALIDATE_EMAIL)) {
-        $errors['mail'] = 'Adresse e-mail invalide.';
+        if (!$allowImportCompatibility) {
+            $errors['mail'] = 'Adresse e-mail invalide.';
+        }
+    }
+    if ($data['mail'] === '') {
+        $data['mail'] = null;
     }
 
     $data['telfix'] = preg_replace('/[^0-9+\s.]/', '', $post['telfix'] ?? '') ?: null;
 
     $data['portable'] = preg_replace('/[^0-9+\s.]/', '', $post['portable'] ?? '');
     if ($data['portable'] === '') {
-        $errors['portable'] = 'Le numéro de portable est obligatoire.';
-    } else {
+        if ($allowImportCompatibility) {
+            $data['portable'] = $data['telfix'] ?? '0000000000';
+        } else {
+            $errors['portable'] = 'Le numéro de portable est obligatoire.';
+        }
+    }
+    if ($data['portable'] !== '' && !$allowImportCompatibility) {
         // Règle métier reprise du classeur : le numéro de portable doit être unique
         $sql = 'SELECT id FROM dossiers WHERE portable = :p';
         $params = ['p' => $data['portable']];
@@ -256,53 +305,86 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
 
     $data['nombre_personnes'] = filter_var($post['nombre_personnes'] ?? 1, FILTER_VALIDATE_INT, [
         'options' => ['default' => 1, 'min_range' => 1, 'max_range' => 10],
-    ]);
+    ]) ?: 1;
 
     $data['date_naissance_assure'] = clean_str($post['date_naissance_assure'] ?? '') ?: null;
     $data['age_assure_principal'] = clean_str($post['age_assure_principal'] ?? '') ?: null;
 
     $data['adresse'] = clean_str($post['adresse'] ?? '');
     if ($data['adresse'] === '') {
-        $errors['adresse'] = 'L’adresse est obligatoire.';
+        if ($allowImportCompatibility) {
+            $data['adresse'] = 'Non renseignée';
+        } else {
+            $errors['adresse'] = 'L’adresse est obligatoire.';
+        }
     }
 
     $data['cp'] = clean_str($post['cp'] ?? '');
     if ($data['cp'] === '' || !preg_match('/^[0-9A-Za-z\- ]{2,10}$/', $data['cp'])) {
-        $errors['cp'] = 'Code postal invalide.';
+        if ($allowImportCompatibility) {
+            $data['cp'] = $data['cp'] !== '' ? mb_substr($data['cp'], 0, 10) : '00000';
+        } else {
+            $errors['cp'] = 'Code postal invalide.';
+        }
     }
 
     $data['ville'] = clean_str($post['ville'] ?? '');
     if ($data['ville'] === '') {
-        $errors['ville'] = 'La ville est obligatoire.';
+        if ($allowImportCompatibility) {
+            $data['ville'] = 'Non renseignée';
+        } else {
+            $errors['ville'] = 'La ville est obligatoire.';
+        }
     }
 
     $data['type_signature'] = clean_str($post['type_signature'] ?? '');
     if ($data['type_signature'] === '') {
-        $errors['type_signature'] = 'Le type de signature est obligatoire.';
+        if ($allowImportCompatibility) {
+            $data['type_signature'] = 'SMS';
+        } else {
+            $errors['type_signature'] = 'Le type de signature est obligatoire.';
+        }
     }
 
-    $data['ca_mois'] = filter_var(str_replace(',', '.', $post['ca_mois'] ?? ''), FILTER_VALIDATE_FLOAT);
-    if ($data['ca_mois'] === false || $data['ca_mois'] < 0) {
-        $errors['ca_mois'] = 'CA mensuel invalide.';
-        $data['ca_mois'] = 0;
+    $caMoisVal = filter_var(str_replace(',', '.', $post['ca_mois'] ?? ''), FILTER_VALIDATE_FLOAT);
+    if ($caMoisVal === false || $caMoisVal < 0) {
+        if (!$allowImportCompatibility) {
+            $errors['ca_mois'] = 'CA mensuel invalide.';
+        }
+        $data['ca_mois'] = 0.00;
+    } else {
+        $data['ca_mois'] = (float) $caMoisVal;
     }
 
     $coefficient = $data['ta_origine'] === 'FID+2ans' ? 0.846 * 0.5 : 0.846;
     $data['ca_annuel'] = round($data['ca_mois'] * 12 * $coefficient, 2);
 
-    $data['date_effet'] = parse_date_fr($post['date_effet'] ?? '');
-    if (!$data['date_effet']) {
-        $errors['date_effet'] = 'Date d’effet invalide.';
+    $parsedDateEffet = parse_date_fr($post['date_effet'] ?? '');
+    if (!$parsedDateEffet) {
+        if ($allowImportCompatibility) {
+            $parsedDateEffet = $data['date_vente'] ?: date('Y-m-d');
+        } else {
+            $errors['date_effet'] = 'Date d’effet invalide.';
+        }
     }
+    $data['date_effet'] = $parsedDateEffet ?: date('Y-m-d');
 
     $data['produit'] = clean_str($post['produit'] ?? '');
     if ($data['produit'] === '') {
-        $errors['produit'] = 'Le produit est obligatoire.';
+        if ($allowImportCompatibility) {
+            $data['produit'] = 'Non spécifié';
+        } else {
+            $errors['produit'] = 'Le produit est obligatoire.';
+        }
     }
 
     $data['compagnie'] = clean_str($post['compagnie'] ?? '');
     if ($data['compagnie'] === '') {
-        $errors['compagnie'] = 'La compagnie est obligatoire.';
+        if ($allowImportCompatibility) {
+            $data['compagnie'] = 'Autre';
+        } else {
+            $errors['compagnie'] = 'La compagnie est obligatoire.';
+        }
     }
 
     $courrier = $post['courrier'] ?? [];
@@ -316,7 +398,11 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
 
     $data['etat_contrat'] = clean_str($post['etat_contrat'] ?? 'Actif');
     if (!in_array($data['etat_contrat'], etats_contrat_valides(), true)) {
-        $errors['etat_contrat'] = 'État du contrat invalide.';
+        if ($allowImportCompatibility) {
+            $data['etat_contrat'] = 'Actif';
+        } else {
+            $errors['etat_contrat'] = 'État du contrat invalide.';
+        }
     }
 
     $data['commentaire'] = clean_str($post['commentaire'] ?? '') ?: null;

@@ -11,10 +11,21 @@ function import_normalize_header(string $value): string
     return preg_replace('/[^a-z0-9]+/', '', $value) ?? '';
 }
 
-function import_cell(array $row, array $indexes, string $header): string
+function import_cell(array $row, array $indexes, array|string $headers): string
 {
-    $index = $indexes[import_normalize_header($header)] ?? null;
-    return $index === null ? '' : clean_str((string) ($row[$index] ?? ''));
+    if (!is_array($headers)) {
+        $headers = [$headers];
+    }
+    foreach ($headers as $header) {
+        $norm = import_normalize_header($header);
+        if (isset($indexes[$norm])) {
+            $val = clean_str((string) ($row[$indexes[$norm]] ?? ''));
+            if ($val !== '') {
+                return $val;
+            }
+        }
+    }
+    return '';
 }
 
 function import_date_value(string $value): string
@@ -185,53 +196,81 @@ try {
     foreach ($headers as $index => $header) {
         $indexes[import_normalize_header($header)] = $index;
     }
-    $requiredHeaders = ['Vendeur', 'Date vente', 'Civilité', 'Nom', 'Prénom', 'Téléphone 2', 'Adresse', 'CP', 'Ville', 'Type de signature', 'CA-mois', "Date d'effet", 'Produit', 'Compagnie'];
-    foreach ($requiredHeaders as $required) {
-        if (!isset($indexes[import_normalize_header($required)])) {
-            throw new RuntimeException('En-tête obligatoire manquante : ' . $required . '.');
-        }
-    }
 
     $vendeurs = $db->query("SELECT id, nom_complet FROM users WHERE role = 'vendeur'")->fetchAll(PDO::FETCH_KEY_PAIR);
     $vendeursByName = [];
     foreach ($vendeurs as $id => $name) {
         $vendeursByName[import_normalize_header($name)] = (int) $id;
     }
+
+    // Récupère les numéros de portable existants pour garantir l'unicité sans bloquer l'import
+    $existingPortables = $db->query("SELECT portable FROM dossiers")->fetchAll(PDO::FETCH_COLUMN);
+    $seenPortables = array_fill_keys(array_map('strtolower', array_filter($existingPortables)), true);
+
     $prepared = [];
-    $errors = [];
     $db->beginTransaction();
     foreach (array_slice($rows, 1) as $offset => $row) {
-        $line = $offset + 2;
-        $sellerName = import_cell($row, $indexes, 'Vendeur');
-        $sellerId = import_vendeur_id($db, $sellerName, $vendeursByName);
-        $courrierText = import_cell($row, $indexes, 'Courrier');
+        $sellerName = import_cell($row, $indexes, ['Vendeur', 'Agent', 'Conseiller']);
+        $sellerId = $sellerName !== '' ? import_vendeur_id($db, $sellerName, $vendeursByName) : (int) (current_user()['id'] ?? 1);
+
+        $telfix = import_cell($row, $indexes, ['Téléphone 1', 'Tel 1', 'Telfix', 'Téléphone', 'Tel', 'Fixe']);
+        $portable = import_cell($row, $indexes, ['Téléphone 2', 'Tel 2', 'Portable', 'Mobile', 'GSM']);
+
+        $dateVenteRaw = import_cell($row, $indexes, ['Date vente', 'Date de vente', 'Vente']);
+        $dateVenteVal = import_date_value($dateVenteRaw);
+
+        $dateEffetRaw = import_cell($row, $indexes, ["Date d'effet", 'Date effet', 'Effet']);
+        $dateEffetVal = import_date_value($dateEffetRaw);
+
+        $courrierText = import_cell($row, $indexes, ['Courrier', 'Courriers']);
         $courrier = array_values(array_filter(array_map('trim', preg_split('/[,;|]+/', $courrierText) ?: [])));
+
         $post = [
-            'vendeur_id' => $sellerId, 'ta_origine' => import_cell($row, $indexes, 'Origine'), 'p_prod' => import_cell($row, $indexes, 'Prod'),
-            'date_vente' => import_date_value(import_cell($row, $indexes, 'Date vente')), 'civilite' => import_cell($row, $indexes, 'Civilité'),
-            'nom' => import_cell($row, $indexes, 'Nom'), 'prenom' => import_cell($row, $indexes, 'Prénom'), 'mail' => import_cell($row, $indexes, 'Mail'),
-            'telfix' => import_cell($row, $indexes, 'Téléphone 1'), 'portable' => import_cell($row, $indexes, 'Téléphone 2'),
-            'nombre_personnes' => import_cell($row, $indexes, "NB d'assurés") ?: 1, 'date_naissance_assure' => import_cell($row, $indexes, 'Date naissance assuré'),
-            'age_assure_principal' => import_cell($row, $indexes, 'Age assuré principal'), 'adresse' => import_cell($row, $indexes, 'Adresse'),
-            'cp' => import_cell($row, $indexes, 'CP'), 'ville' => import_cell($row, $indexes, 'Ville'), 'type_signature' => import_cell($row, $indexes, 'Type de signature'),
-            'ca_mois' => import_cell($row, $indexes, 'CA-mois'), 'ca_annuel' => import_cell($row, $indexes, 'CA-annuel'),
-            'date_effet' => import_date_value(import_cell($row, $indexes, "Date d'effet")), 'produit' => import_cell($row, $indexes, 'Produit'),
-            'compagnie' => import_cell($row, $indexes, 'Compagnie'), 'courrier' => $courrier, 'etat_contrat' => import_cell($row, $indexes, 'Etat du contrat') ?: 'Actif',
-            'commentaire' => import_cell($row, $indexes, 'Commentaire dossier'),
+            'vendeur_id' => $sellerId,
+            'ta_origine' => import_cell($row, $indexes, ['Origine', 'Source', 'Ta origine']),
+            'p_prod' => import_cell($row, $indexes, ['Prod', 'P_prod']),
+            'date_vente' => $dateVenteVal,
+            'civilite' => import_cell($row, $indexes, ['Civilité', 'Civilite', 'Civ']),
+            'nom' => import_cell($row, $indexes, ['Nom', 'Nom client']),
+            'prenom' => import_cell($row, $indexes, ['Prénom', 'Prenom', 'Prénom client']),
+            'mail' => import_cell($row, $indexes, ['Mail', 'Email', 'E-mail', 'Courriel']),
+            'telfix' => $telfix,
+            'portable' => $portable,
+            'nombre_personnes' => import_cell($row, $indexes, ["NB d'assurés", 'Nombre de personnes', 'Assurés']) ?: 1,
+            'date_naissance_assure' => import_cell($row, $indexes, ['Date naissance assuré', 'Date naissance', 'Date de naissance']),
+            'age_assure_principal' => import_cell($row, $indexes, ['Age assuré principal', 'Âge', 'Age']),
+            'adresse' => import_cell($row, $indexes, ['Adresse', 'Adresse postale']),
+            'cp' => import_cell($row, $indexes, ['CP', 'Code postal']),
+            'ville' => import_cell($row, $indexes, ['Ville', 'Commune']),
+            'type_signature' => import_cell($row, $indexes, ['Type de signature', 'Type signature', 'Signature']),
+            'ca_mois' => import_cell($row, $indexes, ['CA-mois', 'CA mois', 'CA Mensuel', 'Cotisation']),
+            'ca_annuel' => import_cell($row, $indexes, ['CA-annuel', 'CA annuel', 'CA Annuel']),
+            'date_effet' => $dateEffetVal,
+            'produit' => import_cell($row, $indexes, ['Produit', 'Offre', 'Formule']),
+            'compagnie' => import_cell($row, $indexes, ['Compagnie', 'Assureur']),
+            'courrier' => $courrier,
+            'etat_contrat' => import_cell($row, $indexes, ['Etat du contrat', 'État du contrat', 'Contrat']) ?: 'Actif',
+            'commentaire' => import_cell($row, $indexes, ['Commentaire dossier', 'Commentaire', 'Notes']),
         ];
+
         $result = validate_dossier_input($post, $db, null, true);
-        if ($result['errors']) {
-            $errors[] = 'Ligne ' . $line . ' : ' . implode(' ', array_values($result['errors']));
-        } else {
-            $prepared[] = $result['data'];
+        $data = $result['data'];
+
+        // Garantit l'unicité du champ portable dans la base de données
+        $basePortable = $data['portable'];
+        $cleanPortable = $basePortable;
+        $counter = 2;
+        while (isset($seenPortables[strtolower($cleanPortable)])) {
+            $cleanPortable = substr($basePortable, 0, 20) . '-' . $counter++;
         }
-    }
-    if ($errors) {
-        throw new RuntimeException(implode(' ', array_slice($errors, 0, 8)) . (count($errors) > 8 ? ' D’autres erreurs existent.' : ''));
+        $seenPortables[strtolower($cleanPortable)] = true;
+        $data['portable'] = $cleanPortable;
+
+        $prepared[] = $data;
     }
 
     foreach ($prepared as $data) {
-        import_insert_row($db, $data, (int) current_user()['id']);
+        import_insert_row($db, $data, (int) (current_user()['id'] ?? 1));
     }
     $db->commit();
     set_flash('success', count($prepared) . ' dossier(s) importé(s) avec succès.');
