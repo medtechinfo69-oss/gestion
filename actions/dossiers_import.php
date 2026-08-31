@@ -156,20 +156,31 @@ function import_csv_rows(string $path): array
     return $rows;
 }
 
-function import_insert_row(PDO $db, array $data, int $userId): void
+function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusinessRules = false): void
 {
+    // When importing with skipBusinessRules, do not auto-set the validation/annulation dates.
+    if (!$skipBusinessRules) {
+        $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
+        $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;
+    } else {
+        // preserve whatever was provided (can be null)
+        $data['date_dossier_complet'] = $data['date_dossier_complet'] ?? null;
+        $data['date_contrat_non_actif'] = $data['date_contrat_non_actif'] ?? null;
+    }
+
     $sql = 'INSERT INTO dossiers
         (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
          nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville, type_signature,
-         ca_mois, ca_annuel, date_effet, produit, compagnie, courrier, etat_dossier, etat_contrat,
-         commentaire, motif_annulation, created_by)
+         ca_mois, ca_annuel, date_effet, produit, compagnie, courrier, etat_dossier, date_dossier_complet,
+         etat_contrat, date_contrat_non_actif, commentaire, motif_annulation, created_by)
         VALUES
         (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
          :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville, :type_signature,
-         :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier, :etat_contrat,
-         :commentaire, :motif_annulation, :created_by)';
+         :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier, :date_dossier_complet,
+         :etat_contrat, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
     $data['created_by'] = $userId;
     $db->prepare($sql)->execute($data);
+    // Keep creation history logging even for imports
     log_dossier_history($db, (int) $db->lastInsertId(), $userId, 'creation');
 }
 
@@ -183,6 +194,13 @@ $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
 if (!in_array($extension, ['xlsx', 'csv'], true)) {
     set_flash('error', 'Format refusé. Utilisez un fichier .xlsx ou .csv.');
     redirect('dossiers_import.php');
+}
+
+// Allow callers to request import that skips business rules (dates/annulation/auto-validation).
+// Only trusted users should be able to use this flag; require_admin() is already enforced at top of this script.
+$skipBusinessRules = false;
+if (!empty($_POST['skipBusinessRules']) || !empty($_POST['skip_business_rules']) || (isset($_REQUEST['skipBusinessRules']) && $_REQUEST['skipBusinessRules'] === 'true')) {
+    $skipBusinessRules = true;
 }
 
 try {
@@ -203,9 +221,20 @@ try {
         $vendeursByName[import_normalize_header($name)] = (int) $id;
     }
 
-    // Récupère les numéros de portable existants pour garantir l'unicité sans bloquer l'import
-    $existingPortables = $db->query("SELECT portable FROM dossiers")->fetchAll(PDO::FETCH_COLUMN);
-    $seenPortables = array_fill_keys(array_map('strtolower', array_filter($existingPortables)), true);
+    $existingPhones = array_merge(
+        $db->query("SELECT telfix FROM dossiers WHERE telfix IS NOT NULL AND telfix <> ''")->fetchAll(PDO::FETCH_COLUMN),
+        $db->query("SELECT portable FROM dossiers WHERE portable IS NOT NULL AND portable <> ''")->fetchAll(PDO::FETCH_COLUMN)
+    );
+    $seenPhones = [];
+    foreach ($existingPhones as $phone) {
+        $norm = strtolower(preg_replace('/[^0-9]/', '', (string) $phone));
+        if ($norm !== '') {
+            $seenPhones[$norm] = true;
+        }
+    }
+
+    $newOrigines = [];
+    $existingOrigines = array_fill_keys(array_map('mb_strtolower', origines_valides($db)), true);
 
     $prepared = [];
     $db->beginTransaction();
@@ -256,21 +285,52 @@ try {
         $result = validate_dossier_input($post, $db, null, true);
         $data = $result['data'];
 
-        // Garantit l'unicité du champ portable dans la base de données
-        $basePortable = $data['portable'];
-        $cleanPortable = $basePortable;
-        $counter = 2;
-        while (isset($seenPortables[strtolower($cleanPortable)])) {
-            $cleanPortable = substr($basePortable, 0, 20) . '-' . $counter++;
+        // Preserve truly empty date cells from the XLSX/CSV import as NULL instead of auto-filling
+        // validate_dossier_input(..., true) may fill missing dates for compatibility; for imports
+        // we keep the original empty values when the source cell was empty.
+        if (isset($dateVenteRaw) && trim((string) $dateVenteRaw) === '') {
+            $data['date_vente'] = null;
         }
-        $seenPortables[strtolower($cleanPortable)] = true;
-        $data['portable'] = $cleanPortable;
+        if (isset($dateEffetRaw) && trim((string) $dateEffetRaw) === '') {
+            $data['date_effet'] = null;
+        }
+
+        $telfixNorm = strtolower(preg_replace('/[^0-9]/', '', (string) ($data['telfix'] ?? '')));
+        $portableNorm = strtolower(preg_replace('/[^0-9]/', '', (string) ($data['portable'] ?? '')));
+
+        if (($telfixNorm !== '' && isset($seenPhones[$telfixNorm])) || ($portableNorm !== '' && isset($seenPhones[$portableNorm]))) {
+            continue;
+        }
+
+        if ($telfixNorm !== '') {
+            $seenPhones[$telfixNorm] = true;
+        }
+        if ($portableNorm !== '') {
+            $seenPhones[$portableNorm] = true;
+        }
+
+        $origine = $data['ta_origine'];
+        if ($origine !== '' && !isset($existingOrigines[mb_strtolower($origine)])) {
+            $newOrigines[mb_strtolower($origine)] = $origine;
+            $existingOrigines[mb_strtolower($origine)] = true;
+        }
 
         $prepared[] = $data;
     }
 
+    foreach ($newOrigines as $origine) {
+        try {
+            $db->prepare('INSERT IGNORE INTO origines (nom) VALUES (:nom)')->execute(['nom' => $origine]);
+        } catch (Throwable $e) {
+            if (!str_contains($e->getMessage(), 'origines')) {
+                throw $e;
+            }
+        }
+    }
+    origines_valides($db, true);
+
     foreach ($prepared as $data) {
-        import_insert_row($db, $data, (int) (current_user()['id'] ?? 1));
+        import_insert_row($db, $data, (int) (current_user()['id'] ?? 1), $skipBusinessRules);
     }
     $db->commit();
     set_flash('success', count($prepared) . ' dossier(s) importé(s) avec succès.');
