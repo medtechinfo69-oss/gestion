@@ -15,43 +15,33 @@ unset($_SESSION['old_username']);
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Connexion · <?= e(APP_NAME) ?></title>
-<link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css">
+<link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= APP_ENV === 'development' ? time() : (int) filemtime(__DIR__ . '/assets/css/style.css') ?>">
 </head>
-<body>
+<body class="login">
 <div class="login-shell">
-  <div class="login-card">
-    <div class="top">
-      <div class="mark">
-        <img src="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg" alt="Assurialis">
-      </div>
-      <p>Plateforme de gestion des dossiers d'assurance</p>
-    </div>
-    <div class="body">
-      <?php foreach ($flashes as $flash): ?>
-        <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
-      <?php endforeach; ?>
-
-      <form action="<?= e(APP_URL) ?>/actions/login_action.php" method="post" novalidate>
-        <?= csrf_field() ?>
-        <div class="form-group">
-          <label for="username">Identifiant</label>
-          <input type="text" id="username" name="username" value="<?= e($oldUsername) ?>" autocomplete="username" required autofocus>
-        </div>
-        <div class="form-group">
-          <label for="password">Mot de passe</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
-      </form>
-
-      <!-- <div class="login-demo">
-        <strong>Comptes de démonstration :</strong><br>
-        Admin — identifiant <span class="kbd">admin</span> / mot de passe <span class="kbd">Admin@2026</span><br>
-        Superviseurs : <span class="kbd">emma</span> ou <span class="kbd">rabia</span> / mot de passe <span class="kbd">Superviseur@2026</span><br>
-        <em>Un changement de mot de passe sera demandé à la première connexion.</em>
-      </div> -->
-    </div>
-  </div>
+    <section class="login-brand">
+      <img src="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg" alt="Assurialis">
+      <h1>Gestion des dossiers</h1>
+      <p>Une solution simple et professionnelle pour gérer les employés, importer les heures et suivre les salaires mensuels.</p>
+    </section>
+    <section class="login-box">
+    <h2>Connexion</h2>
+    <p>Accédez à votre espace d'administration RH.</p>
+    <?php foreach ($flashes as $flash): ?>
+      <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
+    <?php endforeach; ?>
+    <form action="<?= e(APP_URL) ?>/actions/login_action.php" method="post" autocomplete="off" novalidate>
+      <?= csrf_field() ?>
+      <label for="username">Identifiant
+        <input type="text" id="username" name="username" value="<?= e($oldUsername) ?>" autocomplete="username" required autofocus>
+      </label>
+      <label for="password">Mot de passe
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary">Se connecter</button>
+    </form>
+    <div class="login-note">Accès protégé · Session sécurisée · Déconnexion automatique après inactivité</div>
+    </section>
 </div>
 </body>
 </html>

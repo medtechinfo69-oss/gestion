@@ -9,6 +9,6 @@
     <?php endif; ?>
   </div>
 </div>
-<script src="<?= e(APP_URL) ?>/assets/js/app.js?v=<?= (int) filemtime(__DIR__ . '/../assets/js/app.js') ?>"></script>
+<script src="<?= e(APP_URL) ?>/assets/js/app.js?v=<?= APP_ENV === 'development' ? time() : (int) filemtime(__DIR__ . '/../assets/js/app.js') ?>"></script>
 </body>
 </html>

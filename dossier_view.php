@@ -47,6 +47,7 @@ $champLabels = [
     'ville' => 'Ville', 'type_signature' => 'Type de signature', 'ca_mois' => 'CA mensuel', 'ca_annuel' => 'CA annuel',
     'date_effet' => "Date d'effet", 'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'État du dossier',
     'courrier' => 'Courrier', 'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'État du contrat', 'motif_annulation' => "Motif d'annulation",
+    'date_dossier_complet' => 'Date validation', 'date_contrat_non_actif' => "Date d'annulation",
 ];
 
 $pageTitle = $dossier['nom'] . ' ' . $dossier['prenom'];
@@ -55,6 +56,13 @@ $activePage = 'dossiers';
 $topbarActions = ($isAdmin || $isSuperviseur)
     ? '<a href="' . e(APP_URL) . '/dossier_form.php?id=' . (int) $dossier['id'] . '" class="btn btn-primary">Modifier</a>'
     : '';
+if ($isAdmin && ($dossier['date_dossier_complet'] !== null || $dossier['date_contrat_non_actif'] !== null)) {
+    $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_reactivate.php" style="display:inline;" onsubmit="return confirm(\'Réactiver la supervision pour ce dossier ?\');">'
+        . csrf_field()
+        . '<input type="hidden" name="id" value="' . (int) $dossier['id'] . '">'
+        . '<button type="submit" class="btn btn-outline">Réactiver supervision</button>'
+        . '</form>';
+}
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -107,8 +115,10 @@ require __DIR__ . '/includes/header.php';
       <div class="detail-item"><div class="k">CA mensuel</div><div class="v"><?= format_montant((float) $dossier['ca_mois']) ?></div></div>
       <div class="detail-item"><div class="k">CA annuel</div><div class="v"><strong><?= format_montant((float) $dossier['ca_annuel']) ?></strong></div></div>
       <div class="detail-item"><div class="k">État du dossier</div><div class="v"><?= badge_etat($dossier['etat_dossier']) ?></div></div>
+      <div class="detail-item"><div class="k">Date validation</div><div class="v"><?= !empty($dossier['date_dossier_complet']) ? format_date($dossier['date_dossier_complet']) : '—' ?></div></div>
       <div class="detail-item"><div class="k">Courrier</div><div class="v"><?= e(implode(', ', courrier_values($dossier['courrier'] ?? ''))) ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">État du contrat</div><div class="v"><?= badge_etat_contrat($dossier['etat_contrat']) ?></div></div>
+      <div class="detail-item"><div class="k">Date d'annulation</div><div class="v"><?= !empty($dossier['date_contrat_non_actif']) ? format_date($dossier['date_contrat_non_actif']) : '—' ?></div></div>
       <?php if ($dossier['motif_annulation']): ?>
       <div class="detail-item"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
       <?php endif; ?>

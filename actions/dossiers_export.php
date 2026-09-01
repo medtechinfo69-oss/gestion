@@ -93,8 +93,8 @@ $columns = [
     'portable' => 'Téléphone 2', 'nombre_personnes' => "NB d'assurés", 'date_naissance_assure' => 'Date naissance assuré',
     'age_assure_principal' => 'Age assuré principal', 'adresse' => 'Adresse', 'cp' => 'CP', 'ville' => 'Ville',
     'type_signature' => 'Type de signature', 'ca_mois' => 'CA-mois', 'ca_annuel' => 'CA-annuel', 'date_effet' => "Date d'effet",
-    'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'Etat du dossier', 'courrier' => 'Courrier',
-    'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'Etat du contrat',
+    'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'Etat du dossier', 'date_dossier_complet' => 'Date validation', 'courrier' => 'Courrier',
+    'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'Etat du contrat', 'date_contrat_non_actif' => "Date d'annulation",
 ];
 if ($hideSupervisorColumns) {
     foreach (['mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {
@@ -113,7 +113,7 @@ foreach ($dossiers as $rowNumber => $dossier) {
     $cells = '';
     foreach (array_keys($columns) as $index => $key) {
         $value = $dossier[$key] ?? '';
-        if (in_array($key, ['date_vente', 'date_effet'], true)) {
+        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif'], true)) {
             $value = format_date((string) $value);
         } elseif ($key === 'courrier') {
             $value = implode(', ', courrier_values((string) $value));

@@ -5,6 +5,7 @@ require_dossier_access();
 $id = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
 $dossier = null;
 $isEdit = false;
+$isAdmin = is_admin();
 $isSuperviseur = is_superviseur();
 
 if ($isSuperviseur && !$id) {
@@ -22,6 +23,8 @@ if ($id) {
     }
     $isEdit = true;
 }
+
+$isRestricted = $isEdit && ($dossier['date_dossier_complet'] !== null || $dossier['date_contrat_non_actif'] !== null);
 
 // Ré-affichage après erreur de validation (données conservées en session)
 $formData = $_SESSION['form_data'] ?? null;
@@ -49,7 +52,10 @@ require __DIR__ . '/includes/header.php';
 <?php if ($isSuperviseur): ?>
 <div class="card dossier-form-card">
   <div class="card-body">
-    <p class="help-text">Vous pouvez uniquement modifier le courrier et le commentaire. L’état du dossier est calculé automatiquement.</p>
+    <?php if ($isRestricted): ?>
+      <div class="alert alert-error" style="margin-bottom:16px;">Merci de contacter l'administrateur.</div>
+    <?php endif; ?>
+    <p class="help-text">Vous pouvez uniquement modifier le courrier et le commentaire. L'état du dossier est calculé automatiquement.</p>
     <form action="<?= e(APP_URL) ?>/actions/dossier_save.php" method="post">
       <?= csrf_field() ?>
       <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
@@ -58,18 +64,26 @@ require __DIR__ . '/includes/header.php';
           <label>Courrier</label>
           <div class="flex gap-12" style="flex-wrap:wrap;">
             <?php foreach (options_courrier() as $option): ?>
-              <label><input type="checkbox" name="courrier[]" value="<?= e($option) ?>" <?= in_array($option, courrier_values($dossier['courrier'] ?? ''), true) ? 'checked' : '' ?>> <?= e($option) ?></label>
+              <label><input type="checkbox" name="courrier[]" value="<?= e($option) ?>" <?= in_array($option, courrier_values($dossier['courrier'] ?? ''), true) ? 'checked' : '' ?> <?= $isRestricted ? 'disabled' : '' ?>> <?= e($option) ?></label>
             <?php endforeach; ?>
           </div>
           <div class="help-text">Les quatre cases cochées donnent automatiquement « Dossier complet ».</div>
         </div>
         <div class="form-group span-full">
           <label for="commentaire">Commentaire dossier</label>
-          <textarea id="commentaire" name="commentaire"><?= e($dossier['commentaire']) ?></textarea>
+          <textarea id="commentaire" name="commentaire" <?= $isRestricted ? 'disabled' : '' ?>><?= e($dossier['commentaire']) ?></textarea>
+        </div>
+        <div class="form-group span-full">
+          <label for="etat_contrat">État du contrat</label>
+          <select id="etat_contrat" name="etat_contrat" <?= $isRestricted ? 'disabled' : '' ?>>
+            <?php foreach (etats_contrat_valides() as $etat): ?>
+              <option value="<?= e($etat) ?>" <?= $dossier['etat_contrat'] === $etat ? 'selected' : '' ?>><?= e($etat) ?></option>
+            <?php endforeach; ?>
+          </select>
         </div>
       </div>
       <div class="form-actions dossier-form-actions">
-        <button type="submit" class="btn btn-primary">Enregistrer</button>
+        <button type="submit" class="btn btn-primary" <?= $isRestricted ? 'disabled' : '' ?>>Enregistrer</button>
         <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $dossier['id'] ?>" class="btn btn-outline">Annuler</a>
       </div>
     </form>
@@ -101,8 +115,15 @@ require __DIR__ . '/includes/header.php';
           <label for="ta_origine">Origine</label>
           <select id="ta_origine" name="ta_origine" class="<?= isset($formErrors['ta_origine']) ? 'input-error' : '' ?>">
             <option value="">— Sélectionner —</option>
-            <?php foreach (origines_valides() as $origine): ?>
-              <option value="<?= e($origine) ?>" <?= $v('ta_origine') === $origine ? 'selected' : '' ?>><?= e($origine) ?></option>
+            <?php
+              $currentOrigine = (string) $v('ta_origine', '');
+              $validOrigines = origines_valides($db);
+              if ($currentOrigine !== '' && !in_array($currentOrigine, $validOrigines, true)) {
+                  $validOrigines[] = $currentOrigine;
+              }
+              foreach ($validOrigines as $origine):
+            ?>
+              <option value="<?= e($origine) ?>" <?= $currentOrigine === $origine ? 'selected' : '' ?>><?= e($origine) ?></option>
             <?php endforeach; ?>
           </select>
           <?php if (isset($formErrors['ta_origine'])): ?><div class="field-error"><?= e($formErrors['ta_origine']) ?></div><?php endif; ?>
@@ -140,7 +161,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="form-group">
           <label for="mail">Mail</label>
-          <input type="email" id="mail" name="mail" value="<?= e($v('mail')) ?>" maxlength="190" class="<?= isset($formErrors['mail']) ? 'input-error' : '' ?>">
+          <input type="text" id="mail" name="mail" value="<?= e($v('mail')) ?>" maxlength="190" class="<?= isset($formErrors['mail']) ? 'input-error' : '' ?>">
           <?php if (isset($formErrors['mail'])): ?><div class="field-error"><?= e($formErrors['mail']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
@@ -204,7 +225,7 @@ require __DIR__ . '/includes/header.php';
         <div class="form-group">
           <label for="ca_annuel">CA annuel (€)</label>
           <input type="number" step="0.01" min="0" id="ca_annuel" name="ca_annuel" data-auto="true" value="<?= e((string) $v('ca_annuel')) ?>">
-         
+          
         </div>
         <div class="form-group">
           <label for="date_effet">Date d'effet <span class="req">*</span></label>
@@ -254,6 +275,13 @@ require __DIR__ . '/includes/header.php';
 
       <div class="form-actions dossier-form-actions">
         <button type="submit" class="btn btn-primary"><?= $isEdit ? 'Enregistrer les modifications' : 'Créer le dossier' ?></button>
+        <?php if ($isAdmin && $isRestricted): ?>
+          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" onsubmit="return confirm('Réactiver la supervision pour ce dossier ?');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+            <button type="submit" class="btn btn-outline">Réactiver supervision</button>
+          </form>
+        <?php endif; ?>
         <a href="<?= e(APP_URL) ?>/dossiers.php" class="btn btn-outline">Annuler</a>
       </div>
     </form>

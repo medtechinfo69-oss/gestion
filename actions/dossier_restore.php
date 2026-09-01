@@ -24,7 +24,7 @@ if (!is_array($dossier) || !is_array($attachments) || !is_array($historique)) {
     redirect('corbeille.php');
 }
 
-$dossierColumns = ['id', 'vendeur_id', 'ta_origine', 'p_prod', 'date_vente', 'civilite', 'nom', 'prenom', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville', 'type_signature', 'ca_mois', 'ca_annuel', 'date_effet', 'produit', 'compagnie', 'courrier', 'etat_dossier', 'etat_contrat', 'commentaire', 'motif_annulation', 'created_by', 'updated_by', 'created_at', 'updated_at'];
+$dossierColumns = ['id', 'vendeur_id', 'ta_origine', 'p_prod', 'date_vente', 'civilite', 'nom', 'prenom', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville', 'type_signature', 'ca_mois', 'ca_annuel', 'date_effet', 'produit', 'compagnie', 'courrier', 'etat_dossier', 'date_dossier_complet', 'etat_contrat', 'date_contrat_non_actif', 'commentaire', 'motif_annulation', 'created_by', 'updated_by', 'created_at', 'updated_at'];
 $dossier = array_intersect_key($dossier, array_flip($dossierColumns));
 
 try {

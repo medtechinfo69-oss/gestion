@@ -28,20 +28,28 @@ if (is_superviseur()) {
     $courrierValues = is_array($courrierValues) ? array_values(array_intersect(options_courrier(), array_map('clean_str', $courrierValues))) : [];
     $courrier = json_encode(array_values(array_unique($courrierValues)), JSON_UNESCAPED_UNICODE);
     $etat = etat_dossier_from_courrier($courrierValues);
+    $etatContrat = clean_str($_POST['etat_contrat'] ?? 'Actif');
     $commentaire = clean_str($_POST['commentaire'] ?? '') ?: null;
+    $dateDossierComplet = $etat === 'Dossier complet' ? ($existing['date_dossier_complet'] ?? date('Y-m-d')) : null;
+    $dateContratNonActif = $etatContrat !== 'Actif' ? ($existing['date_contrat_non_actif'] ?? date('Y-m-d')) : null;
 
     $stmt = $db->prepare('UPDATE dossiers
-                          SET courrier = :courrier, etat_dossier = :etat, commentaire = :commentaire, updated_by = :updated_by
+                          SET courrier = :courrier, etat_dossier = :etat, date_dossier_complet = :date_dossier_complet,
+                              etat_contrat = :etat_contrat, date_contrat_non_actif = :date_contrat_non_actif,
+                              commentaire = :commentaire, updated_by = :updated_by
                           WHERE id = :id');
     $stmt->execute([
         'courrier' => $courrier,
         'etat' => $etat,
+        'date_dossier_complet' => $dateDossierComplet,
+        'etat_contrat' => $etatContrat,
+        'date_contrat_non_actif' => $dateContratNonActif,
         'commentaire' => $commentaire,
         'updated_by' => $user['id'],
         'id' => $id,
     ]);
 
-    foreach (['courrier' => $courrier, 'etat_dossier' => $etat, 'commentaire' => $commentaire] as $champ => $nouvelle) {
+    foreach (['courrier' => $courrier, 'etat_dossier' => $etat, 'etat_contrat' => $etatContrat, 'commentaire' => $commentaire] as $champ => $nouvelle) {
         if ((string) $nouvelle !== (string) $existing[$champ]) {
             log_dossier_history($db, $id, $user['id'], 'modification', $champ, (string) $existing[$champ], (string) $nouvelle);
         }
@@ -73,11 +81,18 @@ try {
                     age_assure_principal = :age_assure_principal, adresse = :adresse, cp = :cp, ville = :ville,
                     type_signature = :type_signature, ca_mois = :ca_mois, ca_annuel = :ca_annuel, date_effet = :date_effet,
                     produit = :produit, compagnie = :compagnie, courrier = :courrier, etat_dossier = :etat_dossier,
-                    etat_contrat = :etat_contrat, commentaire = :commentaire,
+                    date_dossier_complet = :date_dossier_complet, etat_contrat = :etat_contrat,
+                    date_contrat_non_actif = :date_contrat_non_actif, commentaire = :commentaire,
                     motif_annulation = :motif_annulation, updated_by = :updated_by
                 WHERE id = :id';
         $stmt = $db->prepare($sql);
         $data['updated_by'] = $user['id'];
+        $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet'
+            ? ($existing['date_dossier_complet'] ?? date('Y-m-d'))
+            : null;
+        $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif'
+            ? ($existing['date_contrat_non_actif'] ?? date('Y-m-d'))
+            : null;
         $data['id'] = $id;
         $stmt->execute($data);
 
@@ -96,13 +111,15 @@ try {
                     (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
                      nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville,
                      type_signature, ca_mois, ca_annuel, date_effet, produit, compagnie, courrier, etat_dossier,
-                     etat_contrat, commentaire, motif_annulation, created_by)
+                     date_dossier_complet, etat_contrat, date_contrat_non_actif, commentaire, motif_annulation, created_by)
                 VALUES
                     (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
                      :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville,
                      :type_signature, :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier,
-                     :etat_contrat, :commentaire, :motif_annulation, :created_by)';
+                     :date_dossier_complet, :etat_contrat, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
         $stmt = $db->prepare($sql);
+        $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
+        $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;
         $data['created_by'] = $user['id'];
         $stmt->execute($data);
         $id = (int) $db->lastInsertId();

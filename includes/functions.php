@@ -135,9 +135,24 @@ function options_courrier(): array
     return ['Résiliation', 'RIB', 'Devoir de conseil', 'Consentement'];
 }
 
-function origines_valides(): array
+function origines_valides(PDO $db = null, bool $refresh = false): array
 {
-    return ['Lead', 'Fiche perso', 'MMC 12', 'MMC 25', 'FID+2ans'];
+    static $cached = null;
+    if ($refresh || $cached === null) {
+        $default = ['Lead', 'Fiche perso', 'MMC 12', 'MMC 25', 'FID+2ans'];
+        if (!$db) {
+            $cached = $default;
+            return $cached;
+        }
+        try {
+            $stmt = $db->query('SELECT nom FROM origines ORDER BY nom');
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $cached = $rows ?: $default;
+        } catch (Throwable $e) {
+            $cached = $default;
+        }
+    }
+    return $cached;
 }
 
 function etats_contrat_valides(): array
@@ -225,9 +240,15 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     $legacyOrigins = ['5ASSUR', '5 ASSUR', 'TRANSFERT', 'PARRAINAGE', 'FICHE PERSO'];
     $originIsValid = $allowImportCompatibility
         ? mb_strlen($data['ta_origine']) <= 255
-        : in_array($data['ta_origine'], origines_valides(), true);
+        : in_array($data['ta_origine'], origines_valides($db), true);
     if (!$originIsValid && !($allowImportCompatibility && in_array($data['ta_origine'], $legacyOrigins, true))) {
-        $errors['ta_origine'] = 'Origine invalide.';
+        try {
+            $db->prepare('INSERT IGNORE INTO origines (nom) VALUES (:nom)')->execute(['nom' => $data['ta_origine']]);
+            origines_valides($db, true);
+            $originIsValid = true;
+        } catch (Throwable $e) {
+            $errors['ta_origine'] = 'Origine invalide.';
+        }
     }
     $data['p_prod'] = clean_str($post['p_prod'] ?? '') ?: ($allowImportCompatibility ? '5 ASSUR' : '');
 
@@ -269,11 +290,6 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     }
 
     $data['mail'] = clean_str($post['mail'] ?? '');
-    if ($data['mail'] !== '' && !filter_var($data['mail'], FILTER_VALIDATE_EMAIL)) {
-        if (!$allowImportCompatibility) {
-            $errors['mail'] = 'Adresse e-mail invalide.';
-        }
-    }
     if ($data['mail'] === '') {
         $data['mail'] = null;
     }

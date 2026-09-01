@@ -158,16 +158,8 @@ function import_csv_rows(string $path): array
 
 function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusinessRules = false): void
 {
-    // When importing with skipBusinessRules, do not auto-set the validation/annulation dates.
-    if (!$skipBusinessRules) {
-        $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
-        $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;
-    } else {
-        // preserve whatever was provided (can be null)
-        $data['date_dossier_complet'] = $data['date_dossier_complet'] ?? null;
-        $data['date_contrat_non_actif'] = $data['date_contrat_non_actif'] ?? null;
-    }
-
+    $data['date_dossier_complet'] = null;
+    $data['date_contrat_non_actif'] = null;
     $sql = 'INSERT INTO dossiers
         (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
          nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville, type_signature,

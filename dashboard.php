@@ -5,6 +5,22 @@ require_login();
 $user = current_user();
 $isAdmin = is_admin();
 $canAccessAll = can_access_dossiers();
+$currentMonth = (int) date('n');
+$performanceMonth = filter_var($_GET['performance_month'] ?? $currentMonth, FILTER_VALIDATE_INT);
+$performanceMonth = $performanceMonth >= 1 && $performanceMonth <= 12 ? $performanceMonth : $currentMonth;
+$currentYear = (int) date('Y');
+$performanceYear = filter_var($_GET['performance_year'] ?? $currentYear, FILTER_VALIDATE_INT);
+$performanceYears = $db->query('SELECT DISTINCT YEAR(date_vente) AS annee FROM dossiers WHERE date_vente IS NOT NULL ORDER BY annee DESC')->fetchAll(PDO::FETCH_COLUMN);
+$performanceYears = array_map('intval', $performanceYears);
+if (!in_array($currentYear, $performanceYears, true)) {
+  $performanceYears[] = $currentYear;
+}
+sort($performanceYears);
+$performanceYear = $performanceYear >= 1900 && $performanceYear <= 2100 ? $performanceYear : $currentYear;
+$monthLabels = [
+  1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril', 5 => 'Mai', 6 => 'Juin',
+  7 => 'Juillet', 8 => 'Août', 9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
+];
 
 // ---------------------------------------------------------------------
 // Statistiques globales (ou filtrées sur le vendeur connecté)
@@ -31,8 +47,18 @@ $stats = $stmt->fetch();
 // Répartition par vendeur (visible pour l'administrateur uniquement)
 $parVendeur = [];
 if ($isAdmin) {
-    $stmt = $db->query("SELECT u.nom_complet,
-            COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' THEN d.ca_annuel ELSE 0 END), 0) AS total_ca,
+  $performanceParams = [];
+  $performanceStart = sprintf('%04d-01-01', $performanceYear);
+  $performanceEnd = sprintf('%04d-01-01', $performanceYear + 1);
+  if ($performanceMonth) {
+    $performanceStart = sprintf('%04d-%02d-01', $performanceYear, $performanceMonth);
+    $performanceEnd = date('Y-m-d', strtotime($performanceStart . ' +1 month'));
+  }
+  $performanceDateCondition = ' AND d.date_vente >= :performance_start AND d.date_vente < :performance_end';
+  $performanceParams['performance_start'] = $performanceStart;
+  $performanceParams['performance_end'] = $performanceEnd;
+  $stmt = $db->prepare("SELECT u.nom_complet,
+            COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' $performanceDateCondition THEN d.ca_annuel ELSE 0 END), 0) AS total_ca,
             SUM(CASE WHEN d.etat_dossier = 'Dossier complet' THEN 1 ELSE 0 END) AS nb_complets,
             SUM(CASE WHEN d.etat_dossier = 'Dossier incomplet' THEN 1 ELSE 0 END) AS nb_non_complets,
             SUM(CASE WHEN d.etat_contrat <> 'Actif' THEN 1 ELSE 0 END) AS nb_annules,
@@ -42,6 +68,7 @@ if ($isAdmin) {
               WHERE u.role = 'vendeur'
         GROUP BY u.id, u.nom_complet
         ORDER BY total_ca DESC");
+    $stmt->execute($performanceParams);
     $parVendeur = $stmt->fetchAll();
 }
 
@@ -86,6 +113,18 @@ require __DIR__ . '/includes/header.php';
 <div class="card mb-16">
   <div class="card-header">
     <h2>Performance par vendeur</h2>
+    <form method="get" class="flex gap-8" style="align-items:center;">
+      <label for="performance_month" class="muted">Mois</label>
+      <select id="performance_month" name="performance_month">
+        <option value="0">Mois</option>
+        <?php foreach ($monthLabels as $monthNumber => $monthLabel): ?>
+          <option value="<?= $monthNumber ?>" <?= $performanceMonth === $monthNumber ? 'selected' : '' ?>><?= e($monthLabel) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <label for="performance_year" class="muted">Année</label>
+      <input type="number" id="performance_year" name="performance_year" value="<?= $performanceYear ?>" min="1900" max="2100" class="year-input" required>
+      <button type="submit" class="btn btn-primary btn-sm">Actualiser</button>
+    </form>
   </div>
   <div class="table-wrap">
     <table class="data-table">

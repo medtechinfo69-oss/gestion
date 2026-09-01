@@ -75,7 +75,9 @@ CREATE TABLE `dossiers` (
     `compagnie`              VARCHAR(100) NOT NULL,
     `courrier`               TEXT NULL,
     `etat_dossier`           ENUM('Dossier complet','Dossier incomplet') NOT NULL DEFAULT 'Dossier incomplet',
+    `date_dossier_complet`   DATE NULL,
     `etat_contrat`           ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','CSS') NOT NULL DEFAULT 'Actif',
+    `date_contrat_non_actif` DATE NULL,
     `commentaire`            TEXT NULL,
     `motif_annulation`       VARCHAR(255) NULL,
     `created_by`             INT UNSIGNED NOT NULL,
@@ -160,8 +162,20 @@ CREATE TABLE `dossier_trash` (
     `deleted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_trash_deleted_at` (`deleted_at`),
     KEY `idx_trash_original_id` (`original_dossier_id`),
-    CONSTRAINT `fk_trash_deleted_by` FOREIGN KEY (`deleted_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT
+    CONSTRAINT `fk_trash_deleted_by` REFERENCES `users`(`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Table : origines
+-- Liste des origines valides pour les dossiers.
+-- ---------------------------------------------------------------------
+CREATE TABLE `origines` (
+    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `nom`        VARCHAR(255) NOT NULL UNIQUE,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `origines` (`nom`) VALUES ('Lead'), ('Fiche perso'), ('MMC 12'), ('MMC 25'), ('FID+2ans');
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -212,3 +226,14 @@ VALUES
 UPDATE `dossiers`
 SET `etat_contrat` = 'Radié pour non-paiement'
 WHERE `portable` IN ('0601020309', '0601020310');
+
+-- ---------------------------------------------------------------------
+-- Initialisation des dates de statut pour les dossiers déjà présents.
+-- ---------------------------------------------------------------------
+UPDATE `dossiers`
+SET `date_dossier_complet` = CURRENT_DATE
+WHERE `etat_dossier` = 'Dossier complet' AND `date_dossier_complet` IS NULL;
+
+UPDATE `dossiers`
+SET `date_contrat_non_actif` = CURRENT_DATE
+WHERE `etat_contrat` <> 'Actif' AND `date_contrat_non_actif` IS NULL;
