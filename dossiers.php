@@ -28,7 +28,7 @@ $sort = array_key_exists($sort, $sortableColumns) ? $sort : 'date_vente';
 $dir = (isset($_GET['dir']) && strtolower($_GET['dir']) === 'asc') ? 'ASC' : 'DESC';
 
 $page = max(1, (int) ($_GET['page'] ?? 1));
-$perPage = ITEMS_PER_PAGE;
+$perPage = get_items_per_page();
 $offset = ($page - 1) * $perPage;
 
 // ---------------------------------------------------------------------

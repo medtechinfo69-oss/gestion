@@ -17,7 +17,7 @@ $user = current_user();
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= e($pageTitle) ?> · <?= e(APP_NAME) ?></title>
 <link rel="icon" type="image/jpeg" href="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg">
-<link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= APP_ENV === 'development' ? time() : (int) filemtime(__DIR__ . '/../assets/css/style.css') ?>">
+<link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= defined('CACHE_VERSION') ? CACHE_VERSION : (int) filemtime(__DIR__ . '/../assets/css/style.css') ?>">
 </head>
 <body class="<?= defined('SECURITY_MODE') && SECURITY_MODE ? 'security-mode' : '' ?>">
 <div class="app-shell">
@@ -72,7 +72,7 @@ $user = current_user();
 
       <div class="nav-label">Compte</div>
       <a href="<?= e(APP_URL) ?>/profile.php" class="nav-item <?= $activePage === 'profile' ? 'active' : '' ?>">
-        <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 18.5c1.5-2.5 4-3.8 7-3.8s5.5 1.3 7 3.8"/></svg></span> Mon profil
+        <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 18.5c1.5-2.5 4-3.8 7-3.8s5.5 1.3 7 3.8"/></svg></span> Paramètres
       </a>
     </nav>
 

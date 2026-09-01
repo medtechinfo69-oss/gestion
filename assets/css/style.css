@@ -463,45 +463,59 @@ p { margin: 0 0 1em; }
   margin: 0 0 22px;
 }
 
-/* Cartes statistiques façon fiche cartonnée avec onglet coloré */
+/* Cartes statistiques façon fiche cartonnée avec accent coloré */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 16px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
   background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-md);
-  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  padding: 20px 22px 20px 24px;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-line-strong);
 }
 .stat-card::before {
   content: '';
   position: absolute;
-  top: 0; left: 0;
-  width: 46px; height: 6px;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 5px;
   background: var(--bar-color, var(--color-cabinet));
-  border-radius: 0 0 6px 0;
+  border-radius: 4px 0 0 4px;
 }
 .stat-card .label {
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
   color: var(--color-ink-soft);
+  font-weight: 600;
   margin-bottom: 8px;
 }
 .stat-card .value {
   font-family: var(--font-display);
-  font-size: 1.7rem;
+  font-size: 1.8rem;
   color: var(--color-cabinet-dark);
   font-weight: 700;
+  line-height: 1.2;
 }
-.stat-card .hint { font-size: 0.78rem; color: var(--color-ink-faint); margin-top: 4px; }
+.stat-card .hint {
+  font-size: 0.8rem;
+  color: var(--color-ink-faint);
+  margin-top: 6px;
+}
 
 .stat-card.tone-complet { --bar-color: var(--color-complet); }
 .stat-card.tone-noncomplet { --bar-color: var(--color-noncomplet); }
@@ -654,6 +668,54 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .help-text { font-size: 0.76rem; color: var(--color-ink-faint); }
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 1.05fr 1.35fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.settings-panel {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+.settings-panel-accent {
+  background: linear-gradient(180deg, rgba(34, 58, 94, 0.04), rgba(34, 58, 94, 0.08));
+}
+.settings-panel-wide {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+.mini-title {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}
+.settings-panel h3,
+.settings-panel-wide h3 {
+  margin: 0 0 14px;
+  font-size: 1.15rem;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px 18px;
+}
+.compact-actions {
+  margin-top: 18px;
+  padding-top: 12px;
+  padding-bottom: 0 !important;
+  padding-left: 0 !important;
+  border-top: none;
+}
 
 /* ---------------------------------------------------------------------
    Tableaux

@@ -20,6 +20,10 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;");
 if (APP_ENV !== 'development') {
     header('Strict-Transport-Security: max-age=63072000; includeSubDomains');
+    // Force cache refresh on production deployment
+    header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
 }
 
 start_secure_session();

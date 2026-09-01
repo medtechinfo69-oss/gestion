@@ -220,7 +220,7 @@ try {
     $seenPhones = [];
     foreach ($existingPhones as $phone) {
         $norm = strtolower(preg_replace('/[^0-9]/', '', (string) $phone));
-        if ($norm !== '') {
+        if (strlen($norm) >= 6 && $norm !== '0000000000') {
             $seenPhones[$norm] = true;
         }
     }
@@ -229,6 +229,7 @@ try {
     $existingOrigines = array_fill_keys(array_map('mb_strtolower', origines_valides($db)), true);
 
     $prepared = [];
+    $skippedCount = 0;
     $db->beginTransaction();
     foreach (array_slice($rows, 1) as $offset => $row) {
         $sellerName = import_cell($row, $indexes, ['Vendeur', 'Agent', 'Conseiller']);
@@ -236,6 +237,29 @@ try {
 
         $telfix = import_cell($row, $indexes, ['Téléphone 1', 'Tel 1', 'Telfix', 'Téléphone', 'Tel', 'Fixe']);
         $portable = import_cell($row, $indexes, ['Téléphone 2', 'Tel 2', 'Portable', 'Mobile', 'GSM']);
+
+        $telfixNorm = strtolower(preg_replace('/[^0-9]/', '', (string) $telfix));
+        $portableNorm = strtolower(preg_replace('/[^0-9]/', '', (string) $portable));
+
+        if (strlen($telfixNorm) < 6 || $telfixNorm === '0000000000') {
+            $telfixNorm = '';
+        }
+        if (strlen($portableNorm) < 6 || $portableNorm === '0000000000') {
+            $portableNorm = '';
+        }
+
+        // Si le numéro de téléphone (Tel 1 ou Tel 2) existe déjà en base ou dans le fichier, on ne l'importe pas (doublon ignoré)
+        if (($telfixNorm !== '' && isset($seenPhones[$telfixNorm])) || ($portableNorm !== '' && isset($seenPhones[$portableNorm]))) {
+            $skippedCount++;
+            continue;
+        }
+
+        if ($telfixNorm !== '') {
+            $seenPhones[$telfixNorm] = true;
+        }
+        if ($portableNorm !== '') {
+            $seenPhones[$portableNorm] = true;
+        }
 
         $dateVenteRaw = import_cell($row, $indexes, ['Date vente', 'Date de vente', 'Vente']);
         $dateVenteVal = import_date_value($dateVenteRaw);
@@ -246,9 +270,20 @@ try {
         $courrierText = import_cell($row, $indexes, ['Courrier', 'Courriers']);
         $courrier = array_values(array_filter(array_map('trim', preg_split('/[,;|]+/', $courrierText) ?: [])));
 
+        $origineRaw = trim(import_cell($row, $indexes, ['Origine', 'Source', 'Ta origine']));
+        if ($origineRaw !== '' && !isset($existingOrigines[mb_strtolower($origineRaw)])) {
+            $newOrigines[mb_strtolower($origineRaw)] = $origineRaw;
+            $existingOrigines[mb_strtolower($origineRaw)] = true;
+        }
+
+        $postPortable = $portable;
+        if ($postPortable === '') {
+            $postPortable = $telfix !== '' ? $telfix : 'N/A-' . ($offset + 2) . '-' . time();
+        }
+
         $post = [
             'vendeur_id' => $sellerId,
-            'ta_origine' => import_cell($row, $indexes, ['Origine', 'Source', 'Ta origine']),
+            'ta_origine' => $origineRaw,
             'p_prod' => import_cell($row, $indexes, ['Prod', 'P_prod']),
             'date_vente' => $dateVenteVal,
             'civilite' => import_cell($row, $indexes, ['Civilité', 'Civilite', 'Civ']),
@@ -256,7 +291,7 @@ try {
             'prenom' => import_cell($row, $indexes, ['Prénom', 'Prenom', 'Prénom client']),
             'mail' => import_cell($row, $indexes, ['Mail', 'Email', 'E-mail', 'Courriel']),
             'telfix' => $telfix,
-            'portable' => $portable,
+            'portable' => $postPortable,
             'nombre_personnes' => import_cell($row, $indexes, ["NB d'assurés", 'Nombre de personnes', 'Assurés']) ?: 1,
             'date_naissance_assure' => import_cell($row, $indexes, ['Date naissance assuré', 'Date naissance', 'Date de naissance']),
             'age_assure_principal' => import_cell($row, $indexes, ['Age assuré principal', 'Âge', 'Age']),
@@ -277,9 +312,6 @@ try {
         $result = validate_dossier_input($post, $db, null, true);
         $data = $result['data'];
 
-        // Preserve truly empty date cells from the XLSX/CSV import as NULL instead of auto-filling
-        // validate_dossier_input(..., true) may fill missing dates for compatibility; for imports
-        // we keep the original empty values when the source cell was empty.
         if (isset($dateVenteRaw) && trim((string) $dateVenteRaw) === '') {
             $data['date_vente'] = null;
         }
@@ -287,36 +319,15 @@ try {
             $data['date_effet'] = null;
         }
 
-        $telfixNorm = strtolower(preg_replace('/[^0-9]/', '', (string) ($data['telfix'] ?? '')));
-        $portableNorm = strtolower(preg_replace('/[^0-9]/', '', (string) ($data['portable'] ?? '')));
-
-        if (($telfixNorm !== '' && isset($seenPhones[$telfixNorm])) || ($portableNorm !== '' && isset($seenPhones[$portableNorm]))) {
-            continue;
-        }
-
-        if ($telfixNorm !== '') {
-            $seenPhones[$telfixNorm] = true;
-        }
-        if ($portableNorm !== '') {
-            $seenPhones[$portableNorm] = true;
-        }
-
-        $origine = $data['ta_origine'];
-        if ($origine !== '' && !isset($existingOrigines[mb_strtolower($origine)])) {
-            $newOrigines[mb_strtolower($origine)] = $origine;
-            $existingOrigines[mb_strtolower($origine)] = true;
-        }
-
         $prepared[] = $data;
     }
 
     foreach ($newOrigines as $origine) {
         try {
-            $db->prepare('INSERT IGNORE INTO origines (nom) VALUES (:nom)')->execute(['nom' => $origine]);
+            $stmt = $db->prepare('INSERT INTO origines (nom) VALUES (:nom) ON DUPLICATE KEY UPDATE nom = VALUES(nom)');
+            $stmt->execute(['nom' => $origine]);
         } catch (Throwable $e) {
-            if (!str_contains($e->getMessage(), 'origines')) {
-                throw $e;
-            }
+            // Table origines optionnelle
         }
     }
     origines_valides($db, true);
@@ -325,7 +336,12 @@ try {
         import_insert_row($db, $data, (int) (current_user()['id'] ?? 1), $skipBusinessRules);
     }
     $db->commit();
-    set_flash('success', count($prepared) . ' dossier(s) importé(s) avec succès.');
+
+    $flashMsg = count($prepared) . ' dossier(s) importé(s) avec succès.';
+    if ($skippedCount > 0) {
+        $flashMsg .= ' ' . $skippedCount . ' doublon(s) de numéro de téléphone ignoré(s).';
+    }
+    set_flash('success', $flashMsg);
 } catch (Throwable $e) {
     if ($db->inTransaction()) {
         $db->rollBack();

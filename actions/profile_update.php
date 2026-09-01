@@ -5,6 +5,17 @@ csrf_require();
 
 $user = current_user();
 
+if (!empty($_POST['save_preferences'])) {
+    $itemsPerPage = max(10, min(100, (int) ($_POST['items_per_page'] ?? ITEMS_PER_PAGE)));
+    $sessionLifetime = max(900, min(21600, (int) ($_POST['session_lifetime'] ?? SESSION_LIFETIME)));
+
+    set_user_preference('items_per_page', $itemsPerPage);
+    set_user_preference('session_lifetime', $sessionLifetime);
+
+    set_flash('success', 'Les préférences ont été enregistrées.');
+    redirect('profile.php' . (!empty($user['must_change_password']) ? '?force=1' : ''));
+}
+
 $current = (string) ($_POST['current_password'] ?? '');
 $new = (string) ($_POST['new_password'] ?? '');
 $confirm = (string) ($_POST['confirm_password'] ?? '');

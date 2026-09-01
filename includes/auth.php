@@ -22,27 +22,34 @@ function start_secure_session(): void
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['SERVER_PORT'] ?? '') === '443');
 
+    $sessionLifetime = defined('SESSION_LIFETIME') ? (int) SESSION_LIFETIME : 7200;
+    if (isset($_SESSION['user_preferences']['session_lifetime'])) {
+        $sessionLifetime = max(900, min(21600, (int) $_SESSION['user_preferences']['session_lifetime']));
+    }
+
     session_set_cookie_params([
-        'lifetime' => SESSION_LIFETIME,
+        'lifetime' => $sessionLifetime,
         'path'     => '/',
         'domain'   => '',
-        'secure'   => $isHttps,   // cookie envoyé uniquement en HTTPS si dispo
-        'httponly' => true,       // inaccessible en JavaScript
-        'samesite' => 'Lax',      // limite les attaques CSRF cross-site
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
     ]);
 
-    session_name('gdsid'); // nom de cookie neutre (n'expose pas la techno)
+    session_name('gdsid');
     session_start();
 
-    // Expiration par inactivité
-    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > SESSION_LIFETIME) {
+    $activeLimit = isset($_SESSION['user_preferences']['session_lifetime'])
+        ? max(900, min(21600, (int) $_SESSION['user_preferences']['session_lifetime']))
+        : $sessionLifetime;
+
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $activeLimit) {
         session_unset();
         session_destroy();
         session_start();
     }
     $_SESSION['last_activity'] = time();
 
-    // Régénération périodique de l'identifiant de session (anti fixation)
     if (empty($_SESSION['created_at'])) {
         $_SESSION['created_at'] = time();
     } elseif (time() - $_SESSION['created_at'] > 900) {
@@ -54,6 +61,43 @@ function start_secure_session(): void
 function current_user(): ?array
 {
     return $_SESSION['user'] ?? null;
+}
+
+function default_user_preferences(): array
+{
+    return [
+        'items_per_page' => (int) (ITEMS_PER_PAGE ?? 25),
+        'session_lifetime' => (int) (SESSION_LIFETIME ?? 7200),
+        'compact_mode' => 0,
+    ];
+}
+
+function user_preferences(): array
+{
+    if (!isset($_SESSION['user_preferences'])) {
+        $_SESSION['user_preferences'] = default_user_preferences();
+    }
+
+    return array_merge(default_user_preferences(), $_SESSION['user_preferences']);
+}
+
+function set_user_preference(string $key, mixed $value): void
+{
+    $prefs = user_preferences();
+    $prefs[$key] = $value;
+    $_SESSION['user_preferences'] = $prefs;
+}
+
+function get_items_per_page(): int
+{
+    $value = (int) (user_preferences()['items_per_page'] ?? ITEMS_PER_PAGE);
+    return max(10, min(100, $value));
+}
+
+function get_session_lifetime(): int
+{
+    $value = (int) (user_preferences()['session_lifetime'] ?? SESSION_LIFETIME);
+    return max(900, min(21600, $value));
 }
 
 function is_logged_in(): bool
