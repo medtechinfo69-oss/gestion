@@ -71,15 +71,19 @@ require __DIR__ . '/includes/header.php';
           <th>Nom</th>
           <th>E-mail</th>
           <th class="text-center">Dossiers</th>
+          <th class="text-center">Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($vendeurs as $vd): ?>
-        <tr>
+        <tr id="vendeur-row-<?= (int) $vd['id'] ?>">
           <td class="selection-cell"><input type="checkbox" value="<?= (int) $vd['id'] ?>" data-vendeur-select aria-label="Sélectionner le vendeur <?= (int) $vd['id'] ?>"></td>
           <td><strong><?= e($vd['nom_complet']) ?></strong></td>
           <td><?= e($vd['email']) ?: '<span class="muted">—</span>' ?></td>
           <td class="text-center"><?= (int) $vd['nb_dossiers'] ?></td>
+          <td class="text-center">
+            <button type="button" class="btn btn-outline btn-sm" data-vendeur-edit data-id="<?= (int) $vd['id'] ?>" data-nom="<?= e($vd['nom_complet']) ?>" data-email="<?= e($vd['email'] ?? '') ?>">Modifier</button>
+          </td>
         </tr>
         <?php endforeach; ?>
       </tbody>
@@ -89,15 +93,34 @@ require __DIR__ . '/includes/header.php';
   <?php if ($vendeurs): ?>
   <div class="bulk-actions" data-vendeur-bulk-actions>
     <span class="bulk-count" data-vendeur-selection-count>0 vendeur sélectionné</span>
-    <div class="flex gap-8">
-      <button type="button" class="btn btn-outline btn-sm" data-vendeur-edit disabled>Modifier la sélection</button>
-      <button type="button" class="btn btn-danger btn-sm" data-vendeur-delete disabled>Supprimer la sélection</button>
-    </div>
+    <button type="button" class="btn btn-danger btn-sm" data-vendeur-delete disabled>Supprimer la sélection</button>
   </div>
   <form action="<?= e(APP_URL) ?>/actions/vendeur_bulk_delete.php" method="post" data-vendeur-delete-form>
     <?= csrf_field() ?>
   </form>
   <?php endif; ?>
+</div>
+
+<div id="vendeur-edit-modal" class="confirm-modal" style="display:none;" aria-hidden="true">
+  <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="vendeur-edit-title">
+    <h2 id="vendeur-edit-title">Modifier le vendeur</h2>
+    <form id="vendeur-edit-form" action="<?= e(APP_URL) ?>/actions/vendeur_update.php" method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="id" id="vendeur-edit-id">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="vendeur-edit-name">Nom du vendeur</label>
+        <input type="text" id="vendeur-edit-name" name="nom_complet" maxlength="150" required>
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="vendeur-edit-email">E-mail</label>
+        <input type="email" id="vendeur-edit-email" name="email" maxlength="190" placeholder="Optionnel">
+      </div>
+      <div class="confirm-actions">
+        <button type="button" class="btn btn-outline" data-vendeur-close>Annuler</button>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

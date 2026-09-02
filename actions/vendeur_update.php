@@ -7,10 +7,17 @@ $id = filter_var($_POST['id'] ?? '', FILTER_VALIDATE_INT);
 $nomComplet = clean_str($_POST['nom_complet'] ?? '');
 $email = clean_str($_POST['email'] ?? '');
 
-if (!$id || $nomComplet === '' || mb_strlen($nomComplet) > 150 || !$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    set_flash('error', 'Le nom et une adresse e-mail valide sont obligatoires.');
-    redirect('vendeurs.php' . ($id ? '?edit=' . $id : ''));
+if (!$id || $nomComplet === '' || mb_strlen($nomComplet) > 150) {
+    set_flash('error', 'Le nom du vendeur est obligatoire.');
+    redirect('vendeurs.php');
 }
+
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    set_flash('error', 'L’e-mail doit être valide si vous le renseignez.');
+    redirect('vendeurs.php');
+}
+
+$email = $email === '' ? null : $email;
 
 $stmt = $db->prepare("UPDATE users SET nom_complet = :nom, email = :email WHERE id = :id AND role = 'vendeur'");
 $stmt->execute(['nom' => $nomComplet, 'email' => $email, 'id' => $id]);

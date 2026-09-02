@@ -65,6 +65,9 @@ $user = current_user();
         <a href="<?= e(APP_URL) ?>/origines.php" class="nav-item <?= $activePage === 'origines' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.5 4.5h8l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5.5 19V6A1.5 1.5 0 0 1 7 4.5Z"/><path d="M13.5 4.5v4h4"/><path d="M8.5 12h7M8.5 15.5h7"/></svg></span> Origine
         </a>
+        <a href="<?= e(APP_URL) ?>/superviseurs.php" class="nav-item <?= $activePage === 'superviseurs' ? 'active' : '' ?>">
+          <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12z"/><path d="M20 21c0-3.3-3.6-6-8-6s-8 2.7-8 6"/></svg></span> Superviseurs
+        </a>
         <a href="<?= e(APP_URL) ?>/corbeille.php" class="nav-item <?= $activePage === 'corbeille' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4.5 7.5h15"/><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7"/><path d="M6.8 7.5 7.6 18.2a1.8 1.8 0 0 0 1.8 1.6h5.2a1.8 1.8 0 0 0 1.8-1.6l.8-10.7"/></svg></span> Corbeille
         </a>

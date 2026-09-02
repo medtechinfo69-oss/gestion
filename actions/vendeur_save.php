@@ -12,8 +12,8 @@ if ($nomComplet === '' || mb_strlen($nomComplet) > 150) {
     $errors[] = 'Le nom du vendeur est obligatoire.';
 }
 
-if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    $errors[] = 'Adresse e-mail invalide.';
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $errors[] = 'L’e-mail doit être valide si vous le renseignez.';
 }
 
 if (!$errors) {
