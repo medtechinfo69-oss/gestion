@@ -22,7 +22,7 @@ header('X-XSS-Protection: 1; mode=block');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()');
 header('Cross-Origin-Opener-Policy: same-origin');
 header('Cross-Origin-Resource-Policy: same-site');
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self' data:; form-action 'self'; base-uri 'self'; frame-ancestors 'none';");
+header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; form-action 'self'; base-uri 'self'; frame-ancestors 'none';");
 if (APP_ENV !== 'development') {
     header('Strict-Transport-Security: max-age=63072000; includeSubDomains; preload');
     // Force cache refresh on production deployment
