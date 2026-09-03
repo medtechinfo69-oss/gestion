@@ -74,7 +74,7 @@ $user = current_user();
       <?php endif; ?>
 
       <?php if (is_admin()): ?>
-        <div class="nav-label">Espace RH · TND</div>
+        <div class="nav-label">Espace RH</div>
         <a href="<?= e(APP_URL) ?>/rh_dashboard.php" class="nav-item <?= $activePage === 'rh_dashboard' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4.75A.75.75 0 0 1 4.75 4h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 10.25v-5.5Zm9 0A.75.75 0 0 1 13.75 4h5.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-3.5ZM4 14.75A.75.75 0 0 1 4.75 14h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 20.25v-5.5Zm9 0a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-5.5Z"/></svg></span> Tableau de bord
         </a>
