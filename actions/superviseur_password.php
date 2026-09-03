@@ -19,7 +19,8 @@ if (!function_exists('password_is_strong')) {
 }
 
 if (!$id || $password === '' || !password_is_strong($password)) {
-    set_flash('error', 'Mot de passe invalide. Il doit contenir au moins 10 caractères, une majuscule, une minuscule et un chiffre.');
+    $reasons = function_exists('password_policy_errors') ? implode(', ', password_policy_errors($password)) : 'au moins 12 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial';
+    set_flash('error', 'Mot de passe invalide. ' . $reasons . '.');
     redirect('superviseurs.php');
 }
 
@@ -34,8 +35,15 @@ try {
     }
 
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $upd = $db->prepare('UPDATE users SET password_hash = :p, must_change_password = 1 WHERE id = :id');
+    $upd = $db->prepare('UPDATE users SET password_hash = :p, must_change_password = 1, last_password_change = NOW() WHERE id = :id');
     $upd->execute(['p' => $hash, 'id' => $id]);
+
+    // Historique des mots de passe (anti-réutilisation)
+    if (function_exists('record_password_change')) {
+        record_password_change($db, (int) $id, $hash);
+    }
+
+    log_security_event('PASSWORD_CHANGE', "Mot de passe défini par l'administrateur pour {$superviseur['username']}");
 
     if (function_exists('log_dossier_history') && function_exists('current_user')) {
         try {

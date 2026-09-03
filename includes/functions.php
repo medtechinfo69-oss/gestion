@@ -45,6 +45,48 @@ function format_montant(?float $value): string
     return number_format($value, 2, ',', ' ') . ' €';
 }
 
+/** Formate un montant RH en dinars tunisiens. */
+function format_montant_tnd(?float $value): string
+{
+    if ($value === null) {
+        return '—';
+    }
+    return number_format($value, 2, ',', ' ') . ' TND';
+}
+
+/** Formate un nombre sans devise (ex : 1 234,56). */
+function format_nombre(?float $value): string
+{
+    if ($value === null) {
+        return '—';
+    }
+    return number_format($value, 2, ',', ' ');
+}
+
+function app_setting(PDO $db, string $key, string $default = ''): string
+{
+    try {
+        $stmt = $db->prepare('SELECT setting_value FROM settings WHERE setting_key = :key LIMIT 1');
+        $stmt->execute(['key' => $key]);
+        $value = $stmt->fetchColumn();
+        return $value === false ? $default : (string) $value;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function save_app_setting(PDO $db, string $key, string $value): void
+{
+    $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (:key, :value) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
+    $stmt->execute(['key' => $key, 'value' => $value]);
+}
+
+function max_import_size_bytes(PDO $db): int
+{
+    $megabytes = (int) app_setting($db, 'max_upload_mb', (string) (IMPORT_MAX_SIZE / 1024 / 1024));
+    return max(1, min(100, $megabytes)) * 1024 * 1024;
+}
+
 /** Formate une date SQL (Y-m-d) au format français (d/m/Y). */
 function format_date(?string $sqlDate): string
 {
@@ -157,7 +199,12 @@ function origines_valides(PDO $db = null, bool $refresh = false): array
 
 function etats_contrat_valides(): array
 {
-    return ['Actif', 'Renonciation', 'Résiliation infra-annuelle', 'Résiliation à échéance', 'Radié pour non-paiement', 'CSS'];
+    return ['Actif', 'Renonciation', 'Résiliation infra-annuelle', 'Résiliation à échéance', 'Radié pour non-paiement', 'Sans effet qualite', 'CSS'];
+}
+
+function controles_qualite_valides(): array
+{
+    return ['OK', 'Moyen', 'KO'];
 }
 
 function courrier_values(?string $json): array
@@ -421,6 +468,18 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         }
     }
 
+    $data['controle_qualite'] = clean_str($post['controle_qualite'] ?? '');
+    if ($data['controle_qualite'] !== '' && !in_array($data['controle_qualite'], controles_qualite_valides(), true)) {
+        if ($allowImportCompatibility) {
+            $data['controle_qualite'] = null;
+        } else {
+            $errors['controle_qualite'] = 'Contrôle qualité invalide.';
+        }
+    }
+    if ($data['controle_qualite'] === '') {
+        $data['controle_qualite'] = null;
+    }
+
     $data['commentaire'] = clean_str($post['commentaire'] ?? '') ?: null;
 
     $data['motif_annulation'] = null;
@@ -445,13 +504,129 @@ function generate_temp_password(): string
 /** Vérifie la robustesse minimale d'un mot de passe choisi par l'utilisateur. */
 function password_is_strong(string $password): bool
 {
-    if (mb_strlen($password) < 10) {
+    return password_policy_errors($password) === [];
+}
+
+/**
+ * Politique de mot de passe renforcée.
+ * Retourne la liste des messages d'erreur (vide si le mot de passe est valide).
+ * Règles : 12+ caractères, majuscule, minuscule, chiffre, caractère spécial,
+ * mot de passe non courant.
+ */
+function password_policy_errors(string $password): array
+{
+    $errors = [];
+
+    if (mb_strlen($password) < 12) {
+        $errors[] = 'au moins 12 caractères';
+    }
+    if (mb_strlen($password) > 128) {
+        $errors[] = 'au plus 128 caractères';
+    }
+    if (preg_match('/[æøåàâäéèêëîïôöùûüÿçœ]/iu', $password)) {
+        $errors[] = 'uniquement les caractères ASCII (évitez accents et lettres non latines)';
+    }
+    if (!preg_match('/[a-z]/', $password)) {
+        $errors[] = 'une minuscule';
+    }
+    if (!preg_match('/[A-Z]/', $password)) {
+        $errors[] = 'une majuscule';
+    }
+    if (!preg_match('/[0-9]/', $password)) {
+        $errors[] = 'un chiffre';
+    }
+    if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+        $errors[] = 'un caractère spécial (!@#$%^&*...)';
+    }
+
+    // Mots de passe trop courants ou trop proches du nom de l'utilisateur
+    $lower = strtolower($password);
+    $common = [
+        'password', 'password1', 'password123', '12345678', '123456789',
+        '1234567890', 'qwerty123', 'letmein', 'admin123', 'welcome123',
+        'changeme', 'changeme1', 'adminadmin', 'iloveyou', 'monkey123',
+        'azerty123', 'assurialis', 'gestion123', 'motdepasse',
+    ];
+    if (in_array($lower, $common, true)) {
+        $errors[] = 'un mot de passe moins courant';
+    }
+
+    return array_values(array_unique($errors));
+}
+
+/**
+ * Vérifie si le mot de passe soumis figure dans l'historique des derniers
+ * mots de passe (anti-réutilisation). La table password_history est créée
+ * par database/upgrade_v2.sql. En cas d'absence de table, retourne false
+ * (aucun blocage) pour ne jamais casser l'application.
+ */
+function password_was_used_before(PDO $db, int $userId, string $password, int $historyCount = 5): bool
+{
+    try {
+        $stmt = $db->prepare(
+            'SELECT password_hash
+               FROM password_history
+              WHERE user_id = :u
+           ORDER BY changed_at DESC
+              LIMIT ' . max(1, min(10, $historyCount))
+        );
+        $stmt->execute(['u' => $userId]);
+        $hashes = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
         return false;
     }
-    $hasLower = preg_match('/[a-z]/', $password);
-    $hasUpper = preg_match('/[A-Z]/', $password);
-    $hasDigit = preg_match('/[0-9]/', $password);
-    return (bool) ($hasLower && $hasUpper && $hasDigit);
+
+    foreach ($hashes as $hash) {
+        if (password_verify($password, (string) $hash)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Vérifie si le mot de passe d'un utilisateur doit être considéré comme
+ * expiré (âge maximal réglable via la colonne last_password_change).
+ * Retourne false si la colonne n'existe pas encore (compatibilité).
+ */
+function password_is_expired(PDO $db, int $userId, int $maxAgeDays = 90): bool
+{
+    try {
+        $stmt = $db->prepare('SELECT last_password_change FROM users WHERE id = :id');
+        $stmt->execute(['id' => $userId]);
+        $lastChange = $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+
+    if (!$lastChange) {
+        return false;
+    }
+    $ts = strtotime((string) $lastChange);
+    if ($ts === false) {
+        return false;
+    }
+    return (time() - $ts) > $maxAgeDays * 86400;
+}
+
+/**
+ * Enregistre le mot de passe courant dans l'historique et met à jour
+ * la date de dernier changement. Ignore silencieusement les erreurs
+ * (table d'historique absente) pour rester compatible avant mise à niveau.
+ */
+function record_password_change(PDO $db, int $userId, string $hash): void
+{
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO password_history (user_id, password_hash, changed_at) VALUES (:u, :h, NOW())'
+        );
+        $stmt->execute(['u' => $userId, 'h' => $hash]);
+
+        $upd = $db->prepare('UPDATE users SET last_password_change = NOW() WHERE id = :id');
+        $upd->execute(['id' => $userId]);
+    } catch (Throwable $e) {
+        // Non bloquant : l'historique est un bonus de sécurité.
+    }
 }
 
 /** Enregistre une entrée d'historique pour un dossier. */

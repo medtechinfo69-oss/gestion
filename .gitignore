@@ -4,6 +4,15 @@ config/config.local.php
 config/config.hosting.php
 .env
 
+# Fichiers contenant des hash de mots de passe (sensible)
+database/reset_passwords*.sql
+
+# Scripts de debug / diagnostics (potentiellement dangereux)
+set_password.php
+check_db.php
+debug_profile.php
+health_check.php
+
 # Runtime data
 logs/*.log
 uploads/dossiers/*

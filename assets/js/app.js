@@ -19,6 +19,10 @@
     initSuperviseurModal();
     initSuperviseurPasswordUx();
     initTrashSelection();
+    initSalaryCardToggle();
+    initSalaryInlineEdit();
+    initSalaryFileImport();
+    initRhDashboardCharts();
     initSecurityMode();
   });
 
@@ -454,6 +458,237 @@
     refresh();
   }
 
+  function initSalaryFileImport() {
+    var input = document.querySelector('[data-salary-file]');
+    var dropzone = document.querySelector('[data-salary-dropzone]');
+    var fileName = document.querySelector('[data-salary-file-name]');
+    if (!input || !dropzone || !fileName) return;
+
+    function updateFileName() {
+      fileName.textContent = input.files.length ? input.files[0].name : 'Choisir un fichier XLSX';
+      dropzone.classList.toggle('has-file', input.files.length > 0);
+    }
+
+    input.addEventListener('change', updateFileName);
+    ['dragenter', 'dragover'].forEach(function (eventName) {
+      dropzone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        dropzone.classList.add('is-dragging');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (eventName) {
+      dropzone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        dropzone.classList.remove('is-dragging');
+      });
+    });
+    dropzone.addEventListener('drop', function (event) {
+      if (event.dataTransfer.files.length) {
+        input.files = event.dataTransfer.files;
+        updateFileName();
+      }
+    });
+  }
+
+  /** Gère les graphiques du tableau de bord RH. */
+  function initRhDashboardCharts() {
+    var salaryCanvas = document.getElementById('salaryChart');
+    var hoursCanvas = document.getElementById('hoursChart');
+    if (!salaryCanvas && !hoursCanvas) return;
+
+    var salaryData = salaryCanvas ? JSON.parse(salaryCanvas.getAttribute('data-values') || '[]') : [];
+    var hoursData = hoursCanvas ? JSON.parse(hoursCanvas.getAttribute('data-values') || '[]') : [];
+    var monthLabels = salaryCanvas ? JSON.parse(salaryCanvas.getAttribute('data-labels') || '[]') : [];
+
+    function setupCanvas(canvas) {
+      if (!canvas) return null;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = 260 * dpr;
+      var ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      return { ctx: ctx, width: rect.width, height: 260 };
+    }
+
+    function drawChart(canvas, data, color, fillColor, labels) {
+      var ctxInfo = setupCanvas(canvas);
+      if (!ctxInfo) return;
+      var ctx = ctxInfo.ctx;
+      var w = ctxInfo.width;
+      var h = ctxInfo.height;
+      var pad = { left: 45, right: 16, top: 16, bottom: 36 };
+      var max = Math.max(1, ...data);
+      var gw = w - pad.left - pad.right;
+      var gh = h - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#E2DBC9';
+      ctx.lineWidth = 1;
+      ctx.font = '11px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif';
+      ctx.fillStyle = '#8A93A0';
+
+      for (var i = 0; i <= 4; i++) {
+        var y = pad.top + (gh * i / 4);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(w - pad.right, y);
+        ctx.stroke();
+        var val = max - (max * i / 4);
+        ctx.fillText(val.toFixed(0), 2, y + 4);
+      }
+
+      var points = [];
+      for (var i = 0; i < data.length; i++) {
+        var x = pad.left + (gw * i / (data.length - 1 || 1));
+        var y = pad.top + gh - (data[i] / max) * gh;
+        points.push({ x: x, y: y });
+      }
+
+      var grad = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+      grad.addColorStop(0, fillColor);
+      grad.addColorStop(1, '#ffffff00');
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (var i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.lineTo(points[points.length - 1].x, h - pad.bottom);
+      ctx.lineTo(points[0].x, h - pad.bottom);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (var i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      points.forEach(function (p, i) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        if (i % 2 === 0 || w < 600) {
+          ctx.fillStyle = '#64748b';
+          ctx.fillText((labels[i] || '').slice(0, 3), p.x - 10, h - 12);
+        }
+      });
+    }
+
+    if (salaryCanvas && salaryData.length) {
+      drawChart(salaryCanvas, salaryData, '#f59e0b', 'rgba(245,158,11,0.18)', monthLabels);
+      window.addEventListener('resize', function () {
+        drawChart(salaryCanvas, salaryData, '#f59e0b', 'rgba(245,158,11,0.18)', monthLabels);
+      });
+    }
+
+    if (hoursCanvas && hoursData.length) {
+      drawChart(hoursCanvas, hoursData, '#6366f1', 'rgba(99,102,241,0.18)', monthLabels);
+      window.addEventListener('resize', function () {
+        drawChart(hoursCanvas, hoursData, '#6366f1', 'rgba(99,102,241,0.18)', monthLabels);
+      });
+    }
+  }
+
+  /** Gère l’ouverture/fermeture du formulaire de saisie manuelle d'un salaire. */
+  function initSalaryCardToggle() {
+    var newSalaryBtn = document.getElementById('newSalaryBtn');
+    var manualSalaryCard = document.getElementById('manualSalaryCard');
+    var manualSelect = document.getElementById('manualEmpSelect');
+    var manualHours = document.getElementById('manualHours');
+    var manualRate = document.getElementById('manualRate');
+    var manualCalc = document.getElementById('manualCalcDisplay');
+
+    function updateManualPreview() {
+      if (!manualSelect || !manualHours || !manualRate || !manualCalc) return;
+      var option = manualSelect.options[manualSelect.selectedIndex];
+      var rate = parseFloat(option && option.getAttribute('data-rate')) || 0;
+      var hours = parseFloat(String(manualHours.value).replace(',', '.')) || 0;
+      manualRate.value = rate.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND/h';
+      manualCalc.value = (hours * rate).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
+    }
+
+    if (manualSelect && manualHours) {
+      manualSelect.addEventListener('change', updateManualPreview);
+      manualHours.addEventListener('input', updateManualPreview);
+      updateManualPreview();
+    }
+
+    if (newSalaryBtn && manualSalaryCard) {
+      newSalaryBtn.addEventListener('click', function () {
+        var isHidden = manualSalaryCard.style.display === 'none' || manualSalaryCard.style.display === '';
+        manualSalaryCard.style.display = isHidden ? 'block' : 'none';
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      if (!event.target || !event.target.closest) return;
+      var closeButton = event.target.closest('[data-close-salary-card]');
+      if (closeButton) {
+        if (manualSalaryCard) {
+          manualSalaryCard.style.display = 'none';
+        }
+      }
+    });
+  }
+
+  /** Gère l’édition inline des salaires dans la liste. */
+  function initSalaryInlineEdit() {
+    document.addEventListener('click', function (event) {
+      if (!event.target || !event.target.closest) return;
+
+      var openButton = event.target.closest('[data-open-inline-edit]');
+      if (openButton) {
+        var row = openButton.closest('tr');
+        var editRow = row && row.nextElementSibling;
+        if (editRow && editRow.classList.contains('edit-row')) {
+          row.style.display = 'none';
+          editRow.style.display = '';
+          updateInlinePreview(editRow.querySelector('form'));
+        }
+      }
+
+      var cancelButton = event.target.closest('[data-cancel-inline-edit]');
+      if (cancelButton) {
+        var card = cancelButton.closest('.edit-inline-card');
+        var editRow = card && card.closest('tr');
+        var prevRow = editRow && editRow.previousElementSibling;
+        if (editRow) {
+          editRow.style.display = 'none';
+        }
+        if (prevRow && prevRow.classList.contains('data-row')) {
+          prevRow.style.display = '';
+        }
+      }
+    });
+
+    function updateInlinePreview(form) {
+      if (!form) return;
+      var hrs = form.querySelector('input[name="total_hours"]');
+      var rate = form.querySelector('input[name="hourly_rate_used"]');
+      var preview = form.querySelector('.inline-preview');
+      if (!hrs || !rate || !preview) return;
+
+      function calc() {
+        var h = parseFloat(hrs.value) || 0;
+        var r = parseFloat(rate.value) || 0;
+        preview.textContent = (h * r).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
+      }
+
+      hrs.addEventListener('input', calc);
+      rate.addEventListener('input', calc);
+      calc();
+    }
+  }
+
   /** Initialise la popup de création/modification d'un superviseur. */
   function initSuperviseurModal() {
     var modal = document.getElementById('superviseur-modal');
@@ -492,8 +727,8 @@
       var passwordHelp = document.getElementById('password-help');
       if (passwordHelp) {
         passwordHelp.textContent = isEdit
-          ? '10 caractères minimum, avec au moins une majuscule, une minuscule et un chiffre. Laisser vide pour conserver le mot de passe actuel.'
-          : '10 caractères minimum, avec au moins une majuscule, une minuscule et un chiffre.';
+          ? '12 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial. Laisser vide pour conserver le mot de passe actuel.'
+          : '12 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial.';
       }
 
       if (modalTitle) {

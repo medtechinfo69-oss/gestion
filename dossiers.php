@@ -138,13 +138,11 @@ $exportQuery = $_GET;
 unset($exportQuery['page']);
 $exportUrl = APP_URL . '/actions/dossiers_export.php' . ($exportQuery ? '?' . http_build_query($exportQuery) : '');
 $topbarActions = '';
-if ($isAdmin) {
+if ($canAccessAll) {
   $topbarActions .= '<a href="' . e(APP_URL) . '/dossier_form.php" class="btn btn-accent">+ Nouveau dossier</a> '
     . '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
 }
-if ($isAdmin) {
-  $topbarActions .= '<a href="' . e($exportUrl) . '" class="btn btn-outline">Exporter Excel</a>';
-}
+$topbarActions .= '<a href="' . e($exportUrl) . '" class="btn btn-outline">Exporter Excel</a>';
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -228,7 +226,7 @@ require __DIR__ . '/includes/header.php';
           <?php if (!$hideSupervisorColumns): ?><th>Adresse</th><th>CP</th><th>Ville</th><?php endif; ?>
           <th>Type de signature</th>
           <th class="text-right"><?= sort_link('ca_mois', 'CA-mois', $sort, $dir) ?></th><th class="text-right">CA-annuel</th><th>Date d'effet</th><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th>
-          <th>Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th>Etat du contrat</th>
+          <th>Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th>Etat du contrat</th><th>Contrôle qualité</th>
           <th></th>
         </tr>
       </thead>
@@ -244,7 +242,7 @@ require __DIR__ . '/includes/header.php';
           <?php if (!$hideSupervisorColumns): ?><td><?= e($d['adresse']) ?></td><td><?= e($d['cp']) ?></td><td><?= e($d['ville']) ?></td><?php endif; ?>
           <td><?= e($d['type_signature']) ?></td>
           <td class="text-right nowrap"><?= format_montant((float) $d['ca_mois']) ?></td><td class="text-right nowrap"><?= format_montant((float) $d['ca_annuel']) ?></td><td><?= format_date($d['date_effet']) ?></td><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td>
-          <td><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td><?= badge_etat_contrat($d['etat_contrat']) ?></td>
+          <td><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td><?= badge_etat_contrat($d['etat_contrat']) ?></td><td><?= e($d['controle_qualite'] ?? '') ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap">
             <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm">Voir</a>
             <?php if ($isAdmin): ?>

@@ -46,7 +46,7 @@ $champLabels = [
     'portable' => 'Portable', 'nombre_personnes' => 'Nombre de personnes', 'adresse' => 'Adresse', 'cp' => 'CP',
     'ville' => 'Ville', 'type_signature' => 'Type de signature', 'ca_mois' => 'CA mensuel', 'ca_annuel' => 'CA annuel',
     'date_effet' => "Date d'effet", 'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'État du dossier',
-    'courrier' => 'Courrier', 'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'État du contrat', 'motif_annulation' => "Motif d'annulation",
+    'courrier' => 'Courrier', 'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'État du contrat', 'controle_qualite' => 'Contrôle qualité', 'motif_annulation' => "Motif d'annulation",
     'date_dossier_complet' => 'Date validation', 'date_contrat_non_actif' => "Date d'annulation",
 ];
 
@@ -56,8 +56,12 @@ $activePage = 'dossiers';
 $topbarActions = ($isAdmin || $isSuperviseur)
     ? '<a href="' . e(APP_URL) . '/dossier_form.php?id=' . (int) $dossier['id'] . '" class="btn btn-primary">Modifier</a>'
     : '';
-if ($isAdmin && ($dossier['date_dossier_complet'] !== null || $dossier['date_contrat_non_actif'] !== null)) {
-    $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_reactivate.php" style="display:inline;" onsubmit="return confirm(\'Réactiver la supervision pour ce dossier ?\');">'
+if ($isAdmin && ($dossier['date_dossier_complet'] !== null
+  || $dossier['date_contrat_non_actif'] !== null
+  || ($dossier['date_courrier_supervision'] ?? null) !== null
+  || ($dossier['date_etat_contrat_supervision'] ?? null) !== null
+  || ($dossier['date_controle_qualite_supervision'] ?? null) !== null)) {
+    $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_reactivate.php" style="display:inline;">'
         . csrf_field()
         . '<input type="hidden" name="id" value="' . (int) $dossier['id'] . '">'
         . '<button type="submit" class="btn btn-outline">Réactiver supervision</button>'
@@ -118,6 +122,7 @@ require __DIR__ . '/includes/header.php';
       <div class="detail-item"><div class="k">Date validation</div><div class="v"><?= !empty($dossier['date_dossier_complet']) ? format_date($dossier['date_dossier_complet']) : '—' ?></div></div>
       <div class="detail-item"><div class="k">Courrier</div><div class="v"><?= e(implode(', ', courrier_values($dossier['courrier'] ?? ''))) ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">État du contrat</div><div class="v"><?= badge_etat_contrat($dossier['etat_contrat']) ?></div></div>
+      <div class="detail-item"><div class="k">Contrôle qualité</div><div class="v"><?= e($dossier['controle_qualite'] ?? '') ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Date d'annulation</div><div class="v"><?= !empty($dossier['date_contrat_non_actif']) ? format_date($dossier['date_contrat_non_actif']) : '—' ?></div></div>
       <?php if ($dossier['motif_annulation']): ?>
       <div class="detail-item"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
@@ -141,7 +146,16 @@ require __DIR__ . '/includes/header.php';
       <ul class="attachment-list">
         <?php foreach ($attachments as $a): ?>
           <li>
-            <span>&#128206; <?= e($a['nom_original']) ?> <span class="muted">(<?= round($a['taille'] / 1024) ?> Ko &middot; ajouté par <?= e($a['uploader']) ?> le <?= format_date(substr($a['created_at'],0,10)) ?>)</span></span>
+            <span>
+              <?php $isAudio = strpos((string) $a['type_mime'], 'audio/') === 0; ?>
+              <?= $isAudio ? '&#127925;' : '&#128206;' ?> <?= e($a['nom_original']) ?>
+              <span class="muted">(<?= round($a['taille'] / 1024) ?> Ko &middot; ajouté par <?= e($a['uploader']) ?> le <?= format_date(substr($a['created_at'],0,10)) ?>)</span>
+              <?php if ($isAudio): ?>
+                <audio class="attachment-player" controls preload="metadata" src="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>&inline=1">
+                  Votre navigateur ne peut pas lire cet enregistrement.
+                </audio>
+              <?php endif; ?>
+            </span>
             <span class="flex gap-8">
               <a href="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>" class="btn btn-outline btn-sm">Télécharger</a>
               <?php if ($isAdmin): ?>
@@ -160,14 +174,14 @@ require __DIR__ . '/includes/header.php';
       <p class="muted">Aucune pièce jointe pour ce dossier.</p>
     <?php endif; ?>
 
-    <?php if ($isAdmin): ?><form action="<?= e(APP_URL) ?>/actions/attachment_upload.php" method="post" enctype="multipart/form-data" style="margin-top:14px;">
+    <?php if ($isAdmin || $isSuperviseur): ?><form action="<?= e(APP_URL) ?>/actions/attachment_upload.php" method="post" enctype="multipart/form-data" style="margin-top:14px;">
       <?= csrf_field() ?>
       <input type="hidden" name="dossier_id" value="<?= (int) $dossier['id'] ?>">
       <div class="flex gap-8" style="align-items:center;flex-wrap:wrap;">
-        <input type="file" name="fichier" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
-        <button type="submit" class="btn btn-outline btn-sm">Ajouter la pièce jointe</button>
+        <input type="file" name="fichier" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.opus,.wma">
+        <button type="submit" class="btn btn-outline btn-sm">Ajouter un document ou un audio</button>
       </div>
-      <div class="help-text" style="margin-top:6px;">Formats acceptés : PDF, JPG, PNG, DOC, DOCX — 5 Mo maximum.</div>
+      <div class="help-text" style="margin-top:6px;">Formats acceptés : PDF, JPG, PNG, DOC, DOCX, MP3, WAV, OGG, M4A, AAC, FLAC, WEBM, OPUS, WMA — 5 Mo maximum.</div>
     </form><?php endif; ?>
   </div>
 </div>

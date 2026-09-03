@@ -5,10 +5,19 @@
 -- Jeu de caractères : utf8mb4 (support complet des accents français)
 -- =====================================================================
 
+CREATE DATABASE IF NOT EXISTS `gestion_dossiers-new`
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `gestion_dossiers-new`;
+
+CREATE USER IF NOT EXISTS 'gestion_app'@'localhost' IDENTIFIED BY 'ChangeMoi_2026!';
+GRANT ALL PRIVILEGES ON `gestion_dossiers-new`.* TO 'gestion_app'@'localhost';
+FLUSH PRIVILEGES;
+
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS `dossier_trash`;
+DROP TABLE IF EXISTS `settings`;
 DROP TABLE IF EXISTS `dossier_attachments`;
 DROP TABLE IF EXISTS `dossier_historique`;
 DROP TABLE IF EXISTS `login_log`;
@@ -65,9 +74,13 @@ CREATE TABLE `dossiers` (
     `produit`                VARCHAR(150) NOT NULL,
     `compagnie`              VARCHAR(100) NOT NULL,
     `courrier`               TEXT NULL,
+    `date_courrier_supervision` DATE NULL,
     `etat_dossier`           ENUM('Dossier complet','Dossier incomplet') NOT NULL DEFAULT 'Dossier incomplet',
     `date_dossier_complet`   DATE NULL,
-    `etat_contrat`           ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','CSS') NOT NULL DEFAULT 'Actif',
+    `etat_contrat`           ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','Sans effet qualite','CSS') NOT NULL DEFAULT 'Actif',
+    `date_etat_contrat_supervision` DATE NULL,
+    `controle_qualite`       ENUM('OK','Moyen','KO') NULL DEFAULT NULL,
+    `date_controle_qualite_supervision` DATE NULL,
     `date_contrat_non_actif` DATE NULL,
     `commentaire`            TEXT NULL,
     `motif_annulation`       VARCHAR(255) NULL,
@@ -161,6 +174,57 @@ CREATE TABLE `origines` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `origines` (`nom`) VALUES ('Lead'), ('Fiche perso'), ('MMC 12'), ('MMC 25'), ('FID+2ans');
+
+-- ---------------------------------------------------------------------
+-- Table : employees (Espace RH)
+-- ---------------------------------------------------------------------
+CREATE TABLE `employees` (
+    `id`             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `employee_code`  VARCHAR(100) NOT NULL UNIQUE,
+    `full_name`      VARCHAR(150) NOT NULL,
+    `position`       VARCHAR(150) NOT NULL DEFAULT '',
+    `department`     VARCHAR(150) NOT NULL DEFAULT '',
+    `contract_type`  VARCHAR(100) NOT NULL DEFAULT '',
+    `hourly_rate`    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    `status`         ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+    `start_date`     DATE NULL,
+    `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY `idx_emp_name` (`full_name`),
+    KEY `idx_emp_dept` (`department`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Table : salary_records (Espace RH)
+-- ---------------------------------------------------------------------
+CREATE TABLE `salary_records` (
+    `id`                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `employee_id`       INT UNSIGNED NOT NULL,
+    `month`             TINYINT UNSIGNED NOT NULL,
+    `year`              SMALLINT UNSIGNED NOT NULL,
+    `total_hours`       DECIMAL(12,2) NOT NULL DEFAULT 0,
+    `hourly_rate_used`  DECIMAL(12,2) NOT NULL DEFAULT 0,
+    `calculated_salary` DECIMAL(14,2) NOT NULL DEFAULT 0,
+    `created_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_salary` (`employee_id`, `month`, `year`),
+    KEY `idx_month_year` (`month`, `year`),
+    CONSTRAINT `fk_salary_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Table : settings (Espace RH)
+-- ---------------------------------------------------------------------
+CREATE TABLE `settings` (
+    `id`           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `setting_key`  VARCHAR(100) NOT NULL UNIQUE,
+    `setting_value` TEXT NOT NULL,
+    `updated_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
+('company_name', 'Gestion des Dossiers'),
+('max_upload_mb', '5');
 
 SET FOREIGN_KEY_CHECKS = 1;
 

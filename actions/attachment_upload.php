@@ -21,7 +21,7 @@ if (!$dossier) {
 }
 
 // Un vendeur ne peut ajouter une pièce jointe que sur ses propres dossiers
-if (!is_admin() && (int) $dossier['vendeur_id'] !== (int) $user['id']) {
+if (!is_admin() && !is_superviseur() && (int) $dossier['vendeur_id'] !== (int) $user['id']) {
     http_response_code(403);
     set_flash('error', 'Accès refusé.');
     redirect('dossiers.php');

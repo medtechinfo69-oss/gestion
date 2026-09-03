@@ -18,11 +18,16 @@ if (!$dossier) {
     redirect('dossiers.php');
 }
 
-$db->prepare('UPDATE dossiers SET date_dossier_complet = NULL, date_contrat_non_actif = NULL, updated_by = :uid WHERE id = :id')
+$db->prepare('UPDATE dossiers SET date_dossier_complet = NULL, date_contrat_non_actif = NULL,
+    date_courrier_supervision = NULL, date_etat_contrat_supervision = NULL,
+    date_controle_qualite_supervision = NULL, updated_by = :uid WHERE id = :id')
     ->execute(['uid' => current_user()['id'], 'id' => $id]);
 
 log_dossier_history($db, $id, current_user()['id'], 'modification', 'date_dossier_complet', (string) $dossier['date_dossier_complet'], '');
 log_dossier_history($db, $id, current_user()['id'], 'modification', 'date_contrat_non_actif', (string) $dossier['date_contrat_non_actif'], '');
+log_dossier_history($db, $id, current_user()['id'], 'modification', 'date_courrier_supervision', (string) ($dossier['date_courrier_supervision'] ?? ''), '');
+log_dossier_history($db, $id, current_user()['id'], 'modification', 'date_etat_contrat_supervision', (string) ($dossier['date_etat_contrat_supervision'] ?? ''), '');
+log_dossier_history($db, $id, current_user()['id'], 'modification', 'date_controle_qualite_supervision', (string) ($dossier['date_controle_qualite_supervision'] ?? ''), '');
 
 set_flash('success', 'Dossier réactivé pour la supervision.');
 redirect('dossier_view.php?id=' . $id);

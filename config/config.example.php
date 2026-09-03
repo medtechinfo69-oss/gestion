@@ -21,11 +21,12 @@ define('ITEMS_PER_PAGE', 25);
 define('IMPORT_MAX_SIZE', 10 * 1024 * 1024);
 define('UPLOAD_DIR', __DIR__ . '/../uploads/dossiers/');
 define('UPLOAD_MAX_SIZE', 5 * 1024 * 1024);
-define('UPLOAD_ALLOWED_EXT', ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']);
+define('UPLOAD_ALLOWED_EXT', ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm', 'opus', 'wma']);
 define('UPLOAD_ALLOWED_MIME', [
     'application/pdf',
     'image/jpeg',
     'image/png',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/webm', 'audio/opus', 'audio/x-ms-wma',
 ]);

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin();
+require_admin_or_superviseur();
 
 $pageTitle = 'Importer des dossiers';
 $pageSubtitle = 'Importer un fichier Excel avec les mêmes colonnes que le tableau Dossiers';
@@ -18,7 +18,7 @@ require __DIR__ . '/includes/header.php';
       <div class="form-group">
         <label for="fichier">Fichier Excel</label>
         <input type="file" id="fichier" name="fichier" accept=".xlsx,.csv" required>
-        <div class="help-text">Taille maximale : <?= (int) (IMPORT_MAX_SIZE / 1024 / 1024) ?> Mo. Les dossiers sont importés uniquement si toutes les lignes sont valides.</div>
+        <div class="help-text">Taille maximale : <?= (int) (max_import_size_bytes($db) / 1024 / 1024) ?> Mo. Les dossiers sont importés uniquement si toutes les lignes sont valides.</div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Importer les dossiers</button>

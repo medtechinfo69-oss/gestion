@@ -18,24 +18,70 @@ if ($isEdit) {
     }
 }
 
-if (is_superviseur()) {
-    if (!$isEdit) {
-        set_flash('error', 'Un superviseur ne peut pas créer de dossier.');
-        redirect('dossiers.php');
-    }
-
+if (is_superviseur() && $isEdit) {
     $courrierValues = $_POST['courrier'] ?? [];
+    $courrierLockedValues = $_POST['courrier_locked'] ?? [];
+    if (!is_array($courrierValues)) {
+        $courrierValues = [];
+    }
+    if (is_array($courrierLockedValues)) {
+        $courrierValues = array_merge($courrierValues, $courrierLockedValues);
+    }
+    $saveSection = clean_str($_POST['save_section'] ?? 'all');
+    $existingCourrier = courrier_values($existing['courrier'] ?? '');
+    $courrierLocked = ($existing['date_courrier_supervision'] ?? null) !== null
+        && count($existingCourrier) === count(options_courrier());
+    $etatContratLocked = ($existing['date_etat_contrat_supervision'] ?? null) !== null;
+    $controleQualiteLocked = ($existing['date_controle_qualite_supervision'] ?? null) !== null;
+    if ($saveSection !== 'courrier' && $saveSection !== 'all') {
+        $courrierValues = courrier_values($existing['courrier'] ?? '');
+    }
+    if ($courrierLocked) {
+        $courrierValues = courrier_values($existing['courrier'] ?? '');
+    }
     $courrierValues = is_array($courrierValues) ? array_values(array_intersect(options_courrier(), array_map('clean_str', $courrierValues))) : [];
     $courrier = json_encode(array_values(array_unique($courrierValues)), JSON_UNESCAPED_UNICODE);
     $etat = etat_dossier_from_courrier($courrierValues);
-    $etatContrat = clean_str($_POST['etat_contrat'] ?? 'Actif');
+    $postedEtatContrat = clean_str($_POST['etat_contrat'] ?? '');
+    $lockedEtatContrat = clean_str($_POST['etat_contrat_locked'] ?? '');
+    $etatContratChanged = $lockedEtatContrat !== '' || ($postedEtatContrat !== '' && $postedEtatContrat !== $existing['etat_contrat']);
+    $etatContrat = $etatContratChanged
+        ? ($postedEtatContrat !== '' ? $postedEtatContrat : $lockedEtatContrat)
+        : $existing['etat_contrat'];
+    if ($etatContratLocked) {
+        $etatContrat = $existing['etat_contrat'];
+    }
+    if ($saveSection !== 'etat_contrat' && $saveSection !== 'all') {
+        $etatContrat = $existing['etat_contrat'];
+    }
+    $controleQualite = clean_str($_POST['controle_qualite'] ?? ($_POST['controle_qualite_locked'] ?? ($existing['controle_qualite'] ?? '')));
+    if ($controleQualite !== '' && !in_array($controleQualite, controles_qualite_valides(), true)) {
+        $controleQualite = $existing['controle_qualite'] ?? null;
+    }
+    $controleQualite = $controleQualite !== '' ? $controleQualite : null;
+    if ($saveSection !== 'controle_qualite' && $saveSection !== 'all') {
+        $controleQualite = $existing['controle_qualite'] ?? null;
+    }
+    $courrierIsComplete = count(array_unique($courrierValues)) === count(options_courrier());
+    $dateCourrierSupervision = $saveSection === 'courrier' && $courrierIsComplete
+        ? ($existing['date_courrier_supervision'] ?? date('Y-m-d'))
+        : ($saveSection === 'courrier' ? null : ($existing['date_courrier_supervision'] ?? null));
+    $dateEtatContratSupervision = $saveSection === 'etat_contrat'
+        ? ($existing['date_etat_contrat_supervision'] ?? date('Y-m-d'))
+        : ($existing['date_etat_contrat_supervision'] ?? null);
+    $dateControleQualiteSupervision = $saveSection === 'controle_qualite'
+        ? ($existing['date_controle_qualite_supervision'] ?? date('Y-m-d'))
+        : ($existing['date_controle_qualite_supervision'] ?? null);
     $commentaire = clean_str($_POST['commentaire'] ?? '') ?: null;
     $dateDossierComplet = $etat === 'Dossier complet' ? ($existing['date_dossier_complet'] ?? date('Y-m-d')) : null;
     $dateContratNonActif = $etatContrat !== 'Actif' ? ($existing['date_contrat_non_actif'] ?? date('Y-m-d')) : null;
 
     $stmt = $db->prepare('UPDATE dossiers
                           SET courrier = :courrier, etat_dossier = :etat, date_dossier_complet = :date_dossier_complet,
-                              etat_contrat = :etat_contrat, date_contrat_non_actif = :date_contrat_non_actif,
+                              etat_contrat = :etat_contrat, date_etat_contrat_supervision = :date_etat_contrat_supervision,
+                              controle_qualite = :controle_qualite, date_courrier_supervision = :date_courrier_supervision,
+                              date_controle_qualite_supervision = :date_controle_qualite_supervision,
+                              date_contrat_non_actif = :date_contrat_non_actif,
                               commentaire = :commentaire, updated_by = :updated_by
                           WHERE id = :id');
     $stmt->execute([
@@ -43,13 +89,17 @@ if (is_superviseur()) {
         'etat' => $etat,
         'date_dossier_complet' => $dateDossierComplet,
         'etat_contrat' => $etatContrat,
+        'date_etat_contrat_supervision' => $dateEtatContratSupervision,
+        'controle_qualite' => $controleQualite,
+        'date_courrier_supervision' => $dateCourrierSupervision,
+        'date_controle_qualite_supervision' => $dateControleQualiteSupervision,
         'date_contrat_non_actif' => $dateContratNonActif,
         'commentaire' => $commentaire,
         'updated_by' => $user['id'],
         'id' => $id,
     ]);
 
-    foreach (['courrier' => $courrier, 'etat_dossier' => $etat, 'etat_contrat' => $etatContrat, 'commentaire' => $commentaire] as $champ => $nouvelle) {
+    foreach (['courrier' => $courrier, 'etat_dossier' => $etat, 'etat_contrat' => $etatContrat, 'controle_qualite' => $controleQualite, 'commentaire' => $commentaire] as $champ => $nouvelle) {
         if ((string) $nouvelle !== (string) $existing[$champ]) {
             log_dossier_history($db, $id, $user['id'], 'modification', $champ, (string) $existing[$champ], (string) $nouvelle);
         }
@@ -82,6 +132,7 @@ try {
                     type_signature = :type_signature, ca_mois = :ca_mois, ca_annuel = :ca_annuel, date_effet = :date_effet,
                     produit = :produit, compagnie = :compagnie, courrier = :courrier, etat_dossier = :etat_dossier,
                     date_dossier_complet = :date_dossier_complet, etat_contrat = :etat_contrat,
+                    controle_qualite = :controle_qualite,
                     date_contrat_non_actif = :date_contrat_non_actif, commentaire = :commentaire,
                     motif_annulation = :motif_annulation, updated_by = :updated_by
                 WHERE id = :id';
@@ -116,7 +167,7 @@ try {
                     (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
                      :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville,
                      :type_signature, :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier,
-                     :date_dossier_complet, :etat_contrat, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
+                     :date_dossier_complet, :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
         $stmt = $db->prepare($sql);
         $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
         $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;

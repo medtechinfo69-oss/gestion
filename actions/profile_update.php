@@ -16,6 +16,18 @@ if (!empty($_POST['save_preferences'])) {
     redirect('profile.php' . (!empty($user['must_change_password']) ? '?force=1' : ''));
 }
 
+if (!empty($_POST['save_app_settings'])) {
+    if (!is_admin()) {
+        set_flash('error', 'Seul un administrateur peut modifier la configuration générale.');
+        redirect('profile.php');
+    }
+
+    $maxUploadMb = max(1, min(100, (int) ($_POST['max_upload_mb'] ?? 10)));
+    save_app_setting($db, 'max_upload_mb', (string) $maxUploadMb);
+    set_flash('success', 'La configuration générale a été enregistrée.');
+    redirect('profile.php');
+}
+
 $current = (string) ($_POST['current_password'] ?? '');
 $new = (string) ($_POST['new_password'] ?? '');
 $confirm = (string) ($_POST['confirm_password'] ?? '');
@@ -35,7 +47,8 @@ if ($new !== $confirm) {
 }
 
 if (!password_is_strong($new)) {
-    set_flash('error', 'Le nouveau mot de passe doit contenir au moins 10 caractères, une majuscule, une minuscule et un chiffre.');
+    $reasons = implode(', ', password_policy_errors($new));
+    set_flash('error', 'Mot de passe trop faible : ' . $reasons . '.');
     redirect('profile.php' . (!empty($user['must_change_password']) ? '?force=1' : ''));
 }
 
@@ -44,9 +57,20 @@ if (password_verify($new, $dbUser['password_hash'])) {
     redirect('profile.php' . (!empty($user['must_change_password']) ? '?force=1' : ''));
 }
 
+// Anti-réutilisation des derniers mots de passe (5 derniers par défaut)
+if (password_was_used_before($db, (int) $dbUser['id'], $new)) {
+    set_flash('error', 'Ce mot de passe a déjà été utilisé récemment. Choisissez-en un nouveau.');
+    redirect('profile.php' . (!empty($user['must_change_password']) ? '?force=1' : ''));
+}
+
 $hash = password_hash($new, PASSWORD_DEFAULT);
-$upd = $db->prepare('UPDATE users SET password_hash = :p, must_change_password = 0 WHERE id = :id');
+$upd = $db->prepare('UPDATE users SET password_hash = :p, must_change_password = 0, last_password_change = NOW() WHERE id = :id');
 $upd->execute(['p' => $hash, 'id' => $user['id']]);
+
+// Enregistre le nouveau mot de passe dans l'historique
+record_password_change($db, (int) $dbUser['id'], $hash);
+
+log_security_event('PASSWORD_CHANGE', "Mot de passe modifié pour {$dbUser['username']}");
 
 $_SESSION['user']['must_change_password'] = false;
 

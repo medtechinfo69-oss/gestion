@@ -94,7 +94,7 @@ $columns = [
     'age_assure_principal' => 'Age assuré principal', 'adresse' => 'Adresse', 'cp' => 'CP', 'ville' => 'Ville',
     'type_signature' => 'Type de signature', 'ca_mois' => 'CA-mois', 'ca_annuel' => 'CA-annuel', 'date_effet' => "Date d'effet",
     'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'Etat du dossier', 'date_dossier_complet' => 'Date validation', 'courrier' => 'Courrier',
-    'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'Etat du contrat', 'date_contrat_non_actif' => "Date d'annulation",
+    'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'Etat du contrat', 'controle_qualite' => 'Contrôle qualité', 'date_contrat_non_actif' => "Date d'annulation",
 ];
 if ($hideSupervisorColumns) {
     foreach (['mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {

@@ -8,11 +8,6 @@ $isEdit = false;
 $isAdmin = is_admin();
 $isSuperviseur = is_superviseur();
 
-if ($isSuperviseur && !$id) {
-  set_flash('error', 'Un superviseur peut uniquement modifier un dossier existant.');
-  redirect('dossiers.php');
-}
-
 if ($id) {
     $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');
     $stmt->execute(['id' => $id]);
@@ -24,7 +19,18 @@ if ($id) {
     $isEdit = true;
 }
 
-$isRestricted = $isEdit && ($dossier['date_dossier_complet'] !== null || $dossier['date_contrat_non_actif'] !== null);
+$isRestricted = $isEdit && ($dossier['date_dossier_complet'] !== null
+  || $dossier['date_contrat_non_actif'] !== null
+  || ($dossier['date_courrier_supervision'] ?? null) !== null
+  || ($dossier['date_etat_contrat_supervision'] ?? null) !== null
+  || ($dossier['date_controle_qualite_supervision'] ?? null) !== null);
+$courrierValues = $isEdit ? courrier_values($dossier['courrier'] ?? '') : [];
+$courrierComplete = count($courrierValues) === count(options_courrier());
+$contratRouge = $isEdit && $dossier['etat_contrat'] !== 'Actif';
+$courrierLocked = $isEdit
+  && ($dossier['date_courrier_supervision'] ?? null) !== null
+  && $courrierComplete;
+$etatContratLocked = $isEdit && ($dossier['date_etat_contrat_supervision'] ?? null) !== null;
 
 // Ré-affichage après erreur de validation (données conservées en session)
 $formData = $_SESSION['form_data'] ?? null;
@@ -49,7 +55,7 @@ $activePage = 'dossier_form';
 require __DIR__ . '/includes/header.php';
 ?>
 
-<?php if ($isSuperviseur): ?>
+<?php if ($isSuperviseur && $isEdit): ?>
 <div class="card dossier-form-card">
   <div class="card-body">
     <?php if ($isRestricted): ?>
@@ -64,31 +70,103 @@ require __DIR__ . '/includes/header.php';
           <label>Courrier</label>
           <div class="flex gap-12" style="flex-wrap:wrap;">
             <?php foreach (options_courrier() as $option): ?>
-              <label><input type="checkbox" name="courrier[]" value="<?= e($option) ?>" <?= in_array($option, courrier_values($dossier['courrier'] ?? ''), true) ? 'checked' : '' ?> <?= $isRestricted ? 'disabled' : '' ?>> <?= e($option) ?></label>
+              <?php $checked = in_array($option, $courrierValues, true); ?>
+              <label><input type="checkbox" class="courrier-checkbox" name="courrier[]" value="<?= e($option) ?>" <?= $checked ? 'checked' : '' ?> <?= $courrierLocked ? 'disabled' : '' ?>> <?= e($option) ?></label>
             <?php endforeach; ?>
           </div>
+          <div id="courrier-message" class="alert alert-error" style="display:none;margin-top:10px;">Merci de contacter l'administrateur.</div>
           <div class="help-text">Les quatre cases cochées donnent automatiquement « Dossier complet ».</div>
-        </div>
-        <div class="form-group span-full">
-          <label for="commentaire">Commentaire dossier</label>
-          <textarea id="commentaire" name="commentaire" <?= $isRestricted ? 'disabled' : '' ?>><?= e($dossier['commentaire']) ?></textarea>
+          <button type="submit" name="save_section" value="courrier" class="btn btn-primary btn-sm section-save" <?= $courrierLocked ? 'disabled' : '' ?>>Enregistrer Courrier</button>
         </div>
         <div class="form-group span-full">
           <label for="etat_contrat">État du contrat</label>
-          <select id="etat_contrat" name="etat_contrat" <?= $isRestricted ? 'disabled' : '' ?>>
+          <select id="etat_contrat" name="etat_contrat" <?= $etatContratLocked ? 'disabled' : '' ?>>
             <?php foreach (etats_contrat_valides() as $etat): ?>
               <option value="<?= e($etat) ?>" <?= $dossier['etat_contrat'] === $etat ? 'selected' : '' ?>><?= e($etat) ?></option>
             <?php endforeach; ?>
           </select>
+          <input type="hidden" id="etat_contrat_locked" name="etat_contrat_locked" value="">
+          <button type="submit" name="save_section" value="etat_contrat" class="btn btn-primary btn-sm section-save" <?= $etatContratLocked ? 'disabled' : '' ?>>Enregistrer État du contrat</button>
+        </div>
+        <div class="form-group span-full">
+          <label for="controle_qualite">Contrôle qualité</label>
+          <select id="controle_qualite" name="controle_qualite" <?= (($dossier['date_controle_qualite_supervision'] ?? null) !== null) ? 'disabled' : '' ?>>
+            <option value="">— Sélectionner —</option>
+            <?php foreach (controles_qualite_valides() as $controle): ?>
+              <option value="<?= e($controle) ?>" <?= ($dossier['controle_qualite'] ?? '') === $controle ? 'selected' : '' ?>><?= e($controle) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <input type="hidden" id="controle_qualite_locked" name="controle_qualite_locked" value="">
+          <button type="submit" name="save_section" value="controle_qualite" class="btn btn-primary btn-sm section-save" <?= (($dossier['date_controle_qualite_supervision'] ?? null) !== null) ? 'disabled' : '' ?>>Enregistrer Contrôle qualité</button>
+        </div>
+        <div class="form-group span-full">
+          <label for="commentaire">Commentaire dossier</label>
+          <textarea id="commentaire" name="commentaire"><?= e($dossier['commentaire']) ?></textarea>
+          <button type="submit" name="save_section" value="commentaire" class="btn btn-primary btn-sm section-save">Enregistrer Commentaire</button>
         </div>
       </div>
       <div class="form-actions dossier-form-actions">
-        <button type="submit" class="btn btn-primary" <?= $isRestricted ? 'disabled' : '' ?>>Enregistrer</button>
         <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $dossier['id'] ?>" class="btn btn-outline">Annuler</a>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+(function(){
+  if (!document.querySelector('.courrier-checkbox')) return;
+  var checkboxes = document.querySelectorAll('.courrier-checkbox');
+  var etatContrat = document.getElementById('etat_contrat');
+  var controleQualite = document.getElementById('controle_qualite');
+  var messageEl = document.getElementById('courrier-message');
+  var form = checkboxes[0].form;
+  var courrierLocked = <?= $courrierLocked ? 'true' : 'false' ?>;
+  var etatContratLocked = <?= $etatContratLocked ? 'true' : 'false' ?>;
+
+  function updateCourrierState() {
+    checkboxes.forEach(function(cb) { cb.disabled = courrierLocked; });
+    var allChecked = Array.from(checkboxes).every(function(cb) { return cb.checked; });
+    if (messageEl) { messageEl.style.display = allChecked && courrierLocked ? 'block' : 'none'; }
+  }
+
+  checkboxes.forEach(function(cb) {
+    cb.addEventListener('change', updateCourrierState);
+  });
+
+  form.addEventListener('submit', function(event) {
+    var section = event.submitter ? event.submitter.value : '';
+    if (section === 'courrier') {
+      var allCourrierChecked = Array.from(checkboxes).every(function(cb) { return cb.checked; });
+      checkboxes.forEach(function(cb) {
+        if (allCourrierChecked && cb.checked) {
+        var locked = document.createElement('input');
+        locked.type = 'hidden';
+        locked.name = 'courrier_locked[]';
+        locked.value = cb.value;
+        form.appendChild(locked);
+        }
+      });
+      if (allCourrierChecked) {
+        checkboxes.forEach(function(cb) { cb.disabled = true; });
+      }
+    }
+    if (section === 'etat_contrat' && etatContrat) {
+      var lockedContract = document.getElementById('etat_contrat_locked');
+      if (lockedContract) { lockedContract.value = etatContrat.value; }
+      etatContrat.disabled = true;
+    }
+    if (section === 'controle_qualite' && controleQualite) {
+      var lockedQuality = document.getElementById('controle_qualite_locked');
+      if (lockedQuality) { lockedQuality.value = controleQualite.value; }
+      controleQualite.disabled = true;
+    }
+  });
+
+  if (etatContrat) { etatContrat.disabled = etatContratLocked; }
+
+  updateCourrierState();
+})();
+</script>
 <?php else: ?>
 <div class="card dossier-form-card">
   <div class="card-body">
@@ -259,6 +337,15 @@ require __DIR__ . '/includes/header.php';
           <select id="etat_contrat" name="etat_contrat" required>
             <?php foreach (etats_contrat_valides() as $etat): ?>
               <option value="<?= e($etat) ?>" <?= $v('etat_contrat', 'Actif') === $etat ? 'selected' : '' ?>><?= e($etat) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="controle_qualite">Contrôle qualité</label>
+          <select id="controle_qualite" name="controle_qualite">
+            <option value="">— Sélectionner —</option>
+            <?php foreach (controles_qualite_valides() as $controle): ?>
+              <option value="<?= e($controle) ?>" <?= $v('controle_qualite', '') === $controle ? 'selected' : '' ?>><?= e($controle) ?></option>
             <?php endforeach; ?>
           </select>
         </div>

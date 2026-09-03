@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
-require_admin();
+require_admin_or_superviseur();
 csrf_require();
 
 function import_normalize_header(string $value): string
@@ -164,12 +164,12 @@ function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusiness
         (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
          nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville, type_signature,
          ca_mois, ca_annuel, date_effet, produit, compagnie, courrier, etat_dossier, date_dossier_complet,
-         etat_contrat, date_contrat_non_actif, commentaire, motif_annulation, created_by)
+         etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation, created_by)
         VALUES
         (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
          :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville, :type_signature,
          :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier, :date_dossier_complet,
-         :etat_contrat, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
+         :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
     $data['created_by'] = $userId;
     $db->prepare($sql)->execute($data);
     // Keep creation history logging even for imports
@@ -177,7 +177,7 @@ function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusiness
 }
 
 $file = $_FILES['fichier'] ?? null;
-if (!$file || $file['error'] !== UPLOAD_ERR_OK || $file['size'] > IMPORT_MAX_SIZE) {
+if (!$file || $file['error'] !== UPLOAD_ERR_OK || $file['size'] > max_import_size_bytes($db)) {
     set_flash('error', 'Veuillez sélectionner un fichier Excel valide de 10 Mo maximum.');
     redirect('dossiers_import.php');
 }
@@ -189,9 +189,9 @@ if (!in_array($extension, ['xlsx', 'csv'], true)) {
 }
 
 // Allow callers to request import that skips business rules (dates/annulation/auto-validation).
-// Only trusted users should be able to use this flag; require_admin() is already enforced at top of this script.
+// Only administrators can bypass import business rules.
 $skipBusinessRules = false;
-if (!empty($_POST['skipBusinessRules']) || !empty($_POST['skip_business_rules']) || (isset($_REQUEST['skipBusinessRules']) && $_REQUEST['skipBusinessRules'] === 'true')) {
+if (is_admin() && (!empty($_POST['skipBusinessRules']) || !empty($_POST['skip_business_rules']) || (isset($_REQUEST['skipBusinessRules']) && $_REQUEST['skipBusinessRules'] === 'true'))) {
     $skipBusinessRules = true;
 }
 
@@ -306,6 +306,7 @@ try {
             'compagnie' => import_cell($row, $indexes, ['Compagnie', 'Assureur']),
             'courrier' => $courrier,
             'etat_contrat' => import_cell($row, $indexes, ['Etat du contrat', 'État du contrat', 'Contrat']) ?: 'Actif',
+            'controle_qualite' => import_cell($row, $indexes, ['Controle qualite', 'Contrôle qualité', 'Controle qualité']),
             'commentaire' => import_cell($row, $indexes, ['Commentaire dossier', 'Commentaire', 'Notes']),
         ];
 

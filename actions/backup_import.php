@@ -18,7 +18,7 @@ try {
 
 $allowed = [
     'users' => ['id', 'username', 'password_hash', 'role', 'nom_complet', 'email', 'is_active', 'must_change_password', 'failed_attempts', 'locked_until', 'last_login', 'created_at', 'updated_at'],
-    'dossiers' => ['id', 'vendeur_id', 'ta_origine', 'p_prod', 'date_vente', 'civilite', 'nom', 'prenom', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville', 'type_signature', 'ca_mois', 'ca_annuel', 'date_effet', 'produit', 'compagnie', 'courrier', 'etat_dossier', 'etat_contrat', 'commentaire', 'motif_annulation', 'created_by', 'updated_by', 'created_at', 'updated_at'],
+    'dossiers' => ['id', 'vendeur_id', 'ta_origine', 'p_prod', 'date_vente', 'civilite', 'nom', 'prenom', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville', 'type_signature', 'ca_mois', 'ca_annuel', 'date_effet', 'produit', 'compagnie', 'courrier', 'date_courrier_supervision', 'etat_dossier', 'etat_contrat', 'date_etat_contrat_supervision', 'controle_qualite', 'date_controle_qualite_supervision', 'commentaire', 'motif_annulation', 'created_by', 'updated_by', 'created_at', 'updated_at'],
     'dossier_historique' => ['id', 'dossier_id', 'user_id', 'action', 'champ', 'ancienne_valeur', 'nouvelle_valeur', 'created_at'],
     'dossier_attachments' => ['id', 'dossier_id', 'nom_original', 'nom_fichier', 'type_mime', 'taille', 'uploaded_by', 'created_at'],
     'login_log' => ['id', 'username', 'ip_address', 'success', 'created_at'],

@@ -36,7 +36,11 @@ if (!is_file($path)) {
 
 header('Content-Description: File Transfer');
 header('Content-Type: ' . $attachment['type_mime']);
-header('Content-Disposition: attachment; filename="' . basename($attachment['nom_original']) . '"');
+if (isset($_GET['inline']) && $_GET['inline'] === '1' && str_starts_with((string) $attachment['type_mime'], 'audio/')) {
+    header('Content-Disposition: inline; filename="' . basename($attachment['nom_original']) . '"');
+} else {
+    header('Content-Disposition: attachment; filename="' . basename($attachment['nom_original']) . '"');
+}
 header('Content-Length: ' . filesize($path));
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store, no-cache, must-revalidate');
