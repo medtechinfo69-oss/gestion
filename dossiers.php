@@ -43,10 +43,24 @@ if (!$canAccessAll) {
 }
 
 if ($search !== '') {
-    $conditions[] = '(d.nom LIKE :q1 OR d.prenom LIKE :q2 OR d.mail LIKE :q3 OR d.portable LIKE :q4 OR d.ville LIKE :q5 OR d.produit LIKE :q6)';
-    $like = '%' . $search . '%';
-    $params['q1'] = $like; $params['q2'] = $like; $params['q3'] = $like;
-    $params['q4'] = $like; $params['q5'] = $like; $params['q6'] = $like;
+    $searchColumns = [
+        'd.nom', 'd.prenom', 'd.civilite', 'd.mail', 'd.telfix', 'd.portable',
+        'd.date_naissance_assure', 'd.age_assure_principal', 'd.adresse', 'd.cp', 'd.ville',
+        'd.type_signature', 'd.produit', 'd.compagnie', 'd.ta_origine', 'd.p_prod',
+        'd.etat_dossier', 'd.etat_contrat', 'd.controle_qualite', 'd.commentaire',
+        'd.motif_annulation',
+        'CAST(d.ca_mois AS CHAR)', 'CAST(d.ca_annuel AS CHAR)', 'CAST(d.nombre_personnes AS CHAR)',
+        'CAST(d.date_vente AS CHAR)', 'CAST(d.date_effet AS CHAR)', 'CAST(d.date_courrier_supervision AS CHAR)',
+        'CAST(d.date_etat_contrat_supervision AS CHAR)', 'CAST(d.date_controle_qualite_supervision AS CHAR)',
+        'CAST(d.created_at AS CHAR)', 'CAST(d.date_dossier_complet AS CHAR)', 'CAST(d.date_contrat_non_actif AS CHAR)'
+    ];
+    $searchClauses = [];
+    foreach ($searchColumns as $idx => $field) {
+        $paramKey = 'q' . $idx;
+        $searchClauses[] = $field . ' LIKE :' . $paramKey;
+        $params[$paramKey] = '%' . $search . '%';
+    }
+    $conditions[] = '(' . implode(' OR ', $searchClauses) . ')';
 }
 
 if (in_array($etatFilter, etats_dossier_valides(), true)) {
@@ -150,7 +164,7 @@ require __DIR__ . '/includes/header.php';
   <form class="toolbar" method="get" action="">
     <div class="form-group">
       <label for="q">Recherche</label>
-      <input type="search" id="q" name="q" placeholder="Nom, mail, portable, ville…" value="<?= e($search) ?>">
+      <input type="search" id="q" name="q" placeholder="Tous les champs : nom, vendeur, compagnie, mail, produit…" value="<?= e($search) ?>">
     </div>
     <div class="form-group">
       <label for="etat">État</label>

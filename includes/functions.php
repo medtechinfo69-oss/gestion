@@ -181,7 +181,7 @@ function origines_valides(PDO $db = null, bool $refresh = false): array
 {
     static $cached = null;
     if ($refresh || $cached === null) {
-        $default = ['Lead', 'Fiche perso', 'MMC 12', 'MMC 25', 'FID+2ans'];
+        $default = ['Lead', 'Fiche perso', 'MMC 12', 'MMC 25'];
         if (!$db) {
             $cached = $default;
             return $cached;
@@ -419,8 +419,7 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         $data['ca_mois'] = (float) $caMoisVal;
     }
 
-    $coefficient = $data['ta_origine'] === 'FID+2ans' ? 0.846 * 0.5 : 0.846;
-    $data['ca_annuel'] = round($data['ca_mois'] * 12 * $coefficient, 2);
+    $data['ca_annuel'] = round($data['ca_mois'] * 12 * 0.846, 2);
 
     $parsedDateEffet = parse_date_fr($post['date_effet'] ?? '');
     if (!$parsedDateEffet) {

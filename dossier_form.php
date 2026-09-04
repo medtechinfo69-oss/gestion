@@ -30,7 +30,7 @@ $contratRouge = $isEdit && $dossier['etat_contrat'] !== 'Actif';
 $courrierLocked = $isEdit
   && ($dossier['date_courrier_supervision'] ?? null) !== null
   && $courrierComplete;
-$etatContratLocked = $isEdit && ($dossier['date_etat_contrat_supervision'] ?? null) !== null;
+$etatContratLocked = $isEdit && (($dossier['date_etat_contrat_supervision'] ?? null) !== null || ($isSuperviseur && ($dossier['etat_contrat'] ?? 'Actif') !== 'Actif'));
 
 // Ré-affichage après erreur de validation (données conservées en session)
 $formData = $_SESSION['form_data'] ?? null;
@@ -58,9 +58,6 @@ require __DIR__ . '/includes/header.php';
 <?php if ($isSuperviseur && $isEdit): ?>
 <div class="card dossier-form-card">
   <div class="card-body">
-    <?php if ($isRestricted): ?>
-      <div class="alert alert-error" style="margin-bottom:16px;">Merci de contacter l'administrateur.</div>
-    <?php endif; ?>
     <p class="help-text">Vous pouvez uniquement modifier le courrier et le commentaire. L'état du dossier est calculé automatiquement.</p>
     <form action="<?= e(APP_URL) ?>/actions/dossier_save.php" method="post">
       <?= csrf_field() ?>
@@ -80,7 +77,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="form-group span-full">
           <label for="etat_contrat">État du contrat</label>
-          <select id="etat_contrat" name="etat_contrat" <?= $etatContratLocked ? 'disabled' : '' ?>>
+          <select id="etat_contrat" name="etat_contrat" <?= $etatContratLocked ? 'disabled' : '' ?> aria-disabled="<?= $etatContratLocked ? 'true' : 'false' ?>">
             <?php foreach (etats_contrat_valides() as $etat): ?>
               <option value="<?= e($etat) ?>" <?= $dossier['etat_contrat'] === $etat ? 'selected' : '' ?>><?= e($etat) ?></option>
             <?php endforeach; ?>

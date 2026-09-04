@@ -16,7 +16,8 @@ $user = current_user();
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= e($pageTitle) ?> · <?= e(APP_NAME) ?></title>
-<link rel="icon" type="image/jpeg" href="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg">
+<link rel="icon" type="image/png" sizes="256x256" href="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png">
+<link rel="apple-touch-icon" href="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png">
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= defined('CACHE_VERSION') ? CACHE_VERSION : (int) filemtime(__DIR__ . '/../assets/css/style.css') ?>">
 </head>
 <body class="<?= defined('SECURITY_MODE') && SECURITY_MODE && !is_superviseur() ? 'security-mode' : '' ?>">
@@ -24,7 +25,7 @@ $user = current_user();
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <div class="mark">
-        <img src="<?= e(APP_URL) ?>/assets/img/assurialis-logo.jpg" alt="Assurialis">
+        <img src="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png" alt="Assurialis">
       </div>
       <div class="sidebar-brand-text">
         <div class="sidebar-brand-title">Gestion des dossiers</div>
@@ -41,6 +42,7 @@ $user = current_user();
     <?php endif; ?>
 
     <nav class="nav-group">
+      <div class="nav-label">Gestion Prod</div>
       <a href="<?= e(APP_URL) ?>/dashboard.php" class="nav-item <?= $activePage === 'dashboard' ? 'active' : '' ?>">
         <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4.75A.75.75 0 0 1 4.75 4h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 10.25v-5.5Zm9 0A.75.75 0 0 1 13.75 4h5.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-3.5ZM4 14.75A.75.75 0 0 1 4.75 14h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 20.25v-5.5Zm9 0a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-5.5Z"/></svg></span> Tableau de bord
       </a>
@@ -59,6 +61,11 @@ $user = current_user();
       </a>
       <?php endif; ?>
       </div>
+      <?php if (is_admin()): ?>
+      <a href="<?= e(APP_URL) ?>/prime.php" class="nav-item <?= $activePage === 'prime' ? 'active' : '' ?>">
+        <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 6h-6a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6H7"/></svg></span> Prime
+      </a>
+      <?php endif; ?>
 
       <?php if (is_admin()): ?>
         <div class="nav-label">Administration</div>
@@ -74,7 +81,7 @@ $user = current_user();
       <?php endif; ?>
 
       <?php if (is_admin()): ?>
-        <div class="nav-label">Espace RH</div>
+        <div class="nav-label">Gestion RH</div>
         <a href="<?= e(APP_URL) ?>/rh_dashboard.php" class="nav-item <?= $activePage === 'rh_dashboard' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4.75A.75.75 0 0 1 4.75 4h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 10.25v-5.5Zm9 0A.75.75 0 0 1 13.75 4h5.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-3.5ZM4 14.75A.75.75 0 0 1 4.75 14h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5A.75.75 0 0 1 4 20.25v-5.5Zm9 0a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75v-5.5Z"/></svg></span> Tableau de bord
         </a>
@@ -85,10 +92,7 @@ $user = current_user();
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1v23M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Salaires mensuels
         </a>
         <a href="<?= e(APP_URL) ?>/rh_history.php" class="nav-item <?= $activePage === 'rh_history' ? 'active' : '' ?>">
-          <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span> Historique
-        </a>
-        <a href="<?= e(APP_URL) ?>/rh_reports.php" class="nav-item <?= $activePage === 'rh_reports' ? 'active' : '' ?>">
-          <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></span> Rapports
+          <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span> Historique
         </a>
       <?php endif; ?>
 

@@ -31,7 +31,7 @@ if (is_superviseur() && $isEdit) {
     $existingCourrier = courrier_values($existing['courrier'] ?? '');
     $courrierLocked = ($existing['date_courrier_supervision'] ?? null) !== null
         && count($existingCourrier) === count(options_courrier());
-    $etatContratLocked = ($existing['date_etat_contrat_supervision'] ?? null) !== null;
+    $etatContratLocked = ($existing['date_etat_contrat_supervision'] ?? null) !== null || ($existing['etat_contrat'] ?? 'Actif') !== 'Actif';
     $controleQualiteLocked = ($existing['date_controle_qualite_supervision'] ?? null) !== null;
     if ($saveSection !== 'courrier' && $saveSection !== 'all') {
         $courrierValues = courrier_values($existing['courrier'] ?? '');

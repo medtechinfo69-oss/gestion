@@ -19,6 +19,13 @@ if (!$attachment) {
     redirect('dossiers.php');
 }
 
+$isInlineAudio = isset($_GET['inline']) && $_GET['inline'] === '1'
+    && str_starts_with((string) $attachment['type_mime'], 'audio/');
+if (is_superviseur() && !$isInlineAudio) {
+    http_response_code(403);
+    exit('Téléchargement interdit pour les superviseurs.');
+}
+
 if (!is_admin() && !is_superviseur() && (int) $attachment['vendeur_id'] !== (int) $user['id']) {
     http_response_code(403);
     set_flash('error', 'Accès refusé.');
@@ -36,7 +43,7 @@ if (!is_file($path)) {
 
 header('Content-Description: File Transfer');
 header('Content-Type: ' . $attachment['type_mime']);
-if (isset($_GET['inline']) && $_GET['inline'] === '1' && str_starts_with((string) $attachment['type_mime'], 'audio/')) {
+if ($isInlineAudio) {
     header('Content-Disposition: inline; filename="' . basename($attachment['nom_original']) . '"');
 } else {
     header('Content-Disposition: attachment; filename="' . basename($attachment['nom_original']) . '"');

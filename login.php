@@ -15,6 +15,8 @@ unset($_SESSION['old_username']);
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Connexion · <?= e(APP_NAME) ?></title>
+<link rel="icon" type="image/png" sizes="256x256" href="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png">
+<link rel="apple-touch-icon" href="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png">
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= APP_ENV === 'development' ? time() : (int) filemtime(__DIR__ . '/assets/css/style.css') ?>">
 </head>
 <body class="login">
@@ -26,7 +28,7 @@ unset($_SESSION['old_username']);
     </section>
     <section class="login-box">
     <h2>Connexion</h2>
-    <p>Accédez à votre espace d'administration RH.</p>
+    <p>Accédez à votre espace d'administration</p>
     <?php foreach ($flashes as $flash): ?>
       <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
     <?php endforeach; ?>

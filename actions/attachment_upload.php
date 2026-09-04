@@ -42,8 +42,10 @@ if ($file['error'] !== UPLOAD_ERR_OK) {
     redirect('dossier_view.php?id=' . $dossierId);
 }
 
-if ($file['size'] <= 0 || $file['size'] > UPLOAD_MAX_SIZE) {
-    set_flash('error', 'Le fichier dépasse la taille maximale autorisée (5 Mo).');
+$maxUploadBytes = max_import_size_bytes($db);
+if ($file['size'] <= 0 || $file['size'] > $maxUploadBytes) {
+    $maxUploadMb = (int) ($maxUploadBytes / 1024 / 1024);
+    set_flash('error', 'Le fichier dépasse la taille maximale autorisée (' . $maxUploadMb . ' Mo).');
     redirect('dossier_view.php?id=' . $dossierId);
 }
 

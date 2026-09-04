@@ -178,7 +178,8 @@ function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusiness
 
 $file = $_FILES['fichier'] ?? null;
 if (!$file || $file['error'] !== UPLOAD_ERR_OK || $file['size'] > max_import_size_bytes($db)) {
-    set_flash('error', 'Veuillez sélectionner un fichier Excel valide de 10 Mo maximum.');
+    $maxUploadMb = (int) (max_import_size_bytes($db) / 1024 / 1024);
+    set_flash('error', 'Veuillez sélectionner un fichier Excel valide de ' . $maxUploadMb . ' Mo maximum.');
     redirect('dossiers_import.php');
 }
 

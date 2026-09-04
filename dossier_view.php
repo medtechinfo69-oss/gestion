@@ -113,27 +113,25 @@ require __DIR__ . '/includes/header.php';
 <div class="card mb-16">
   <div class="card-header"><h2>Contrat</h2></div>
   <div class="card-body">
-    <div class="detail-grid">
+    <div class="detail-grid detail-grid--contract">
       <div class="detail-item"><div class="k">Produit</div><div class="v"><?= e($dossier['produit']) ?></div></div>
       <div class="detail-item"><div class="k">Compagnie</div><div class="v"><?= e($dossier['compagnie']) ?></div></div>
       <div class="detail-item"><div class="k">CA mensuel</div><div class="v"><?= format_montant((float) $dossier['ca_mois']) ?></div></div>
-      <div class="detail-item"><div class="k">CA annuel</div><div class="v"><strong><?= format_montant((float) $dossier['ca_annuel']) ?></strong></div></div>
+      <div class="detail-item detail-item--wide"><div class="k">CA annuel</div><div class="v"><strong><?= format_montant((float) $dossier['ca_annuel']) ?></strong></div></div>
+
+      <div class="detail-item"><div class="k">Courrier</div><div class="v"><?= e(implode(', ', courrier_values($dossier['courrier'] ?? ''))) ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">État du dossier</div><div class="v"><?= badge_etat($dossier['etat_dossier']) ?></div></div>
       <div class="detail-item"><div class="k">Date validation</div><div class="v"><?= !empty($dossier['date_dossier_complet']) ? format_date($dossier['date_dossier_complet']) : '—' ?></div></div>
-      <div class="detail-item"><div class="k">Courrier</div><div class="v"><?= e(implode(', ', courrier_values($dossier['courrier'] ?? ''))) ?: '—' ?></div></div>
+
       <div class="detail-item"><div class="k">État du contrat</div><div class="v"><?= badge_etat_contrat($dossier['etat_contrat']) ?></div></div>
-      <div class="detail-item"><div class="k">Contrôle qualité</div><div class="v"><?= e($dossier['controle_qualite'] ?? '') ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Date d'annulation</div><div class="v"><?= !empty($dossier['date_contrat_non_actif']) ? format_date($dossier['date_contrat_non_actif']) : '—' ?></div></div>
+
+      <div class="detail-item"><div class="k">Contrôle qualité</div><div class="v"><?= e($dossier['controle_qualite'] ?? '') ?: '—' ?></div></div>
+      <div class="detail-item"><div class="k">Commentaire</div><div class="v"><?= $dossier['commentaire'] ? nl2br(e($dossier['commentaire'])) : '—' ?></div></div>
       <?php if ($dossier['motif_annulation']): ?>
-      <div class="detail-item"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
+      <div class="detail-item detail-item--wide"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
       <?php endif; ?>
     </div>
-    <?php if ($dossier['commentaire']): ?>
-      <div class="detail-item" style="margin-top:16px;">
-        <div class="k">Commentaire</div>
-        <div class="v"><?= nl2br(e($dossier['commentaire'])) ?></div>
-      </div>
-    <?php endif; ?>
   </div>
 </div>
 
@@ -151,13 +149,15 @@ require __DIR__ . '/includes/header.php';
               <?= $isAudio ? '&#127925;' : '&#128206;' ?> <?= e($a['nom_original']) ?>
               <span class="muted">(<?= round($a['taille'] / 1024) ?> Ko &middot; ajouté par <?= e($a['uploader']) ?> le <?= format_date(substr($a['created_at'],0,10)) ?>)</span>
               <?php if ($isAudio): ?>
-                <audio class="attachment-player" controls preload="metadata" src="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>&inline=1">
+                <audio class="attachment-player" controls controlsList="nodownload" preload="metadata" src="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>&inline=1">
                   Votre navigateur ne peut pas lire cet enregistrement.
                 </audio>
               <?php endif; ?>
             </span>
             <span class="flex gap-8">
+              <?php if (!$isSuperviseur): ?>
               <a href="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>" class="btn btn-outline btn-sm">Télécharger</a>
+              <?php endif; ?>
               <?php if ($isAdmin): ?>
               <form action="<?= e(APP_URL) ?>/actions/attachment_delete.php" method="post" style="margin:0;" data-confirm="Supprimer cette pièce jointe ?">
                 <?= csrf_field() ?>
@@ -181,7 +181,7 @@ require __DIR__ . '/includes/header.php';
         <input type="file" name="fichier" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.opus,.wma">
         <button type="submit" class="btn btn-outline btn-sm">Ajouter un document ou un audio</button>
       </div>
-      <div class="help-text" style="margin-top:6px;">Formats acceptés : PDF, JPG, PNG, DOC, DOCX, MP3, WAV, OGG, M4A, AAC, FLAC, WEBM, OPUS, WMA — 5 Mo maximum.</div>
+      <div class="help-text" style="margin-top:6px;">Formats acceptés : PDF, JPG, PNG, DOC, DOCX, MP3, WAV, OGG, M4A, AAC, FLAC, WEBM, OPUS, WMA — <?= (int) (max_import_size_bytes($db) / 1024 / 1024) ?> Mo maximum.</div>
     </form><?php endif; ?>
   </div>
 </div>

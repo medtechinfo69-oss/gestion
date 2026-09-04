@@ -6,6 +6,7 @@ $pageTitle = 'Employés';
 $pageSubtitle = 'Ensemble des salariés enregistrés';
 $activePage = 'rh_employees';
 $pdo = $db;
+$isAdmin = is_admin();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   require_once __DIR__ . '/actions/rh_employee_action.php';
@@ -21,7 +22,9 @@ if (isset($_GET['edit'])) {
 
 $q = trim((string) ($_GET['q'] ?? ''));
 $status = $_GET['status'] ?? '';
-$department = trim((string) ($_GET['department'] ?? ''));
+$position = $_GET['position'] ?? '';
+$sort = ($_GET['sort'] ?? '') === 'matricule' ? 'matricule' : 'name';
+$direction = strtoupper((string) ($_GET['direction'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
 
 $sql = 'SELECT * FROM employees WHERE 1=1';
 $args = [];
@@ -33,17 +36,26 @@ if (in_array($status, ['Active', 'Inactive'], true)) {
   $sql .= ' AND status=:status';
   $args['status'] = $status;
 }
-if ($department !== '') {
-  $sql .= ' AND department=:department';
-  $args['department'] = $department;
+if (in_array($position, ['Agent', 'Responsable'], true)) {
+  $sql .= ' AND position=:position';
+  $args['position'] = $position;
 }
-$sql .= ' ORDER BY full_name';
+$sql .= $sort === 'matricule'
+  ? ' ORDER BY employee_code ' . $direction
+  : ' ORDER BY full_name ASC';
+
+$nextDirection = ($sort === 'matricule' && $direction === 'ASC') ? 'DESC' : 'ASC';
+$matriculeSortUrl = '?' . http_build_query([
+  'q' => $q,
+  'status' => $status,
+  'position' => $position,
+  'sort' => 'matricule',
+  'direction' => $nextDirection,
+]);
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($args);
 $rows = $stmt->fetchAll();
-
-$departments = $pdo->query("SELECT DISTINCT department FROM employees WHERE department<>'' ORDER BY department")->fetchAll(PDO::FETCH_COLUMN);
 
 require __DIR__ . '/includes/header.php';
 ?>
@@ -71,12 +83,11 @@ require __DIR__ . '/includes/header.php';
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Département</label>
-          <select name="department" class="form-select">
+          <label class="form-label">Poste</label>
+          <select name="position" class="form-select">
             <option value="">Tous</option>
-            <?php foreach ($departments as $d): ?>
-              <option value="<?= e($d) ?>" <?= $department === $d ? 'selected' : '' ?>><?= e($d) ?></option>
-            <?php endforeach; ?>
+            <option value="Agent" <?= $position === 'Agent' ? 'selected' : '' ?>>Agent</option>
+            <option value="Responsable" <?= $position === 'Responsable' ? 'selected' : '' ?>>Responsable</option>
           </select>
         </div>
         <div class="col-md-3 d-flex align-items-end">
@@ -96,16 +107,14 @@ require __DIR__ . '/includes/header.php';
     <input type="hidden" name="id" value="<?= e($edit['id'] ?? '') ?>">
     <div class="form-grid">
       <label>Matricule<input class="form-control" name="employee_code" required value="<?= e($edit['employee_code'] ?? '') ?>"></label>
-      <label>Nom complet<input class="form-control" name="full_name" required value="<?= e($edit['full_name'] ?? '') ?>"></label>
-      <label>Poste<input class="form-control" name="position" value="<?= e($edit['position'] ?? '') ?>"></label>
-      <label>Département<input class="form-control" name="department" value="<?= e($edit['department'] ?? '') ?>"></label>
-      <label>Type de contrat<input class="form-control" name="contract_type" value="<?= e($edit['contract_type'] ?? '') ?>"></label>
+      <label>Nom & prénom<input class="form-control" name="full_name" required value="<?= e($edit['full_name'] ?? '') ?>"></label>
+      <label>Pseudo<input class="form-control" name="pseudo" value="<?= e($edit['pseudo'] ?? '') ?>"></label>
+      <label>Poste<select class="form-control" name="position" required><option value="Agent" <?= ($edit['position'] ?? 'Agent') === 'Agent' ? 'selected' : '' ?>>Agent</option><option value="Responsable" <?= ($edit['position'] ?? '') === 'Responsable' ? 'selected' : '' ?>>Responsable</option></select></label>
           <label>Régime horaire (TND / h)<input class="form-control" name="hourly_rate" type="number" step="0.01" min="0" required value="<?= e($edit['hourly_rate'] ?? '') ?>"></label>
       <label>Statut<select class="form-control" name="status">
         <option value="Active" <?= ($edit['status'] ?? 'Active') === 'Active' ? 'selected' : '' ?>>Actif</option>
         <option value="Inactive" <?= ($edit['status'] ?? '') === 'Inactive' ? 'selected' : '' ?>>Inactif</option>
       </select></label>
-      <label>Date d'entrée<input class="form-control" name="start_date" type="date" value="<?= e($edit['start_date'] ?? '') ?>"></label>
     </div>
     <div class="actions-row">
       <a class="btn btn-secondary" href="rh_employees.php">Annuler</a>
@@ -124,9 +133,8 @@ require __DIR__ . '/includes/header.php';
     <table>
       <thead>
         <tr>
-          <th>Matricule</th>
+          <th><a href="<?= e($matriculeSortUrl) ?>" class="table-sort-link">Matricule <?= $sort === 'matricule' ? ($direction === 'ASC' ? '&#9650;' : '&#9660;') : '&#8597;' ?></a></th>
           <th>Nom complet</th>
-          <th>Département</th>
           <th>Poste</th>
           <th>Régime horaire</th>
           <th>Statut</th>
@@ -138,24 +146,25 @@ require __DIR__ . '/includes/header.php';
         <tr class="data-row">
           <td><b><?= e($r['employee_code']) ?></b></td>
           <td><?= e($r['full_name']) ?></td>
-          <td><?= e($r['department'] ?: '—') ?></td>
           <td><?= e($r['position'] ?: '—') ?></td>
           <td><?= format_montant_tnd((float) $r['hourly_rate']) ?></td>
           <td><span class="badge <?= $r['status'] === 'Active' ? 'badge-success' : 'badge-muted' ?>"><?= $r['status'] === 'Active' ? 'Actif' : 'Inactif' ?></span></td>
           <td class="nowrap">
             <a class="btn btn-sm btn-secondary" href="?edit=<?= (int) $r['id'] ?>">Modifier</a>
-            <form class="inline" method="post" action="actions/rh_employee_action.php" onsubmit="return confirm('Confirmer la suppression de cet employé ?')">
+            <?php if ($isAdmin): ?>
+            <form class="inline" method="post" action="actions/rh_employee_action.php" onsubmit="return confirm('Supprimer définitivement cet employé et tout son historique de salaire ?')">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-              <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+              <button type="submit" class="btn btn-sm btn-danger">Supprimer définitivement</button>
             </form>
+            <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>
         <?php if (!$rows): ?>
         <tr>
-          <td colspan="7">
+          <td colspan="6">
             <div class="empty-state">
               <div class="empty-icon">&#128188;</div>
               Aucun employé ne correspond aux critères.

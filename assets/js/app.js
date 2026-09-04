@@ -60,8 +60,7 @@
         annuelInput.value = '';
         return;
       }
-      var coefficient = origineInput.value === 'FID+2ans' ? 0.846 * 0.5 : 0.846;
-      annuelInput.value = (Math.round(monthlyAmount * 12 * coefficient * 100) / 100).toFixed(2);
+      annuelInput.value = (Math.round(monthlyAmount * 12 * 0.846 * 100) / 100).toFixed(2);
     }
 
     moisInput.addEventListener('input', function () {
@@ -564,7 +563,13 @@
       for (var i = 1; i < points.length; i++) {
         ctx.lineTo(points[i].x, points[i].y);
       }
-      ctx.strokeStyle = color;
+      var lineColor = color;
+      if (color === 'turquoise-gradient') {
+        lineColor = ctx.createLinearGradient(pad.left, 0, w - pad.right, 0);
+        lineColor.addColorStop(0, '#0A9FAD');
+        lineColor.addColorStop(1, '#12D6D6');
+      }
+      ctx.strokeStyle = lineColor;
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
@@ -574,7 +579,7 @@
         ctx.fillStyle = '#fff';
         ctx.fill();
         ctx.lineWidth = 2;
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = lineColor;
         ctx.stroke();
         if (i % 2 === 0 || w < 600) {
           ctx.fillStyle = '#64748b';
@@ -584,16 +589,16 @@
     }
 
     if (salaryCanvas && salaryData.length) {
-      drawChart(salaryCanvas, salaryData, '#f59e0b', 'rgba(245,158,11,0.18)', monthLabels);
+      drawChart(salaryCanvas, salaryData, '#012B5E', 'rgba(1,43,94,0.14)', monthLabels);
       window.addEventListener('resize', function () {
-        drawChart(salaryCanvas, salaryData, '#f59e0b', 'rgba(245,158,11,0.18)', monthLabels);
+        drawChart(salaryCanvas, salaryData, '#012B5E', 'rgba(1,43,94,0.14)', monthLabels);
       });
     }
 
     if (hoursCanvas && hoursData.length) {
-      drawChart(hoursCanvas, hoursData, '#6366f1', 'rgba(99,102,241,0.18)', monthLabels);
+      drawChart(hoursCanvas, hoursData, 'turquoise-gradient', 'rgba(10,159,173,0.16)', monthLabels);
       window.addEventListener('resize', function () {
-        drawChart(hoursCanvas, hoursData, '#6366f1', 'rgba(99,102,241,0.18)', monthLabels);
+        drawChart(hoursCanvas, hoursData, 'turquoise-gradient', 'rgba(10,159,173,0.16)', monthLabels);
       });
     }
   }
@@ -603,22 +608,26 @@
     var newSalaryBtn = document.getElementById('newSalaryBtn');
     var manualSalaryCard = document.getElementById('manualSalaryCard');
     var manualSelect = document.getElementById('manualEmpSelect');
-    var manualHours = document.getElementById('manualHours');
+    var manualHours = document.querySelector('[name="paid_hours"]');
+    var manualDays = document.querySelector('[name="paid_days"]');
     var manualRate = document.getElementById('manualRate');
     var manualCalc = document.getElementById('manualCalcDisplay');
 
     function updateManualPreview() {
-      if (!manualSelect || !manualHours || !manualRate || !manualCalc) return;
+      if (!manualSelect || !manualRate || !manualCalc) return;
       var option = manualSelect.options[manualSelect.selectedIndex];
       var rate = parseFloat(option && option.getAttribute('data-rate')) || 0;
-      var hours = parseFloat(String(manualHours.value).replace(',', '.')) || 0;
+      var position = option && option.getAttribute('data-position');
+      var base = position === 'Responsable' ? manualDays : manualHours;
+      var amount = base ? parseFloat(String(base.value).replace(',', '.')) || 0 : 0;
       manualRate.value = rate.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND/h';
-      manualCalc.value = (hours * rate).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
+      manualCalc.value = (amount * rate).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
     }
 
-    if (manualSelect && manualHours) {
+    if (manualSelect && (manualHours || manualDays)) {
       manualSelect.addEventListener('change', updateManualPreview);
-      manualHours.addEventListener('input', updateManualPreview);
+      if (manualHours) manualHours.addEventListener('input', updateManualPreview);
+      if (manualDays) manualDays.addEventListener('input', updateManualPreview);
       updateManualPreview();
     }
 
@@ -649,41 +658,77 @@
       if (openButton) {
         var row = openButton.closest('tr');
         var editRow = row && row.nextElementSibling;
-        if (editRow && editRow.classList.contains('edit-row')) {
+        var editCard = editRow && editRow.querySelector('.edit-inline-card');
+        var editForm = editRow && editRow.querySelector('.inline-edit-form');
+        if (editRow && editRow.classList.contains('edit-row') && editCard && editForm) {
+          var editCell = editForm.parentElement;
+          var modal = document.createElement('div');
+          var closeButton = document.createElement('button');
+
+          modal.className = 'salary-edit-modal';
+          modal.setAttribute('role', 'dialog');
+          modal.setAttribute('aria-modal', 'true');
+          modal.setAttribute('aria-label', 'Modifier le salaire');
+          closeButton.type = 'button';
+          closeButton.className = 'salary-edit-modal-close';
+          closeButton.setAttribute('aria-label', 'Fermer');
+          closeButton.textContent = 'X';
+          modal.appendChild(closeButton);
+          modal.appendChild(editForm);
+          document.body.appendChild(modal);
+          editRow.style.display = 'none';
           row.style.display = 'none';
-          editRow.style.display = '';
-          updateInlinePreview(editRow.querySelector('form'));
+          editForm._salaryModal = modal;
+          editForm._salaryEditCell = editCell;
+          updateInlinePreview(editForm);
         }
       }
 
       var cancelButton = event.target.closest('[data-cancel-inline-edit]');
       if (cancelButton) {
         var card = cancelButton.closest('.edit-inline-card');
-        var editRow = card && card.closest('tr');
-        var prevRow = editRow && editRow.previousElementSibling;
-        if (editRow) {
-          editRow.style.display = 'none';
-        }
-        if (prevRow && prevRow.classList.contains('data-row')) {
-          prevRow.style.display = '';
-        }
+        closeSalaryEditModal(card && card.closest('.inline-edit-form'));
+      }
+
+      var closeModalButton = event.target.closest('.salary-edit-modal-close');
+      if (closeModalButton) {
+        var modalForm = closeModalButton.parentElement.querySelector('.inline-edit-form');
+        closeSalaryEditModal(modalForm);
       }
     });
 
+    function closeSalaryEditModal(form) {
+      if (!form || !form._salaryModal || !form._salaryEditCell) return;
+      var modal = form._salaryModal;
+      var cell = form._salaryEditCell;
+      var row = cell.closest('tr');
+      var previousRow = row && row.previousElementSibling;
+      cell.appendChild(form);
+      modal.remove();
+      form._salaryModal = null;
+      form._salaryEditCell = null;
+      if (row) row.style.display = 'none';
+      if (previousRow && previousRow.classList.contains('data-row')) previousRow.style.display = '';
+    }
+
     function updateInlinePreview(form) {
       if (!form) return;
-      var hrs = form.querySelector('input[name="total_hours"]');
+      var position = (form.getAttribute('data-position') || 'Agent');
+      var paidHours = form.querySelector('input[name="paid_hours"]');
+      var paidDays = form.querySelector('input[name="paid_days"]');
       var rate = form.querySelector('input[name="hourly_rate_used"]');
       var preview = form.querySelector('.inline-preview');
-      if (!hrs || !rate || !preview) return;
+      if (!rate || !preview) return;
 
       function calc() {
-        var h = parseFloat(hrs.value) || 0;
+        var baseField = position === 'Responsable' ? paidDays : paidHours;
+        var base = baseField ? (parseFloat(baseField.value) || 0) : 0;
         var r = parseFloat(rate.value) || 0;
-        preview.textContent = (h * r).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
+        preview.textContent = (base * r).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND';
       }
 
-      hrs.addEventListener('input', calc);
+      if (paidHours) paidHours.addEventListener('input', calc);
+      if (paidDays) paidDays.addEventListener('input', calc);
       rate.addEventListener('input', calc);
       calc();
     }

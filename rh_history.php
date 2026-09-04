@@ -13,7 +13,7 @@ $rows = [];
 $employee = null;
 
 if ($eid > 0) {
-  $stmt = $pdo->prepare('SELECT id, employee_code, full_name, department, hourly_rate FROM employees WHERE id=:id');
+  $stmt = $pdo->prepare('SELECT id, employee_code, full_name, hourly_rate FROM employees WHERE id=:id');
   $stmt->execute(['id' => $eid]);
   $employee = $stmt->fetch();
 
@@ -60,7 +60,7 @@ require __DIR__ . '/includes/header.php';
 <div class="content-card">
   <div class="card-head">
     <h2><?= e($employee['full_name']) ?></h2>
-    <span class="muted"><?= e($employee['employee_code']) ?> · <?= e($employee['department'] ?: 'Département non renseigné') ?></span>
+    <span class="muted"><?= e($employee['employee_code']) ?></span>
   </div>
   <div class="table-wrap">
     <table>

@@ -168,6 +168,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $cells = $xpath->query('.//x:c', $row);
     $sorted = [];
     foreach ($cells as $c) {
+      if (!$c instanceof DOMElement) {
+        continue;
+      }
       $r = $c->getAttribute('r');
       $col = '';
       if (preg_match('/^([A-Z]+)/', $r, $m)) { $col = $m[1]; }
@@ -201,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     redirect_salary_page($mTarget, $yTarget);
   }
 
-  $headerKeywords = ['matricule', 'nom complet', 'département', 'poste', 'mois', 'année', 'total des heures', 'régime horaire', 'employee code', 'full name', 'department', 'position', 'month', 'year', 'total hours', 'hours', 'hourly rate'];
+  $headerKeywords = ['matricule', 'nom & prénom', 'nom complet', 'nom', 'prénom', 'pseudo', 'peseudo', 'poste', 'jour normalement travaillé', 'abs non justifiée en jours', 'abs non justifiée en heures', 'jour payé', 'heure payée', 'nb retards', 'régime horaire', 'employee code', 'full name', 'position', 'total hours', 'hours', 'hourly rate'];
   $headers = [];
   $headerRowIndex = -1;
 
@@ -241,22 +244,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     }
     if (!$data && !empty($headers)) { $data = []; foreach ($headers as $idx => $h) { $data[$h] = $vals[$idx] ?? ''; } }
 
-    $code = trim((string) ($data['matricule'] ?? $data['employee id'] ?? $data['employee_code'] ?? $data['code'] ?? $vals[1] ?? ''));
-    $name = trim((string) ($data['nom complet'] ?? $data['full_name'] ?? $data['name'] ?? $vals[0] ?? ''));
-    $monthVal = (int) ($data['month'] ?? $data['mois'] ?? $data['m'] ?? $vals[4] ?? 0);
-    $yearVal = (int) ($data['year'] ?? $data['année'] ?? $data['annee'] ?? $data['y'] ?? $vals[5] ?? 0);
-    if ($yearVal > 0 && $yearVal < 100) { $yearVal += 2000; }
-    $hours = $data['total des heures'] ?? $data['total hours'] ?? $data['heures'] ?? $data['hours'] ?? $data['total_hours'] ?? $vals[6] ?? null;
-    $rate = $data['régime horaire'] ?? $data['hourly_rate'] ?? $data['taux horaire'] ?? $vals[7] ?? null;
-    $hours = is_string($hours) ? str_replace(',', '.', $hours) : $hours;
-    $rate = is_string($rate) ? str_replace(',', '.', $rate) : $rate;
+    $code = trim((string) ($data['matricule'] ?? $data['employee id'] ?? $data['employee_code'] ?? $data['code'] ?? $vals[0] ?? ''));
+    $name = trim((string) ($data['nom & prénom'] ?? $data['nom complet'] ?? $data['full_name'] ?? $data['name'] ?? ''));
+    if ($name === '') {
+      $name = trim((string) ($data['nom'] ?? '') . ' ' . ($data['prénom'] ?? $data['prenom'] ?? ''));
+    }
+    if ($name === '') {
+      $name = trim((string) ($vals[0] ?? ''));
+    }
+    $monthVal = $mTarget;
+    $yearVal = $yTarget;
+    $normalDays = $data['jour normalement travaillé'] ?? 0;
+    $absenceDays = $data['abs non justifiée en jours'] ?? 0;
+    $absenceHours = $data['abs non justifiée en heures'] ?? 0;
+    $paidDays = $data['jour payé'] ?? 0;
+    $paidHours = $data['heure payée'] ?? 0;
+    $lateCount = $data['nb retards'] ?? 0;
+    $rate = $data['régime horaire'] ?? $data['hourly_rate'] ?? $data['taux horaire'] ?? 0;
+    foreach (['normalDays', 'absenceDays', 'absenceHours', 'paidDays', 'paidHours', 'lateCount', 'rate'] as $numberKey) {
+      $$numberKey = is_string($$numberKey) ? str_replace(',', '.', trim($$numberKey)) : $$numberKey;
+    }
 
-    if (!$code || $monthVal < 1 || $monthVal > 12 || $yearVal < 2000 || $yearVal > 2100 || !is_numeric($hours) || (float) $hours < 0) {
+    if (!$code || !is_numeric($normalDays) || (float) $normalDays < 0 || !is_numeric($absenceDays) || (float) $absenceDays < 0 || !is_numeric($absenceHours) || (float) $absenceHours < 0 || !is_numeric($paidDays) || (float) $paidDays < 0 || !is_numeric($paidHours) || (float) $paidHours < 0 || !is_numeric($lateCount) || (int) $lateCount < 0) {
       $errors[] = 'Ligne ' . ($i + 1) . ' : données invalides.';
       continue;
     }
 
-    $stmt = $pdo->prepare('SELECT id, hourly_rate, full_name FROM employees WHERE employee_code=:code LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, hourly_rate, full_name, position FROM employees WHERE employee_code=:code LIMIT 1');
     $stmt->execute(['code' => $code]);
     $emp = $stmt->fetch();
 
@@ -265,31 +279,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         $errors[] = 'Ligne ' . ($i + 1) . ' : nouveau matricule sans nom.';
         continue;
       }
-      $dept = trim((string) ($data['département'] ?? $data['department'] ?? $vals[2] ?? ''));
-      $position = trim((string) ($data['poste'] ?? $data['position'] ?? $vals[3] ?? ''));
+      $position = trim((string) ($data['poste'] ?? $data['position'] ?? 'Agent'));
+      $position = in_array($position, ['Responsable', 'Agent'], true) ? $position : 'Agent';
       $empRate = is_numeric($rate) ? (float) $rate : 0;
       if ($empRate <= 0) {
         $errors[] = 'Ligne ' . ($i + 1) . ' : nouveau salarié sans régime horaire valide.';
         continue;
       }
-      $pdo->prepare('INSERT INTO employees(employee_code, full_name, position, department, contract_type, hourly_rate, status, start_date) VALUES(:code, :name, :position, :dept, :contract, :rate, :status, :start)')->execute([
-        'code' => $code, 'name' => $name, 'position' => $position, 'dept' => $dept, 'contract' => 'CDI', 'rate' => $empRate, 'status' => 'Active', 'start' => date('Y-m-d')
+      $pseudo = trim((string) ($data['peseudo'] ?? $data['pseudo'] ?? ''));
+      $pdo->prepare('INSERT INTO employees(employee_code, full_name, pseudo, position, contract_type, hourly_rate, status, start_date) VALUES(:code, :name, :pseudo, :position, :contract, :rate, :status, :start)')->execute([
+        'code' => $code, 'name' => $name, 'pseudo' => $pseudo, 'position' => $position, 'contract' => 'CDI', 'rate' => $empRate, 'status' => 'Active', 'start' => date('Y-m-d')
       ]);
       $empId = (int) $pdo->lastInsertId();
+      $emp = ['hourly_rate' => $empRate, 'position' => $position];
     } else {
       $empId = (int) $emp['id'];
     }
 
-    $h = (float) $hours;
+    $position = $emp['position'] ?? ($position ?? 'Agent');
     $rate = (float) ($emp['hourly_rate'] ?? $rate);
     if (!is_numeric($rate) || (float) $rate <= 0) {
       $errors[] = 'Ligne ' . ($i + 1) . ' : régime horaire manquant.';
       continue;
     }
     $rate = (float) $rate;
-    $calc = round($h * $rate, 2);
-    $sql = 'INSERT INTO salary_records(employee_id, month, year, total_hours, hourly_rate_used, calculated_salary) VALUES(:eid, :m, :y, :h, :r, :s) ON DUPLICATE KEY UPDATE total_hours=VALUES(total_hours), hourly_rate_used=VALUES(hourly_rate_used), calculated_salary=VALUES(calculated_salary), updated_at=CURRENT_TIMESTAMP';
-    $pdo->prepare($sql)->execute(['eid' => $empId, 'm' => $monthVal, 'y' => $yearVal, 'h' => $h, 'r' => $rate, 's' => $calc]);
+    $calcBase = $position === 'Responsable' ? (float) $paidDays : (float) $paidHours;
+    $calc = round($calcBase * $rate, 2);
+    $sql = 'INSERT INTO salary_records(employee_id, month, year, total_hours, hourly_rate_used, calculated_salary, normal_worked_days, unjustified_absence_days, unjustified_absence_hours, paid_days, paid_hours, late_count) VALUES(:eid, :m, :y, :h, :r, :s, :normal, :absdays, :abshours, :paiddays, :paidhours, :late) ON DUPLICATE KEY UPDATE total_hours=VALUES(total_hours), hourly_rate_used=VALUES(hourly_rate_used), calculated_salary=VALUES(calculated_salary), normal_worked_days=VALUES(normal_worked_days), unjustified_absence_days=VALUES(unjustified_absence_days), unjustified_absence_hours=VALUES(unjustified_absence_hours), paid_days=VALUES(paid_days), paid_hours=VALUES(paid_hours), late_count=VALUES(late_count), updated_at=CURRENT_TIMESTAMP';
+    $pdo->prepare($sql)->execute(['eid' => $empId, 'm' => $monthVal, 'y' => $yearVal, 'h' => $paidHours, 'r' => $rate, 's' => $calc, 'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours, 'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => (int) $lateCount]);
     $ok++;
     $mTarget = $monthVal;
     $yTarget = $yearVal;
@@ -305,19 +322,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 }
 
 $periodFilter = ($_GET['filter_period'] ?? '') === '1';
-$departmentFilter = trim((string) ($_GET['department'] ?? ''));
 $q = trim((string) ($_GET['q'] ?? ''));
 
-$sql = 'SELECT sr.*, e.full_name, e.employee_code, e.department FROM salary_records sr JOIN employees e ON e.id = sr.employee_id WHERE 1=1';
+$sql = 'SELECT sr.*, e.full_name, e.employee_code, e.pseudo, e.position FROM salary_records sr JOIN employees e ON e.id = sr.employee_id WHERE 1=1';
 $args = [];
 if ($periodFilter) {
   $sql .= ' AND sr.month=:m AND sr.year=:y';
   $args['m'] = $month;
   $args['y'] = $year;
-}
-if ($departmentFilter !== '') {
-  $sql .= ' AND e.department=:department';
-  $args['department'] = $departmentFilter;
 }
 if ($q !== '') {
   $sql .= ' AND (e.full_name LIKE :q OR e.employee_code LIKE :q)';
@@ -336,8 +348,7 @@ foreach ($rows as $r) {
   $totalHours += (float) $r['total_hours'];
 }
 
-$departments = $pdo->query('SELECT DISTINCT department FROM employees WHERE department<>"" ORDER BY department')->fetchAll(PDO::FETCH_COLUMN);
-$allEmployees = $pdo->query('SELECT id, employee_code, full_name, hourly_rate FROM employees WHERE status="Active" ORDER BY full_name')->fetchAll();
+$allEmployees = $pdo->query('SELECT id, employee_code, full_name, position, hourly_rate FROM employees WHERE status="Active" ORDER BY full_name')->fetchAll();
 
 $months = [
   1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril', 5 => 'Mai', 6 => 'Juin',
@@ -368,7 +379,7 @@ require __DIR__ . '/includes/header.php';
       <span class="salary-dropzone-action">Parcourir</span>
     </label>
     <div class="salary-import-footer">
-      <p><b>Colonnes attendues :</b> Matricule, Nom complet, Département, Poste, Mois, Année, Total des heures, Régime horaire.</p>
+      <p><b>Entêtes acceptées :</b> Matricule, Nom, prénom, Peseudo, Jour Normalement Travaillé, ABS Non Justifiée en jours, ABS Non Justifiée en heures, Jour Payé, Heure Payée, Nb Retards.</p>
       <button type="submit" class="btn btn-primary btn-sm">Importer le fichier</button>
     </div>
   </form>
@@ -401,15 +412,6 @@ require __DIR__ . '/includes/header.php';
           <label class="form-label">Année</label>
           <input type="number" name="year" class="form-control" value="<?= e($displayYear) ?>">
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Département</label>
-          <select name="department" class="form-select">
-            <option value="">Tous</option>
-            <?php foreach ($departments as $d): ?>
-              <option value="<?= e($d) ?>" <?= $departmentFilter === $d ? 'selected' : '' ?>><?= e($d) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
         <div class="col-md-1 d-flex align-items-end gap-1">
           <input type="hidden" name="filter_period" value="1">
           <button type="submit" class="btn btn-light w-100">Filtrer</button>
@@ -431,7 +433,7 @@ require __DIR__ . '/includes/header.php';
       <label>Employé<select class="form-control" name="employee_id" id="manualEmpSelect" required>
         <option value="">-- Sélectionner un employé --</option>
         <?php foreach ($allEmployees as $emp): ?>
-          <option value="<?= (int) $emp['id'] ?>" data-rate="<?= (float) $emp['hourly_rate'] ?>"><?= e($emp['employee_code']) ?> — <?= e($emp['full_name']) ?> (<?= format_montant_tnd((float) $emp['hourly_rate']) ?>/h)</option>
+          <option value="<?= (int) $emp['id'] ?>" data-rate="<?= (float) $emp['hourly_rate'] ?>" data-position="<?= e($emp['position'] ?? 'Agent') ?>"><?= e($emp['employee_code']) ?> — <?= e($emp['full_name']) ?> (<?= e($emp['position'] ?? 'Agent') ?>)</option>
         <?php endforeach; ?>
       </select></label>
       <label>Mois<select class="form-control" name="month" required>
@@ -440,9 +442,14 @@ require __DIR__ . '/includes/header.php';
         <?php endfor; ?>
       </select></label>
       <label>Année<input class="form-control" type="number" name="year" value="<?= e($displayYear) ?>" min="2000" max="2100" required></label>
-      <label>Total des heures travaillées<input class="form-control" type="number" step="0.01" min="0" name="total_hours" id="manualHours" required placeholder="ex : 151.67"></label>
-          <label>Régime horaire (TND / h)<input class="form-control form-readonly" type="text" id="manualRate" readonly value="—"></label>
-          <label>Salaire calculé (Aperçu)<input class="form-control form-readonly" type="text" id="manualCalcDisplay" readonly value="0,00 TND"></label>
+        <label>Jour Normalement Travaillé<input class="form-control" type="number" step="0.01" min="0" name="normal_worked_days" required></label>
+        <label>ABS Non Justifiée en jours<input class="form-control" type="number" step="0.01" min="0" name="unjustified_absence_days" required value="0"></label>
+        <label>ABS Non Justifiée en heures<input class="form-control" type="number" step="0.01" min="0" name="unjustified_absence_hours" required value="0"></label>
+        <label>Jour Payé<input class="form-control" type="number" step="0.01" min="0" name="paid_days" required value="0"></label>
+        <label>Heure Payée<input class="form-control" type="number" step="0.01" min="0" name="paid_hours" required value="0"></label>
+        <label>Nb Retards<input class="form-control" type="number" step="1" min="0" name="late_count" required value="0"></label>
+        <label>Régime horaire (TND / h)<input class="form-control form-readonly" type="text" id="manualRate" readonly value="—" aria-readonly="true"></label>
+        <label>Salaire calculé (Aperçu)<input class="form-control form-readonly" type="text" id="manualCalcDisplay" readonly value="0,00 TND"></label>
     </div>
     <div class="actions-row">
       <button type="button" class="btn btn-secondary" data-close-salary-card>Annuler</button>
@@ -460,35 +467,39 @@ require __DIR__ . '/includes/header.php';
     <table>
       <thead>
         <tr>
-          <th>Salarié</th>
           <th>Matricule</th>
-          <th>Département</th>
-          <th>Mois</th>
-          <th>Année</th>
-          <th>Heures</th>
-          <th>Régime horaire</th>
-          <th>Salaire calculé</th>
+          <th>Nom & prénom</th>
+          <th>Peseudo</th>
+          <th>Jour Normalement Travaillé</th>
+          <th>ABS Non Justifiée en jours</th>
+          <th>ABS Non Justifiée en heures</th>
+          <th>Jour Payé</th>
+          <th>Heure Payée</th>
+          <th>Nb Retards</th>
+          <th>Salaire</th>
           <th>Action</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
         <tr class="data-row">
-          <td><b><?= e($r['full_name']) ?></b></td>
           <td><?= e($r['employee_code']) ?></td>
-          <td><?= e($r['department'] ?: '—') ?></td>
-          <td><?= e($months[(int) $r['month']] ?? $r['month']) ?></td>
-          <td><?= e($r['year']) ?></td>
-          <td><?= format_nombre((float) $r['total_hours']) ?></td>
-          <td><?= format_montant_tnd((float) $r['hourly_rate_used']) ?></td>
+          <td><b><?= e($r['full_name']) ?></b></td>
+          <td><?= e($r['pseudo'] ?: '—') ?></td>
+          <td><?= format_nombre((float) $r['normal_worked_days']) ?></td>
+          <td><?= format_nombre((float) $r['unjustified_absence_days']) ?></td>
+          <td><?= format_nombre((float) $r['unjustified_absence_hours']) ?></td>
+          <td><?= format_nombre((float) $r['paid_days']) ?></td>
+          <td><?= format_nombre((float) $r['paid_hours']) ?></td>
+          <td><?= (int) $r['late_count'] ?></td>
           <td><b><?= format_montant_tnd((float) $r['calculated_salary']) ?></b></td>
           <td>
             <button class="btn btn-sm btn-secondary" type="button" data-open-inline-edit>Modifier</button>
           </td>
         </tr>
         <tr class="edit-row" style="display:none">
-          <td colspan="9">
-            <form method="post" action="actions/rh_salary_action.php" class="inline-edit-form">
+          <td colspan="11">
+            <form method="post" action="actions/rh_salary_action.php" class="inline-edit-form" data-position="<?= e($r['position'] ?? 'Agent') ?>">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
@@ -500,8 +511,13 @@ require __DIR__ . '/includes/header.php';
                   <span class="muted" id="editCode"><?= e($r['employee_code']) ?></span>
                 </div>
                 <div class="form-grid form-grid--half">
-                  <label>Heures travaillées<input class="form-control" name="total_hours" type="number" step="0.01" min="0" value="<?= e($r['total_hours']) ?>" required></label>
-                  <label>Régime horaire (TND / h)<input class="form-control" name="hourly_rate_used" type="number" step="0.01" min="0" value="<?= e($r['hourly_rate_used']) ?>" required></label>
+                  <label>Jour Normalement Travaillé<input class="form-control" name="normal_worked_days" type="number" step="0.01" min="0" value="<?= e($r['normal_worked_days']) ?>" required></label>
+                  <label>ABS Non Justifiée en jours<input class="form-control" name="unjustified_absence_days" type="number" step="0.01" min="0" value="<?= e($r['unjustified_absence_days']) ?>" required></label>
+                  <label>ABS Non Justifiée en heures<input class="form-control" name="unjustified_absence_hours" type="number" step="0.01" min="0" value="<?= e($r['unjustified_absence_hours']) ?>" required></label>
+                  <label>Jour Payé<input class="form-control" name="paid_days" type="number" step="0.01" min="0" value="<?= e($r['paid_days']) ?>" required></label>
+                  <label>Heure Payée<input class="form-control" name="paid_hours" type="number" step="0.01" min="0" value="<?= e($r['paid_hours']) ?>" required></label>
+                  <label>Nb Retards<input class="form-control" name="late_count" type="number" step="1" min="0" value="<?= e($r['late_count']) ?>" required></label>
+                  <label>Régime horaire<input class="form-control form-readonly" name="hourly_rate_used" type="number" step="0.01" min="0" value="<?= e($r['hourly_rate_used']) ?>" readonly aria-readonly="true"></label>
                 </div>
                 <div class="edit-calc-preview">Salaire calculé : <strong class="inline-preview"><?= format_montant_tnd((float) $r['calculated_salary']) ?></strong></div>
                 <div class="edit-inline-actions">
@@ -515,7 +531,7 @@ require __DIR__ . '/includes/header.php';
         <?php endforeach; ?>
         <?php if (!$rows): ?>
         <tr>
-          <td colspan="9">
+          <td colspan="11">
             <div class="empty-state">
               <div class="empty-icon">&#128202;</div>
               Aucun salaire ne correspond à ces critères.
@@ -526,12 +542,6 @@ require __DIR__ . '/includes/header.php';
       </tbody>
     </table>
   </div>
-  <?php if ($rows): ?>
-  <div class="cards-summary">
-    <span>Total heures : <b><?= format_nombre($totalHours) ?> h</b></span>
-    <span>Total salaires : <b><?= format_montant_tnd($totalSalaries) ?></b></span>
-  </div>
-  <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

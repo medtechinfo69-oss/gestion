@@ -27,14 +27,19 @@ if ($action === 'save') {
   $id = (int) ($_POST['id'] ?? 0);
   $code = trim((string) ($_POST['employee_code'] ?? ''));
   $name = trim((string) ($_POST['full_name'] ?? ''));
+  $pseudo = trim((string) ($_POST['pseudo'] ?? ''));
   $position = trim((string) ($_POST['position'] ?? ''));
   $department = trim((string) ($_POST['department'] ?? ''));
-  $contract = trim((string) ($_POST['contract_type'] ?? ''));
+  if ($id > 0 && !array_key_exists('department', $_POST)) {
+    $existingDepartment = $pdo->prepare('SELECT department FROM employees WHERE id=:id');
+    $existingDepartment->execute(['id' => $id]);
+    $department = (string) ($existingDepartment->fetchColumn() ?: '');
+  }
   $rateInput = trim((string) ($_POST['hourly_rate'] ?? ''));
   $status = $_POST['status'] ?? 'Active';
   $start = trim((string) ($_POST['start_date'] ?? ''));
 
-  if ($code === '' || $name === '' || !is_numeric($rateInput) || (float) $rateInput < 0 || !in_array($status, ['Active', 'Inactive'], true)) {
+  if ($code === '' || $name === '' || !in_array($position, ['Responsable', 'Agent'], true) || !is_numeric($rateInput) || (float) $rateInput < 0 || !in_array($status, ['Active', 'Inactive'], true)) {
     employee_redirect('Veuillez vérifier les champs obligatoires.');
   }
 
@@ -43,26 +48,26 @@ if ($action === 'save') {
 
   try {
     if ($id > 0) {
-      $stmt = $pdo->prepare('UPDATE employees SET employee_code=:code, full_name=:name, position=:position, department=:department, contract_type=:contract, hourly_rate=:rate, status=:status, start_date=:start WHERE id=:id');
+      $stmt = $pdo->prepare('UPDATE employees SET employee_code=:code, full_name=:name, pseudo=:pseudo, position=:position, department=:department, hourly_rate=:rate, status=:status, start_date=:start WHERE id=:id');
       $stmt->execute([
         'code' => $code,
         'name' => $name,
+        'pseudo' => $pseudo,
         'position' => $position,
         'department' => $department,
-        'contract' => $contract,
         'rate' => $rate,
         'status' => $status,
         'start' => $startDate,
         'id' => $id,
       ]);
     } else {
-      $stmt = $pdo->prepare('INSERT INTO employees(employee_code, full_name, position, department, contract_type, hourly_rate, status, start_date) VALUES(:code, :name, :position, :department, :contract, :rate, :status, :start)');
+      $stmt = $pdo->prepare('INSERT INTO employees(employee_code, full_name, pseudo, position, department, hourly_rate, status, start_date) VALUES(:code, :name, :pseudo, :position, :department, :rate, :status, :start)');
       $stmt->execute([
         'code' => $code,
         'name' => $name,
+        'pseudo' => $pseudo,
         'position' => $position,
         'department' => $department,
-        'contract' => $contract,
         'rate' => $rate,
         'status' => $status,
         'start' => $startDate,
@@ -76,18 +81,26 @@ if ($action === 'save') {
 }
 
 if ($action === 'delete') {
+  if (!is_admin()) {
+    employee_redirect('Seul un administrateur peut supprimer un employé.');
+  }
   $id = (int) ($_POST['id'] ?? 0);
   if ($id <= 0) {
     employee_redirect('Employé invalide.');
   }
-  $check = $pdo->prepare('SELECT COUNT(*) FROM salary_records WHERE employee_id=:id');
-  $check->execute(['id' => $id]);
-  if ((int) $check->fetchColumn() > 0) {
-    employee_redirect('Impossible de supprimer un employé ayant un historique de salaire.');
+  try {
+    $pdo->beginTransaction();
+    $salaryDelete = $pdo->prepare('DELETE FROM salary_records WHERE employee_id=:id');
+    $salaryDelete->execute(['id' => $id]);
+    $stmt = $pdo->prepare('DELETE FROM employees WHERE id=:id');
+    $stmt->execute(['id' => $id]);
+    $pdo->commit();
+    employee_redirect('Employé et historique de salaire supprimés.', 'success');
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) { $pdo->rollBack(); }
+    error_log('rh_employee_delete: ' . $e->getMessage());
+    employee_redirect('Impossible de supprimer cet employé.');
   }
-  $stmt = $pdo->prepare('DELETE FROM employees WHERE id=:id');
-  $stmt->execute(['id' => $id]);
-  employee_redirect('Employé supprimé.', 'success');
 }
 
 employee_redirect('Action inconnue.');

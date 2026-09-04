@@ -33,7 +33,7 @@ require __DIR__ . '/includes/header.php';
         <div class="settings-card-heading"><span class="settings-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg></span><div><span class="mini-title">Configuration générale</span><h3>Réglages de l'application</h3></div></div>
         <form action="<?= e(APP_URL) ?>/actions/profile_update.php" method="post" novalidate>
           <?= csrf_field() ?><input type="hidden" name="save_app_settings" value="1">
-          <div class="settings-form-row"><div class="form-group"><label for="max_upload_mb">Taille maximale d'import (Mo)</label><input type="number" id="max_upload_mb" name="max_upload_mb" value="<?= $maxUploadMb ?>" min="1" max="100" required><div class="help-text">Limite appliquée aux imports de dossiers et de salaires.</div></div><button type="submit" class="btn btn-primary">Enregistrer les paramètres</button></div>
+          <div class="settings-form-row"><div class="form-group"><label for="max_upload_mb">Taille maximale des fichiers (Mo)</label><input type="number" id="max_upload_mb" name="max_upload_mb" value="<?= $maxUploadMb ?>" min="1" max="100" required><div class="help-text">Limite appliquée aux imports et aux pièces jointes des dossiers.</div></div><button type="submit" class="btn btn-primary">Enregistrer les paramètres</button></div>
         </form>
       </section>
     <?php endif; ?>

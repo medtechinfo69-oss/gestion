@@ -155,10 +155,8 @@ require __DIR__ . '/includes/header.php';
         <tr>
           <th>Matricule</th>
           <th>Nom complet</th>
-          <th>Département</th>
           <th>Poste</th>
           <th>Statut</th>
-          <th>Date d'entrée</th>
         </tr>
       </thead>
       <tbody>
@@ -166,10 +164,8 @@ require __DIR__ . '/includes/header.php';
         <tr>
           <td><b><?= e($e['employee_code']) ?></b></td>
           <td><?= e($e['full_name']) ?></td>
-          <td><?= e($e['department'] ?: '—') ?></td>
           <td><?= e($e['position'] ?: '—') ?></td>
           <td><span class="badge <?= $e['status'] === 'Active' ? 'badge-success' : 'badge-muted' ?>"><?= $e['status'] === 'Active' ? 'Actif' : 'Inactif' ?></span></td>
-          <td><?= $e['start_date'] ? format_date($e['start_date']) : '—' ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
