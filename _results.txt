@@ -1,0 +1,97 @@
+﻿MEASURE2 page=dashboard.php docScrollH=1241 innerH=749
+CONTENT top=87 h=1099 bottomPage=1186
+  enfant <div class="stat-grid"> top=113 h=142 bottom=255
+  enfant <div class="card mb-16"> top=279 h=333 bottom=611
+  enfant <div class="card"> top=627 h=499 bottom=1126
+DERNIER element bas=1126 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=1 docScrollH=1108 innerH=749
+CONTENT top=87 h=967 bottomPage=1054
+  enfant <div class="card"> top=113 h=881 bottom=994
+DERNIER element bas=994 | ESPACE APRES=114
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=profile.php docScrollH=1396 innerH=749
+CONTENT top=64 h=1277 bottomPage=1341
+  enfant <main class="settings-page"> top=90 h=1191 bottom=1281
+DERNIER element bas=1281 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=rh_dashboard.php docScrollH=1131 innerH=749
+CONTENT top=87 h=990 bottomPage=1076
+  enfant <div class="stats-grid"> top=113 h=96 bottom=209
+  enfant <div class="rh-period-toolbar"> top=233 h=33 bottom=266
+  enfant <div class="charts-container"> top=278 h=409 bottom=687
+  enfant <div class="card"> top=711 h=306 bottom=1016
+DERNIER element bas=1016 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=rh_employees.php docScrollH=764 innerH=749
+CONTENT top=87 h=623 bottomPage=709
+  enfant <div class="content-card"> top=113 h=168 bottom=281
+  enfant <div class="content-card"> top=299 h=333 bottom=631
+DERNIER element bas=631 | ESPACE APRES=133
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=rh_salaries.php docScrollH=1064 innerH=749
+CONTENT top=87 h=923 bottomPage=1009
+  enfant <section class="salary-import-panel"> top=113 h=248 bottom=361
+  enfant <div class="content-card"> top=379 h=208 bottom=586
+  enfant <div class="content-card"> top=604 h=327 bottom=931
+DERNIER element bas=931 | ESPACE APRES=133
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=rh_history.php docScrollH=749 innerH=749
+CONTENT top=87 h=608 bottomPage=694
+  enfant <div class="content-card"> top=113 h=165 bottom=277
+DERNIER element bas=277 | ESPACE APRES=472
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=rh_reports.php docScrollH=851 innerH=749
+CONTENT top=87 h=710 bottomPage=797
+  enfant <div class="content-card"> top=113 h=165 bottom=277
+  enfant <div class="stat-grid"> top=295 h=142 bottom=437
+  enfant <div class="content-card"> top=461 h=258 bottom=719
+DERNIER element bas=719 | ESPACE APRES=132
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=vendeurs.php docScrollH=993 innerH=749
+CONTENT top=87 h=852 bottomPage=938
+  enfant <div class="card mb-16"> top=113 h=313 bottom=425
+  enfant <div class="card"> top=441 h=437 bottom=878
+DERNIER element bas=878 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=superviseurs.php docScrollH=749 innerH=749
+CONTENT top=87 h=608 bottomPage=694
+  enfant <div class="card mb-16"> top=113 h=223 bottom=335
+DERNIER element bas=335 | ESPACE APRES=414
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=dossier_form.php docScrollH=1468 innerH=749
+CONTENT top=87 h=1326 bottomPage=1413
+  enfant <div class="card dossier-form-card"> top=113 h=1218 bottom=1331
+DERNIER element bas=1331 | ESPACE APRES=137
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=corbeille.php docScrollH=749 innerH=749
+CONTENT top=87 h=608 bottomPage=694
+  enfant <div class="card"> top=113 h=257 bottom=370
+DERNIER element bas=370 | ESPACE APRES=379
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=origines.php docScrollH=1189 innerH=749
+CONTENT top=87 h=1048 bottomPage=1134
+  enfant <div class="card mb-16"> top=113 h=280 bottom=393
+  enfant <div class="card"> top=409 h=665 bottom=1074
+DERNIER element bas=1074 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------
+MEASURE2 page=annulation.php docScrollH=1000 innerH=749
+CONTENT top=87 h=858 bottomPage=945
+  enfant <div class="stat-grid"> top=113 h=142 bottom=255
+  enfant <div class="card"> top=275 h=610 bottom=885
+DERNIER element bas=885 | ESPACE APRES=115
+NAV clientH=538 scrollH=698 (defile si scrollH>clientH)
+--------------------------------------------------

@@ -290,8 +290,10 @@ p { margin: 0 0 1em; }
 
 .nav-group {
   flex: 1;
+  min-height: 0; /* indispensable : autorise le menu a retrecir et a defiler quand il depasse l'ecran */
   padding: 10px 10px 14px;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
 }
@@ -433,6 +435,18 @@ p { margin: 0 0 1em; }
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+@media (min-width: 961px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+  }
+  .main {
+    margin-left: 250px;
+    min-height: 100vh;
+  }
 }
 
 .topbar {
@@ -1633,10 +1647,13 @@ body.login {
   .sidebar {
     position: fixed;
     left: 0; top: 0;
+    height: 100vh;              /* secours pour les vieux navigateurs */
+    height: 100dvh;             /* hauteur reelle visible sur mobile (barre d'adresse) */
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow-lg);
   }
+  .main { margin-left: 0; }
   .sidebar.open { transform: translateX(0); }
   .menu-toggle { display: inline-flex; }
   .content { padding: 18px; }
@@ -1979,4 +1996,114 @@ body.login {
 .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 1200px) {
   .charts-container { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   RESPONSIVE — Correctifs complémentaires (v2)
+   Complète la section « Responsive » existante : page de connexion,
+   voile du menu mobile, zoom iOS, cibles tactiles et sécurité anti-débordement.
+   ===================================================================== */
+
+/* --- Sécurité anti-débordement horizontal --- */
+.content img, .content svg, .card img { max-width: 100%; height: auto; }
+
+/* --- Tablette et mobile (≤ 768px) --- */
+@media (max-width: 768px) {
+  /* Page de connexion : les deux panneaux s'empilent au lieu de s'écraser */
+  .login-shell {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 16px;
+    padding: 16px 12px;
+  }
+  .login-brand,
+  .login-box {
+    max-width: 440px;
+    width: 100%;
+  }
+  .login-brand {
+    min-height: auto;
+    padding: 22px 20px;
+  }
+  .login-brand p { margin-bottom: 0; }
+
+  /* Bouton hamburger : cible tactile confortable */
+  .menu-toggle {
+    min-width: 40px;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  /* Pagination : ne déborde plus sur petits écrans */
+  .pagination { flex-wrap: wrap; }
+
+  /* Évite le zoom automatique iOS au focus (largeur < 16px) */
+  input[type=text], input[type=email], input[type=tel], input[type=number],
+  input[type=date], input[type=password], input[type=search],
+  select, textarea {
+    font-size: 16px;
+  }
+}
+
+/* --- Très petits écrans (≤ 480px) --- */
+@media (max-width: 480px) {
+  /* Édition inline RH : champs empilés au lieu de côte à côte */
+  .form-grid--half { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   RESPONSIVE v3 — La page ne défile JAMAIS horizontalement.
+   Les tableaux conservent leur défilement horizontal DANS leur
+   conteneur (.table-wrap) : on fait glisser le tableau pour voir
+   toutes les colonnes, sans casser le texte ni la mise en page.
+   ===================================================================== */
+
+/* Garantie : la page elle-même ne défile jamais horizontalement.
+   (clip ne crée pas de conteneur de scroll : position:sticky reste OK) */
+html { overflow-x: clip; }
+
+/* Confort : barre de défilement discrète et glissement fluide au doigt */
+.table-wrap {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar-track { background: var(--color-surface-alt); }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 4px; }
+
+/* Filtres dans les en-têtes de cartes (ex : dashboard "Performance") :
+   passent à la ligne au lieu de déborder */
+@media (max-width: 768px) {
+  .card-header form {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .card-header form select,
+  .card-header form input {
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+  .card-header form .btn { flex: 0 0 auto; }
+}
+
+/* --- Voile sombre + blocage du scroll quand le menu mobile est ouvert --- */
+/* (progressif : ignoré par les navigateurs sans :has(), le menu reste
+   fonctionnel grâce à la fermeture au clic extérieur dans app.js) */
+@supports selector(body:has(.sidebar.open)) {
+  @media (max-width: 960px) {
+    body:has(.sidebar.open)::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 29, 45, 0.55);
+      z-index: 19; /* sous la sidebar (20), au-dessus du contenu */
+    }
+    body:has(.sidebar.open) {
+      overflow: hidden;
+    }
+  }
 }
