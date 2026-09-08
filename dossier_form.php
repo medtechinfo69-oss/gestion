@@ -27,8 +27,9 @@ $isRestricted = $isEdit && ($dossier['date_dossier_complet'] !== null
 $courrierValues = $isEdit ? courrier_values($dossier['courrier'] ?? '') : [];
 $courrierComplete = count($courrierValues) === count(options_courrier());
 $contratRouge = $isEdit && $dossier['etat_contrat'] !== 'Actif';
+$dossierCompletLocked = $isEdit && (($dossier['date_dossier_complet'] ?? null) !== null || ($dossier['etat_dossier'] ?? '') === 'Dossier complet');
 $courrierLocked = $isEdit
-  && ($dossier['date_courrier_supervision'] ?? null) !== null
+  && ($dossierCompletLocked || ($dossier['date_courrier_supervision'] ?? null) !== null)
   && $courrierComplete;
 $etatContratLocked = $isEdit && (($dossier['date_etat_contrat_supervision'] ?? null) !== null || ($isSuperviseur && ($dossier['etat_contrat'] ?? 'Actif') !== 'Actif'));
 
@@ -73,7 +74,7 @@ require __DIR__ . '/includes/header.php';
           </div>
           <div id="courrier-message" class="alert alert-error" style="display:none;margin-top:10px;">Merci de contacter l'administrateur.</div>
           <div class="help-text">Les quatre cases cochées donnent automatiquement « Dossier complet ».</div>
-          <button type="submit" name="save_section" value="courrier" class="btn btn-primary btn-sm section-save" <?= $courrierLocked ? 'disabled' : '' ?>>Enregistrer Courrier</button>
+          <button type="submit" name="save_section" value="courrier" class="btn btn-primary btn-sm section-save" <?= $courrierLocked || $dossierCompletLocked ? 'disabled' : '' ?>>Enregistrer Courrier</button>
         </div>
         <div class="form-group span-full">
           <label for="etat_contrat">État du contrat</label>

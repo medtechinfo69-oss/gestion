@@ -2120,11 +2120,17 @@ html { overflow-x: clip; }
 /* Confort : barre de défilement discrète et glissement fluide au doigt */
 .table-wrap {
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-line-strong) var(--color-surface-alt);
 }
-.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar { width: 14px; height: 14px; }
 .table-wrap::-webkit-scrollbar-track { background: var(--color-surface-alt); }
-.table-wrap::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 4px; }
+.table-wrap::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border: 3px solid var(--color-surface-alt);
+  border-radius: 8px;
+}
+.table-wrap::-webkit-scrollbar-thumb:hover { background: var(--color-cabinet); }
 
 /* Filtres dans les en-têtes de cartes (ex : dashboard "Performance") :
    passent à la ligne au lieu de déborder */
@@ -2142,20 +2148,49 @@ html { overflow-x: clip; }
   .card-header form .btn { flex: 0 0 auto; }
 }
 
-/* --- Voile sombre + blocage du scroll quand le menu mobile est ouvert --- */
-/* (progressif : ignoré par les navigateurs sans :has(), le menu reste
-   fonctionnel grâce à la fermeture au clic extérieur dans app.js) */
-@supports selector(body:has(.sidebar.open)) {
-  @media (max-width: 960px) {
-    body:has(.sidebar.open)::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: rgba(11, 29, 45, 0.55);
-      z-index: 19; /* sous la sidebar (20), au-dessus du contenu */
-    }
-    body:has(.sidebar.open) {
-      overflow: hidden;
-    }
-  }
+/* --- Bulk actions bar --- */
+.bulk-actions-bar {
+  transition: all 0.2s ease;
 }
+.bulk-actions-bar input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #0d6efd;
+}
+.bulk-actions-bar #selectionCount {
+  transition: all 0.2s ease;
+}
+.bulk-actions-bar .btn {
+  transition: all 0.2s ease;
+}
+.bulk-actions-bar .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bulk-actions-bar .btn-danger:not(:disabled):hover {
+  background: #bb2d3b;
+  border-color: #b02a37;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.2);
+}
+.bulk-actions-bar .btn-outline:not(:disabled):hover {
+  background: #dc3545;
+  color: white;
+  border-color: #dc3545;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.2);
+}
+
+/* --- Table checkboxes --- */
+.salary-checkbox {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #0d6efd;
+}
+.data-row:hover .salary-checkbox {
+  transform: scale(1.1);
+}
+
+/* --- End of bulk actions --- */

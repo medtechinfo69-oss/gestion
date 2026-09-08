@@ -8,6 +8,262 @@ $activePage = 'rh_employees';
 $pdo = $db;
 $isAdmin = is_admin();
 
+function employee_import_header(string $value): string
+{
+  $value = trim(mb_strtolower($value));
+  $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+  $value = $ascii !== false ? $ascii : $value;
+  return trim(preg_replace('/[^a-z0-9]+/', ' ', $value) ?? '');
+}
+
+function employee_import_value(array $data, array $aliases, $default = '')
+{
+  foreach ($aliases as $alias) {
+    $wanted = employee_import_header($alias);
+    foreach ($data as $key => $value) {
+      $actual = employee_import_header((string) $key);
+      if (($actual === $wanted || strpos($actual, $wanted . ' ') === 0) && trim((string) $value) !== '') {
+        return $value;
+      }
+    }
+  }
+  return $default;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_employees') {
+  csrf_require();
+  $errors = [];
+  $created = 0;
+  $updated = 0;
+  $skipped = 0;
+
+  $f = $_FILES['import_file'] ?? null;
+  if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > max_import_size_bytes($pdo)) {
+    set_flash('error', 'Fichier invalide. Vérifiez la taille et le format.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+  if ($ext !== 'xlsx') {
+    set_flash('error', 'Format invalide. Sélectionnez un fichier .xlsx.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  if (!class_exists('ZipArchive')) {
+    set_flash('error', 'L\'extension PHP ZipArchive est requise.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $zip = new ZipArchive();
+  if ($zip->open($f['tmp_name']) !== true) {
+    set_flash('error', 'Le fichier Excel est invalide ou corrompu.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $shared = [];
+  $sharedXml = $zip->getFromName('xl/sharedStrings.xml');
+  if ($sharedXml !== false) {
+    $x = simplexml_load_string($sharedXml);
+    if ($x) {
+      foreach ($x->si as $si) {
+        $text = '';
+        $textNodes = $si->xpath('.//*[local-name()="t"]') ?: [];
+        foreach ($textNodes as $textNode) {
+          $text .= (string) $textNode;
+        }
+        $shared[] = $text !== '' ? $text : (string) $si;
+      }
+    }
+  }
+
+  $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+  if ($sheet === false) {
+    $zip->close();
+    set_flash('error', 'La première feuille Excel est introuvable.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $dom = new DOMDocument();
+  if (!$dom->loadXML($sheet)) {
+    $zip->close();
+    set_flash('error', 'Impossible de lire le contenu du fichier Excel.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $rows = $dom->getElementsByTagName('row');
+  $xpath = new DOMXPath($dom);
+  $xpath->registerNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+  $allRows = [];
+
+  foreach ($rows as $row) {
+    $vals = [];
+    $cells = $xpath->query('.//x:c', $row);
+    foreach ($cells as $c) {
+      if (!$c instanceof DOMElement) {
+        continue;
+      }
+      $r = $c->getAttribute('r');
+      $columnLetters = '';
+      if (preg_match('/^([A-Z]+)/', $r, $m)) { $columnLetters = $m[1]; }
+      $columnIndex = 0;
+      foreach (str_split($columnLetters) as $letter) {
+        $columnIndex = ($columnIndex * 26) + ord($letter) - 64;
+      }
+      $columnIndex--;
+      $v = '';
+      $vNode = $xpath->query('.//x:v', $c)->item(0);
+      if ($vNode) {
+        $v = $vNode->nodeValue;
+        if ($c->getAttribute('t') === 's' && isset($shared[(int) $v])) {
+          $v = $shared[(int) $v];
+        }
+      }
+      if ($columnIndex >= 0) { $vals[$columnIndex] = $v; }
+    }
+    if ($vals) {
+      ksort($vals);
+      $vals = array_replace(array_fill(0, max(array_keys($vals)) + 1, ''), $vals);
+    }
+    if (!empty($vals)) { $allRows[] = $vals; }
+  }
+
+  if (empty($allRows)) {
+    $zip->close();
+    set_flash('error', 'Fichier vide.');
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $headerKeywords = ['matricule', 'nom', 'prenom', 'nom et prenom', 'nom complet', 'pseudo', 'peseudo', 'poste', 'fonction', 'employee code', 'full name', 'position'];
+  $headers = [];
+  $headerRowIndex = -1;
+
+  foreach ($allRows as $index => $vals) {
+    $normalized = array_map(function ($h) { return employee_import_header((string) $h); }, $vals);
+    $matchCount = 0;
+    foreach ($normalized as $h) {
+      foreach ($headerKeywords as $kw) {
+        if (strpos($h, employee_import_header($kw)) !== false) { $matchCount++; break; }
+      }
+    }
+    if ($matchCount >= 2 && empty($headers)) {
+      $headers = $normalized;
+      $headerRowIndex = $index;
+      break;
+    }
+  }
+
+  if (empty($headers)) {
+    $headers = array_map(function ($h) { return employee_import_header((string) $h); }, $allRows[0]);
+    $headerRowIndex = 0;
+  }
+
+  $pdo->beginTransaction();
+  try {
+    for ($i = $headerRowIndex + 1; $i < count($allRows); $i++) {
+      $vals = $allRows[$i];
+      $vals = array_pad($vals, count($headers), '');
+      $data = [];
+      foreach ($headers as $idx => $h) { $data[$h] = $vals[$idx] ?? ''; }
+
+      $code = trim((string) employee_import_value($data, ['matricule', 'employee code', 'employee id', 'code'], $vals[0] ?? ''));
+      if (preg_match('/^(\d+)\.0+$/', $code, $match)) {
+        $code = $match[1];
+      }
+
+      $nom = trim((string) employee_import_value($data, ['nom', 'nom et prenom', 'nom & prenom', 'nom & pr&eacute;nom', 'nom complet', 'full name'], ''));
+      $prenom = trim((string) employee_import_value($data, ['prenom', 'pr&eacute;nom', 'pr&eacute;nome'], ''));
+
+      if ($nom !== '' && $prenom !== '') {
+        $name = $nom . ' ' . $prenom;
+      } elseif ($nom !== '') {
+        $fullName = trim((string) employee_import_value($data, ['nom et prenom', 'nom & prenom', 'nom & pr&eacute;nom', 'nom complet', 'full name'], ''));
+        $name = $fullName !== '' ? $fullName : $nom;
+      } else {
+        $name = trim((string) employee_import_value($data, ['nom et prenom', 'nom & prenom', 'nom & pr&eacute;nom', 'nom complet', 'full name'], ''));
+      }
+
+      $position = trim((string) employee_import_value($data, ['poste', 'position', 'fonction', 'role'], 'Agent'));
+      $position = in_array(strtolower($position), ['responsable', 'responsable'], true) ? 'Responsable' : 'Agent';
+
+      $pseudo = trim((string) employee_import_value($data, ['pseudo', 'peseudo'], ''));
+      $rate = employee_import_value($data, ['r&eacute;gime horaire', 'r&eacute;gime', 'taux horaire', 'hourly rate', 'regime'], 0);
+      $rate = is_numeric($rate) ? round((float) $rate, 2) : 5.000;
+
+      if (!$code) {
+        $errors[] = 'Ligne ' . ($i + 1) . ' : matricule absent.';
+        continue;
+      }
+
+      if (!$name) {
+        $errors[] = 'Ligne ' . ($i + 1) . ' : nom absent.';
+        continue;
+      }
+
+      $stmt = $pdo->prepare('SELECT id FROM employees WHERE employee_code=:code LIMIT 1');
+      $stmt->execute(['code' => $code]);
+      $existing = $stmt->fetch();
+
+      if ($existing) {
+        $employeeUpdates = [];
+        $employeeParams = ['code' => $code];
+        if ($name) {
+          $employeeUpdates[] = 'full_name = :full_name';
+          $employeeParams['full_name'] = $name;
+        }
+        if ($pseudo) {
+          $employeeUpdates[] = 'pseudo = :pseudo';
+          $employeeParams['pseudo'] = $pseudo;
+        }
+        if ($rate > 0) {
+          $employeeUpdates[] = 'hourly_rate = :hourly_rate';
+          $employeeParams['hourly_rate'] = $rate;
+        }
+        $employeeUpdates[] = 'position = :position';
+        $employeeParams['position'] = $position;
+
+        if ($employeeUpdates) {
+          $pdo->prepare('UPDATE employees SET ' . implode(', ', $employeeUpdates) . ' WHERE employee_code = :code')->execute($employeeParams);
+        }
+        $updated++;
+      } else {
+        $pdo->prepare('INSERT INTO employees(employee_code, full_name, pseudo, position, contract_type, hourly_rate, status, start_date) VALUES(:code, :name, :pseudo, :position, :contract, :rate, :status, :start)')->execute([
+          'code' => $code, 'name' => $name, 'pseudo' => $pseudo, 'position' => $position, 'contract' => 'CDI', 'rate' => $rate, 'status' => 'Active', 'start' => date('Y-m-d')
+        ]);
+        $created++;
+      }
+    }
+    $pdo->commit();
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) { $pdo->rollBack(); }
+    error_log('employee_import error: ' . $e->getMessage());
+    set_flash('error', 'Import annulé : ' . $e->getMessage());
+    header('Location: ' . APP_URL . '/rh_employees.php');
+    exit;
+  }
+
+  $zip->close();
+
+  $parts = [];
+  if ($created > 0) $parts[] = $created . ' créé(s)';
+  if ($updated > 0) $parts[] = $updated . ' mis à jour';
+  if ($skipped > 0) $parts[] = $skipped . ' ignoré(s)';
+
+  $msg = 'Import terminé : ' . implode(', ', $parts) . '.';
+  if ($errors) {
+    $msg .= ' ' . count($errors) . ' erreur(s) : ' . implode(' | ', array_slice($errors, 0, 5));
+  }
+  set_flash(($created > 0 || $updated > 0) ? 'success' : 'error', $msg);
+  header('Location: ' . APP_URL . '/rh_employees.php');
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   require_once __DIR__ . '/actions/rh_employee_action.php';
   exit;
@@ -23,7 +279,7 @@ if (isset($_GET['edit'])) {
 $q = trim((string) ($_GET['q'] ?? ''));
 $status = $_GET['status'] ?? '';
 $position = $_GET['position'] ?? '';
-$sort = ($_GET['sort'] ?? '') === 'matricule' ? 'matricule' : 'name';
+$sort = ($_GET['sort'] ?? '') === 'matricule' ? 'matricule' : 'matricule';
 $direction = strtoupper((string) ($_GET['direction'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
 
 $sql = 'SELECT * FROM employees WHERE 1=1';
@@ -41,7 +297,7 @@ if (in_array($position, ['Agent', 'Responsable'], true)) {
   $args['position'] = $position;
 }
 $sql .= $sort === 'matricule'
-  ? ' ORDER BY employee_code ' . $direction
+  ? ' ORDER BY CAST(employee_code AS UNSIGNED) ' . $direction . ', employee_code ' . $direction
   : ' ORDER BY full_name ASC';
 
 $nextDirection = ($sort === 'matricule' && $direction === 'ASC') ? 'DESC' : 'ASC';

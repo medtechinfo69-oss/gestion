@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
-require_admin_or_superviseur();
+require_admin();
 require_once __DIR__ . '/../includes/xlsx.php';
 
 $month = isset($_GET['month']) ? (int) $_GET['month'] : (int) date('n');
@@ -27,4 +27,18 @@ while ($row = $stmt->fetch()) {
   ];
 }
 
-create_xlsx('salaires_' . $year . '_' . $month . '.xlsx', 'Salaires', $rows);
+$filename = 'salaires_' . $year . '_' . $month . '.xlsx';
+ob_start();
+create_xlsx($filename, 'Salaires', $rows);
+$fileContents = ob_get_clean();
+$temporaryFile = tempnam(sys_get_temp_dir(), 'salary_export_');
+$emailSent = false;
+if ($temporaryFile !== false) {
+  file_put_contents($temporaryFile, $fileContents);
+  $emailSent = notify_admins($db, 'Export des salaires ' . $month . '/' . $year, 'L’export Excel des salaires a été généré par ' . (string) (current_user()['nom_complet'] ?? 'un administrateur') . '.', $temporaryFile, $filename);
+  @unlink($temporaryFile);
+}
+set_flash($emailSent ? 'success' : 'error', $emailSent
+  ? 'Le fichier Excel a été envoyé par e-mail.'
+  : 'L’envoi e-mail a échoué. Vérifiez la configuration SMTP et les logs.');
+redirect('rh_salaries.php?month=' . $month . '&year=' . $year);

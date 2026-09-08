@@ -239,7 +239,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Données initiales
 -- ---------------------------------------------------------------------
 INSERT INTO `users` (`username`, `password_hash`, `role`, `nom_complet`, `email`, `is_active`, `must_change_password`)
-VALUES ('admin', '$2y$10$H2hIEP1fxcRX/cxA.8.EJ.Yw.Z9MN8KIOdvi0ke8VQyAMGb0D.hGO', 'admin', 'Administrateur', 'admin@example.com', 1, 0);
+VALUES ('admin', '$2y$10$H2hIEP1fxcRX/cxA.8.EJ.Yw.Z9MN8KIOdvi0ke8VQyAMGb0D.hGO', 'admin', 'Administrateur', 'mohamedaymensuuport@gmail.com', 1, 0);
 
 INSERT INTO `users` (`username`, `password_hash`, `role`, `nom_complet`, `email`, `is_active`, `must_change_password`) VALUES
 ('emma',      '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'superviseur', 'Emma',  NULL, 1, 0),

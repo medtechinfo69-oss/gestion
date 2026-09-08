@@ -20,7 +20,7 @@ $user = current_user();
 <link rel="apple-touch-icon" href="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png">
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= defined('CACHE_VERSION') ? CACHE_VERSION : (int) filemtime(__DIR__ . '/../assets/css/style.css') ?>">
 </head>
-<body class="<?= defined('SECURITY_MODE') && SECURITY_MODE && !is_superviseur() ? 'security-mode' : '' ?>">
+<body>
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">

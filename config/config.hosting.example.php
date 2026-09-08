@@ -23,6 +23,13 @@ define('ITEMS_PER_PAGE', 25);
 define('IMPORT_MAX_SIZE', 10 * 1024 * 1024);
 define('UPLOAD_DIR', __DIR__ . '/../uploads/dossiers/');
 define('UPLOAD_MAX_SIZE', 5 * 1024 * 1024);
+define('MAIL_HOST', getenv('MAIL_HOST') ?: 'smtp.gmail.com');
+define('MAIL_PORT', (int) (getenv('MAIL_PORT') ?: 587));
+define('MAIL_USERNAME', getenv('MAIL_USERNAME') ?: 'your@gmail.com');
+define('MAIL_PASSWORD', getenv('MAIL_PASSWORD') ?: '');
+define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') ?: 'tls');
+define('MAIL_FROM', getenv('MAIL_FROM') ?: 'your@gmail.com');
+define('MAIL_ALERT_TO', getenv('MAIL_ALERT_TO') ?: 'medtechinfo69@gmail.com');
 define('UPLOAD_ALLOWED_EXT', ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm', 'opus', 'wma']);
 define('UPLOAD_ALLOWED_MIME', [
     'application/pdf',

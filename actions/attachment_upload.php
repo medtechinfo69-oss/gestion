@@ -99,6 +99,7 @@ try {
         'mime' => $realMime, 'taille' => $file['size'], 'u' => $user['id'],
     ]);
     log_dossier_history($db, $dossierId, $user['id'], 'ajout_piece_jointe', null, null, $originalName);
+    notify_admins($db, 'Nouvelle pièce jointe dans un dossier', 'Une pièce jointe nommée "' . $originalName . '" a été ajoutée au dossier #' . $dossierId . ' par ' . (string) ($user['nom_complet'] ?? 'un utilisateur') . '.', $destination, $originalName);
 } catch (PDOException $e) {
     @unlink($destination);
     error_log('attachment_upload error: ' . $e->getMessage());

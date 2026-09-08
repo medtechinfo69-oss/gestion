@@ -44,6 +44,8 @@ try {
         'e' => $email !== '' ? $email : null,
     ]);
 
+    notify_admins($db, 'Nouveau superviseur', 'Le superviseur ' . $username . ' a été créé par ' . (string) (current_user()['nom_complet'] ?? 'un administrateur') . '.');
+
     set_flash('success', 'Superviseur créé avec succès. Il devra changer le mot de passe à la première connexion.');
 } catch (Throwable $e) {
     error_log('superviseur_save error: ' . $e->getMessage());

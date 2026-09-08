@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
-require_dossier_access();
+require_admin();
 
 function export_xml(string $value): string
 {
@@ -26,8 +26,7 @@ function export_cell(string $reference, string $value, bool $header = false): st
 
 $user = current_user();
 $canAccessAll = can_access_dossiers();
-$hideSupervisorColumns = is_superviseur()
-    && in_array(mb_strtolower((string) ($user['username'] ?? '')), ['emma', 'rabia'], true);
+$hideSupervisorColumns = false;
 $search = trim($_GET['q'] ?? '');
 $etatFilter = $_GET['etat'] ?? '';
 $etatContratFilter = $_GET['etat_contrat'] ?? '';

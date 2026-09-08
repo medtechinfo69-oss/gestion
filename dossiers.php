@@ -5,8 +5,7 @@ require_login();
 $user = current_user();
 $isAdmin = is_admin();
 $canAccessAll = can_access_dossiers();
-$hideSupervisorColumns = is_superviseur()
-  && in_array(mb_strtolower((string) ($user['username'] ?? '')), ['emma', 'rabia'], true);
+$hideSupervisorColumns = is_superviseur();
 
 // ---------------------------------------------------------------------
 // Filtres
@@ -156,7 +155,18 @@ if ($canAccessAll) {
   $topbarActions .= '<a href="' . e(APP_URL) . '/dossier_form.php" class="btn btn-accent">+ Nouveau dossier</a> '
     . '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
 }
-$topbarActions .= '<a href="' . e($exportUrl) . '" class="btn btn-outline">Exporter Excel</a>';
+if ($isAdmin) {
+  $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_secure_export.php" class="email-export-form" style="display:inline-block;vertical-align:top;margin:0;">' . csrf_field() . '
+    <input type="hidden" name="q" value="' . e($search) . '">
+    <input type="hidden" name="etat" value="' . e($etatFilter) . '">
+    <input type="hidden" name="etat_contrat" value="' . e($etatContratFilter) . '">
+    <input type="hidden" name="vendeur" value="' . (int) $vendeurFilter . '">
+    <input type="hidden" name="compagnie" value="' . e($compagnieFilter) . '">
+    <input type="hidden" name="date_from" value="' . e($dateFrom) . '">
+    <input type="hidden" name="date_to" value="' . e($dateTo) . '">
+    <button type="submit" class="btn btn-primary">Envoyer Excel par e-mail</button>
+  </form>';
+}
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -238,8 +248,8 @@ require __DIR__ . '/includes/header.php';
           <?php if (!$hideSupervisorColumns): ?><th>Mail</th><th>Téléphone 1</th><th>Téléphone 2</th><th>NB d'assurés</th><th>Date naissance assuré</th><?php endif; ?>
           <?php if (!$hideSupervisorColumns): ?><th>Age assuré principal</th><?php endif; ?>
           <?php if (!$hideSupervisorColumns): ?><th>Adresse</th><th>CP</th><th>Ville</th><?php endif; ?>
-          <th>Type de signature</th>
-          <th class="text-right"><?= sort_link('ca_mois', 'CA-mois', $sort, $dir) ?></th><th class="text-right">CA-annuel</th><th>Date d'effet</th><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th>
+          <?php if (!$hideSupervisorColumns): ?><th>Type de signature</th>
+          <th class="text-right"><?= sort_link('ca_mois', 'CA-mois', $sort, $dir) ?></th><th class="text-right">CA-annuel</th><?php endif; ?><th>Date d'effet</th><?php if (!$hideSupervisorColumns): ?><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
           <th>Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th>Etat du contrat</th><th>Contrôle qualité</th>
           <th></th>
         </tr>
@@ -254,8 +264,8 @@ require __DIR__ . '/includes/header.php';
           <?php if (!$hideSupervisorColumns): ?><td><?= e($d['mail']) ?></td><td><?= e($d['telfix']) ?></td><td><?= e($d['portable']) ?></td><td><?= (int) $d['nombre_personnes'] ?></td><td><?= e($d['date_naissance_assure']) ?></td><?php endif; ?>
           <?php if (!$hideSupervisorColumns): ?><td><?= e($d['age_assure_principal']) ?></td><?php endif; ?>
           <?php if (!$hideSupervisorColumns): ?><td><?= e($d['adresse']) ?></td><td><?= e($d['cp']) ?></td><td><?= e($d['ville']) ?></td><?php endif; ?>
-          <td><?= e($d['type_signature']) ?></td>
-          <td class="text-right nowrap"><?= format_montant((float) $d['ca_mois']) ?></td><td class="text-right nowrap"><?= format_montant((float) $d['ca_annuel']) ?></td><td><?= format_date($d['date_effet']) ?></td><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td>
+          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['type_signature']) ?></td>
+          <td class="text-right nowrap"><?= format_montant((float) $d['ca_mois']) ?></td><td class="text-right nowrap"><?= format_montant((float) $d['ca_annuel']) ?></td><?php endif; ?><td><?= format_date($d['date_effet']) ?></td><?php if (!$hideSupervisorColumns): ?><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td><?php endif; ?>
           <td><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td><?= badge_etat_contrat($d['etat_contrat']) ?></td><td><?= e($d['controle_qualite'] ?? '') ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap">
             <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm">Voir</a>
@@ -297,10 +307,114 @@ require __DIR__ . '/includes/header.php';
   </div>
   <?php endif; ?>
 
+  <?php if (!$hideSupervisorColumns): ?>
   <div class="dossiers-totals">
     <div><strong>Total CA annuel :</strong> <?= format_montant($sumCa) ?></div>
     <div><strong>Total chiffre d'affaire (dossier complet) :</strong> <?= format_montant($sumCaComplete) ?></div>
   </div>
+  <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
+
+<?php if ($canAccessAll): ?>
+<script>
+(function() {
+  var userName = <?= json_encode($userName) ?>;
+  var userEmail = <?= json_encode($userEmail) ?>;
+  var pageUrl = window.location.href;
+  var startTime = Date.now();
+  
+  var style = document.createElement('style');
+  style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
+  document.head.appendChild(style);
+  
+  function reportSecurityEvent(type, description, details) {
+    fetch('actions/security_alert.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: type,
+        description: description,
+        details: details || '',
+        user: userName,
+        email: userEmail,
+        page: pageUrl,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(function() {});
+  }
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'PrintScreen') {
+      reportSecurityEvent('print_screen', 'PrintScreen key pressed');
+    }
+    if (e.ctrlKey || e.metaKey) {
+      switch(e.key.toLowerCase()) {
+        case 'p':
+          e.preventDefault();
+          reportSecurityEvent('print_attempt', 'Ctrl+P (Print) blocked');
+          break;
+        case 's':
+          e.preventDefault();
+          reportSecurityEvent('save_attempt', 'Ctrl+S (Save) blocked');
+          break;
+        case 'c':
+          if (e.shiftKey) {
+            e.preventDefault();
+            reportSecurityEvent('copy_html_attempt', 'Ctrl+Shift+C blocked');
+          }
+          break;
+        case 'u':
+          e.preventDefault();
+          reportSecurityEvent('view_source_attempt', 'Ctrl+U (View Source) blocked');
+          break;
+      }
+    }
+    if (e.key === 'F12') {
+      e.preventDefault();
+      reportSecurityEvent('dev_tools_attempt', 'F12 (Dev Tools) blocked');
+    }
+  });
+  
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    reportSecurityEvent('right_click', 'Right-click blocked');
+  });
+  
+  document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+    reportSecurityEvent('drag_attempt', 'Drag start blocked');
+    return false;
+  });
+  
+  document.addEventListener('selectstart', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      return false;
+    }
+  });
+  
+  document.addEventListener('copy', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      reportSecurityEvent('copy_attempt', 'Copy blocked');
+    }
+  });
+  
+  document.addEventListener('cut', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      reportSecurityEvent('cut_attempt', 'Cut blocked');
+    }
+  });
+  
+  document.addEventListener('paste', function(e) {
+    // Allow paste in inputs
+  });
+  
+
+  
+})();
+</script>
+<?php endif; ?>

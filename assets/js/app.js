@@ -23,7 +23,6 @@
     initSalaryInlineEdit();
     initSalaryFileImport();
     initRhDashboardCharts();
-    initSecurityMode();
   });
 
   /** Bascule le menu latéral en affichage mobile. */
@@ -975,31 +974,6 @@
       var val = pwd.value || '';
       var res = scorePassword(val);
       renderScoreData(res);
-    });
-  }
-
-  /** Bloque les actions de copie, menu contextuel et impression en mode sécurisé. */
-  function initSecurityMode() {
-    if (!document.body.classList.contains('security-mode')) return;
-
-    document.addEventListener('contextmenu', function (e) {
-      e.preventDefault();
-    });
-
-    document.addEventListener('dragstart', function (e) {
-      e.preventDefault();
-    });
-
-    document.addEventListener('keydown', function (e) {
-      var key = String(e.key).toLowerCase();
-      var modifier = e.ctrlKey || e.metaKey;
-      if (key === 'printscreen' || (modifier && ['p', 's', 'u'].indexOf(key) !== -1)) {
-        e.preventDefault();
-        document.body.classList.add('security-alert');
-        setTimeout(function () {
-          document.body.classList.remove('security-alert');
-        }, 800);
-      }
     });
   }
 

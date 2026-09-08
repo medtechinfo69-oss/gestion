@@ -164,6 +164,28 @@ port et permissions. N'utilisez pas les valeurs XAMPP locales en production.
 Activez les extensions PHP `pdo_mysql`, `fileinfo` et `zip`, necessaires a la
 base de donnees, aux uploads et a l'export Excel.
 
+### 2.1 Notifications e-mail
+
+Les alertes utilisent Gmail SMTP et sont envoyees a `medtechinfo69@gmail.com`
+ainsi qu'aux adresses des comptes admin actifs. Utilisez un mot de passe
+d'application Google, jamais le mot de passe normal du compte :
+
+```text
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=medtechinfo69@gmail.com
+MAIL_PASSWORD=votre_mot_de_passe_application_google
+MAIL_ENCRYPTION=tls
+MAIL_FROM=medtechinfo69@gmail.com
+MAIL_ALERT_TO=medtechinfo69@gmail.com
+```
+
+Un export RH admin est envoye en piece jointe par e-mail et n'est pas
+telecharge dans le navigateur. Les modifications faites par un superviseur sur un dossier,
+les changements de compte ou mot de passe superviseur, et les pieces jointes
+ajoutees declenchent aussi une alerte. Les erreurs SMTP sont journalisees sans
+bloquer l'action principale.
+
 ## 3. Installation locale avec XAMPP
 
 1. Copiez le projet dans `C:\xampp\htdocs\gestion-dossiers`.

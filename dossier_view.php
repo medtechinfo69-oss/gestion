@@ -228,4 +228,70 @@ require __DIR__ . '/includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($isAdmin || $isSuperviseur): ?>
+<script>
+(function() {
+  var userName = <?= json_encode($user['nom_complet'] ?? 'Unknown') ?>;
+  var userEmail = <?= json_encode($user['email'] ?? '') ?>;
+  var pageUrl = window.location.href;
+  
+  var style = document.createElement('style');
+  style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
+  document.head.appendChild(style);
+  
+  function reportSecurityEvent(type, description) {
+    fetch('actions/security_alert.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: type,
+        description: description,
+        user: userName,
+        email: userEmail,
+        page: pageUrl,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(function() {});
+  }
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'PrintScreen') {
+      reportSecurityEvent('print_screen', 'PrintScreen key pressed');
+    }
+    if (e.ctrlKey || e.metaKey) {
+      switch(e.key.toLowerCase()) {
+        case 'p': e.preventDefault(); reportSecurityEvent('print_attempt', 'Ctrl+P blocked'); break;
+        case 's': e.preventDefault(); reportSecurityEvent('save_attempt', 'Ctrl+S blocked'); break;
+        case 'u': e.preventDefault(); reportSecurityEvent('view_source_attempt', 'Ctrl+U blocked'); break;
+      }
+    }
+    if (e.key === 'F12') { e.preventDefault(); reportSecurityEvent('dev_tools', 'F12 blocked'); }
+  });
+  
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    reportSecurityEvent('right_click', 'Right-click blocked');
+  });
+  
+  document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+    reportSecurityEvent('drag_attempt', 'Drag start blocked');
+  });
+  
+  document.addEventListener('selectstart', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+    }
+  });
+  
+  document.addEventListener('copy', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      reportSecurityEvent('copy_attempt', 'Copy blocked');
+    }
+  });
+})();
+</script>
+<?php endif; ?>
+
 <?php require __DIR__ . '/includes/footer.php'; ?>

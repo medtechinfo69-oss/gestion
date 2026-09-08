@@ -29,8 +29,13 @@ if (is_superviseur() && $isEdit) {
     }
     $saveSection = clean_str($_POST['save_section'] ?? 'all');
     $existingCourrier = courrier_values($existing['courrier'] ?? '');
-    $courrierLocked = ($existing['date_courrier_supervision'] ?? null) !== null
-        && count($existingCourrier) === count(options_courrier());
+    $dossierCompletLocked = ($existing['date_dossier_complet'] ?? null) !== null
+        || ($existing['etat_dossier'] ?? '') === 'Dossier complet';
+    $courrierLocked = $dossierCompletLocked || (($existing['date_courrier_supervision'] ?? null) !== null
+        && count($existingCourrier) === count(options_courrier()));
+    if ($dossierCompletLocked) {
+        $courrierValues = $existingCourrier;
+    }
     $etatContratLocked = ($existing['date_etat_contrat_supervision'] ?? null) !== null || ($existing['etat_contrat'] ?? 'Actif') !== 'Actif';
     $controleQualiteLocked = ($existing['date_controle_qualite_supervision'] ?? null) !== null;
     if ($saveSection !== 'courrier' && $saveSection !== 'all') {
@@ -63,7 +68,7 @@ if (is_superviseur() && $isEdit) {
         $controleQualite = $existing['controle_qualite'] ?? null;
     }
     $courrierIsComplete = count(array_unique($courrierValues)) === count(options_courrier());
-    $dateCourrierSupervision = $saveSection === 'courrier' && $courrierIsComplete
+    $dateCourrierSupervision = !$dossierCompletLocked && $saveSection === 'courrier' && $courrierIsComplete
         ? ($existing['date_courrier_supervision'] ?? date('Y-m-d'))
         : ($saveSection === 'courrier' ? null : ($existing['date_courrier_supervision'] ?? null));
     $dateEtatContratSupervision = $saveSection === 'etat_contrat'
@@ -104,6 +109,8 @@ if (is_superviseur() && $isEdit) {
             log_dossier_history($db, $id, $user['id'], 'modification', $champ, (string) $existing[$champ], (string) $nouvelle);
         }
     }
+
+    notify_admins($db, 'Modification superviseur dans un dossier', 'Le superviseur ' . (string) ($user['nom_complet'] ?? 'un superviseur') . ' a modifié le dossier #' . $id . '.');
 
     set_flash('success', 'Dossier mis à jour avec succès.');
     redirect('dossier_view.php?id=' . $id);

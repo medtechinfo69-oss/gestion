@@ -13,6 +13,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/mailer.php';
 
 // En-têtes de sécurité HTTP
 header('X-Content-Type-Options: nosniff');

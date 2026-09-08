@@ -50,6 +50,8 @@ try {
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
 
+    notify_admins($db, 'Modification d’un superviseur', 'Le superviseur ' . $username . ' a été modifié par ' . (string) (current_user()['nom_complet'] ?? 'un administrateur') . '.');
+
     set_flash('success', $password !== ''
         ? 'Superviseur mis à jour avec succès. Le mot de passe a été modifié.'
         : 'Superviseur mis à jour avec succès.');
