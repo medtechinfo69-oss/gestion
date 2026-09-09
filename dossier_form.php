@@ -301,7 +301,7 @@ require __DIR__ . '/includes/header.php';
         <div class="form-group">
           <label for="ca_annuel">CA annuel (€)</label>
           <input type="number" step="0.01" min="0" id="ca_annuel" name="ca_annuel" data-auto="true" value="<?= e((string) $v('ca_annuel')) ?>">
-          
+
         </div>
         <div class="form-group">
           <label for="date_effet">Date d'effet <span class="req">*</span></label>
@@ -361,7 +361,7 @@ require __DIR__ . '/includes/header.php';
       <div class="form-actions dossier-form-actions">
         <button type="submit" class="btn btn-primary"><?= $isEdit ? 'Enregistrer les modifications' : 'Créer le dossier' ?></button>
         <?php if ($isAdmin && $isRestricted): ?>
-          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" onsubmit="return confirm('Réactiver la supervision pour ce dossier ?');">
+          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver la supervision pour ce dossier ?">
             <?= csrf_field() ?>
             <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
             <button type="submit" class="btn btn-outline">Réactiver supervision</button>

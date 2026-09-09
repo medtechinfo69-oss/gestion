@@ -1,11 +1,14 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
+require_once __DIR__ . '/includes/security_integration.php';
 
 $token = $_GET['token'] ?? '';
 $error = '';
 $downloadInfo = null;
 $remainingAttempts = 0;
 $locked = false;
+
+sec_log('view', 'attachment', $token, 'Access secure download page');
 
 if ($token) {
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
@@ -42,10 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $downloadInfo && !$locked) {
         $codeHash = hash('sha256', $enteredCode);
         
         if ($codeHash === $downloadInfo['code_hash']) {
-            $clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            $clientIp = get_client_ip();
             
             $stmt = $db->prepare('UPDATE secure_downloads SET used_at = NOW(), used_ip = :ip WHERE token = :token');
             $stmt->execute(['ip' => $clientIp, 'token' => $token]);
+            
+            sec_log('download', 'attachment', $token, 'Secure download successful: ' . $downloadInfo['filename'], true);
             
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             header('Content-Disposition: attachment; filename="' . $downloadInfo['filename'] . '"');
@@ -62,8 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $downloadInfo && !$locked) {
             $stmt->execute(['token' => $token]);
             
             $newAttempts = $downloadInfo['attempts'] + 1;
+            sec_log('permission_denied', 'attachment', $token, 'Invalid download code attempt', false, 'Wrong code');
+            
             if ($newAttempts >= $downloadInfo['max_attempts']) {
-                $error = 'Code incorrect. Trop de tentatives - le lien est maintenant bloqué.';
+                $error = 'Code incorrect. Trop de tentatives - le lien est maintenant bloquÃ©.';
                 $locked = true;
             } else {
                 $remainingAttempts = $downloadInfo['max_attempts'] - $newAttempts;

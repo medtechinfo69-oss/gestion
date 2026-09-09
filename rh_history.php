@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin_or_superviseur();
+require_admin();
 
 $pageTitle = 'Historique des salaires';
 $pageSubtitle = 'Consultez l\'évolution mensuelle d\'un salarié';
@@ -8,12 +8,12 @@ $activePage = 'rh_history';
 $pdo = $db;
 
 $eid = isset($_GET['employee_id']) ? (int) $_GET['employee_id'] : 0;
-$employees = $pdo->query('SELECT id, employee_code, full_name FROM employees ORDER BY full_name')->fetchAll();
+$employees = $pdo->query('SELECT id, employee_code, full_name FROM employees ORDER BY id')->fetchAll();
 $rows = [];
 $employee = null;
 
 if ($eid > 0) {
-  $stmt = $pdo->prepare('SELECT id, employee_code, full_name, hourly_rate FROM employees WHERE id=:id');
+  $stmt = $pdo->prepare('SELECT id, employee_code, full_name, hourly_rate FROM employees WHERE id=:id ORDER BY full_name');
   $stmt->execute(['id' => $eid]);
   $employee = $stmt->fetch();
 
@@ -69,6 +69,7 @@ require __DIR__ . '/includes/header.php';
           <th>Mois</th>
           <th>Année</th>
           <th>Heures</th>
+          <th>Jour Payé</th>
           <th>Régime horaire utilisé</th>
           <th>Salaire</th>
         </tr>
@@ -79,13 +80,14 @@ require __DIR__ . '/includes/header.php';
           <td><?= e($months[(int) $r['month']] ?? $r['month']) ?></td>
           <td><?= e($r['year']) ?></td>
           <td><?= format_nombre((float) $r['total_hours']) ?></td>
+          <td><?= format_nombre((float) $r['paid_days']) ?></td>
           <td><?= format_montant_tnd((float) $r['hourly_rate_used']) ?></td>
           <td><b><?= format_montant_tnd((float) $r['calculated_salary']) ?></b></td>
         </tr>
         <?php endforeach; ?>
         <?php if (!$rows): ?>
         <tr>
-          <td colspan="5">
+          <td colspan="6">
             <div class="empty-state">
               <div class="empty-icon">&#128197;</div>
               Aucun historique disponible.

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin_or_superviseur();
+require_admin();
 
 $pageTitle = 'Salaires mensuels';
 $pageSubtitle = 'Gestion et contrôle de la paie';
@@ -48,6 +48,9 @@ function salary_import_value(array $data, array $aliases, $default = '')
 {
   foreach ($aliases as $alias) {
     $wanted = salary_import_header($alias);
+    if (isset($data[$wanted]) && trim((string) $data[$wanted]) !== '') {
+      return $data[$wanted];
+    }
     foreach ($data as $key => $value) {
       $actual = salary_import_header((string) $key);
       if (($actual === $wanted || strpos($actual, $wanted . ' ') === 0) && trim((string) $value) !== '') {
@@ -83,23 +86,49 @@ function salary_import_number($value)
 
 function salary_import_excel_time_to_hours($value)
 {
-  if (!is_numeric($value)) return $value;
-  $num = (float) $value;
-  if ($num > 0 && $num < 1) {
-    return round($num * 24, 2);
-  }
-  return $num;
+  // Only call for numeric cells with an Excel time/duration number format.
+  return is_numeric($value) ? (float) $value * 24 : $value;
 }
 
-function salary_import_code($value): string
+function salary_import_time_styles(ZipArchive $zip): array
 {
-  $value = trim((string) $value);
-  if (preg_match('/^(\d+)\.0+$/', $value, $match)) {
-    return $match[1];
+  $xml = $zip->getFromName('xl/styles.xml');
+  $styles = $xml !== false ? simplexml_load_string($xml) : false;
+  if (!$styles) return [];
+
+  $formats = [];
+  foreach ($styles->numFmts->numFmt ?? [] as $format) {
+    $formats[(int) $format['numFmtId']] = (string) $format['formatCode'];
   }
-  $value = preg_replace('/\s*-\s*$/', '', $value);
-  $value = trim($value);
-  return $value;
+  $timeStyles = [];
+  foreach ($styles->cellXfs->xf ?? [] as $style) {
+    $formatId = (int) $style['numFmtId'];
+    $format = $formats[$formatId] ?? '';
+    // Ignore literals, escapes, colours and conditions; retain elapsed-time tokens.
+    $format = preg_replace('/"[^"]*"|\x5c.|\[(?![hms]+\])[^\]]*\]/i', '', $format);
+    $timeStyles[] = in_array($formatId, [18, 19, 20, 21, 32, 33, 45, 46, 47], true)
+      || (bool) preg_match('/h|s|\[m+\]/i', $format);
+  }
+  return $timeStyles;
+}
+
+function salary_import_time_to_decimal($value)
+{
+  if ($value === '' || $value === null) return 0;
+
+  $str = trim((string) $value);
+  if ($str === '') return 0;
+
+  if (preg_match('/^(\d+):([0-5]\d)(?::([0-5]\d))?$/', $str, $m)) {
+    $hours = (int) ($m[1] ?? 0);
+    $minutes = (int) ($m[2] ?? 0);
+    $seconds = isset($m[3]) ? (int) $m[3] : 0;
+    return $hours + ($minutes / 60) + ($seconds / 3600);
+  }
+
+  // Numeric values are already decimal hours; Excel durations were converted on read.
+  $str = str_replace(',', '.', $str);
+  return is_numeric($str) ? (float) $str : -1;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update') {
@@ -173,14 +202,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_salaries') {
   csrf_require();
   $errors = [];
-  $skipped = 0;
   $ok = 0;
-  $employeesCreated = 0;
-  $employeesExisting = 0;
-  $salaryRecordsImported = 0;
-  $salaryRecordsUpdated = 0;
+  $inserts = [];
   $mTarget = $month;
   $yTarget = $year;
+
+  $allEmployees = [];
+  foreach ($pdo->query('SELECT id, employee_code, full_name, pseudo, hourly_rate, position FROM employees WHERE status="Active"') as $row) {
+    $allEmployees[trim((string) $row['employee_code'])] = $row;
+  }
 
   $f = $_FILES['import_file'] ?? null;
   if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > max_import_size_bytes($pdo)) {
@@ -239,6 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
   $xpath = new DOMXPath($dom);
   $xpath->registerNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
   $allRows = [];
+  $timeStyles = salary_import_time_styles($zip);
 
   foreach ($rows as $row) {
     $vals = [];
@@ -268,6 +299,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
           $textNodes = $xpath->query('.//x:t', $isNode);
           foreach ($textNodes as $textNode) { $v .= $textNode->nodeValue; }
         }
+      }
+      if (in_array($c->getAttribute('t'), ['', 'n'], true)
+          && ($timeStyles[(int) $c->getAttribute('s')] ?? false)) {
+        $v = salary_import_excel_time_to_hours($v);
       }
       if ($columnIndex >= 0) { $vals[$columnIndex] = $v; }
     }
@@ -327,133 +362,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $headerRowIndex = 0;
   }
 
-  $pdo->beginTransaction();
-  try {
+  // The attendance report has an unlabelled pseudo column G, beside the merged name.
+  if (($headers[1] ?? '') === 'matricule' && str_starts_with($headers[4] ?? '', 'nom')
+      && ($headers[6] ?? '') === '' && str_starts_with($headers[13] ?? '', 'h pay')) {
+    $headers[6] = 'pseudo';
+  }
+
   for ($i = $headerRowIndex + 1; $i < count($allRows); $i++) {
     $vals = $allRows[$i];
     $vals = array_pad($vals, count($headers), '');
-    
+
     $nonEmptyCount = 0;
     foreach ($vals as $v) {
       if (trim((string) $v) !== '') $nonEmptyCount++;
     }
     if ($nonEmptyCount < 3) continue;
-    
+
     $data = [];
     if (!empty($headers)) {
       foreach ($headers as $idx => $h) { $data[$h] = $vals[$idx] ?? ''; }
     }
     if (!$data && !empty($headers)) { $data = []; foreach ($headers as $idx => $h) { $data[$h] = $vals[$idx] ?? ''; } }
 
-    $code = salary_import_code(salary_import_value($data, ['matricule', 'employee code', 'employee id', 'code'], $vals[0] ?? ''));
-
-    $fullName = trim((string) salary_import_value($data, ['nom et prenom', 'nom & prenom', 'nom & pr&eacute;nom', 'nom complet', 'full name', 'nom', 'nom et pr&eacute;nom']));
-    $nom = trim((string) salary_import_value($data, ['nom', 'nom et prenom', 'nom & prenom', 'nom & pr&eacute;nom', 'nom complet', 'full name']));
-    $prenom = trim((string) salary_import_value($data, ['prenom', 'pr&eacute;nom', 'pr&eacute;nome', 'prenom']));
-
-    if ($fullName !== '') {
-        $name = str_replace(["\n", "\r", '  '], ' ', $fullName);
-    } elseif ($nom !== '' && $prenom !== '') {
-        $name = $nom . ' ' . $prenom;
-    } elseif ($nom !== '') {
-        $name = $nom;
-    } else {
-        $name = 'Employé ' . ($code !== '' ? $code : (string) ($i + 1));
+    $code = trim((string) salary_import_value($data, ['Matricule', 'Employee ID', 'Employee code', 'Code'], $vals[0] ?? ''));
+    $code = preg_replace('/[\s\-–—:]+$/', '', $code);
+    $code = preg_replace('/^[\s\-–—:]+/', '', $code);
+    $code = trim((string) $code);
+    $code = str_replace([' ', '-', '–', '—'], '', $code);
+    $name = trim((string) salary_import_value($data, ['Nom & prénom', 'Nom, prénom', 'Nom et prénom', 'Nom complet', 'Full name', 'Name']));
+    if ($name === '') {
+      $name = trim((string) salary_import_value($data, ['Nom']) . ' ' . (string) salary_import_value($data, ['Prénom', 'Prenom']));
     }
-    $name = trim($name);
-
-    $monthVal = $mTarget;
-    $yearVal = $yTarget;
-    $normalDays = salary_import_value($data, ['jr normalement travaill', 'jour normalement travaill', 'jr normal', 'normal worked days'], 0);
-    $absenceDays = salary_import_value($data, ['abs non justif', 'abs nj'], 0);
-    $absenceHours = salary_import_value($data, ['abs non justif', 'abs nj'], 0);
-    $paidDays = salary_import_value($data, ['j pay', 'jour pay'], 0);
-    $paidHours = salary_import_value($data, ['h pay', 'heure pay', 'total hours'], 0);
-    $lateCount = salary_import_value($data, ['nb retards', 'retards', 'n retards'], 0);
-    $heuresSup = salary_import_value($data, ['heures sup', 'heure sup', 'sup', 'h sup'], 0);
-    $nDepart = salary_import_value($data, ['n depart', 'n d&eacute;part', 'n depart a', 'depart'], 0);
-    $rate = salary_import_value($data, ['r&eacute;gime horaire', 'r&eacute;gime', 'taux horaire', 'hourly rate', 'regime'], 0);
-    foreach (['normalDays', 'absenceDays', 'absenceHours', 'paidDays', 'paidHours', 'lateCount', 'heuresSup', 'nDepart', 'rate'] as $numberKey) {
-      $$numberKey = salary_import_number($$numberKey);
-      if (!is_numeric($$numberKey) || (float) $$numberKey < 0) {
-        $$numberKey = 0;
+    if ($name === '') {
+      $name = trim((string) ($vals[1] ?? ''));
+      if (isset($vals[2]) && isset($headers[2]) && strpos($headers[2], 'prenom') !== false) {
+        $name .= ' ' . trim((string) $vals[2]);
       }
     }
-    
-    $absenceHours = salary_import_excel_time_to_hours($absenceHours);
-    $paidHours = salary_import_excel_time_to_hours($paidHours);
-    $heuresSup = salary_import_excel_time_to_hours($heuresSup);
+    $monthVal = $mTarget;
+    $yearVal = $yTarget;
+    $normalDays = salary_import_value($data, ['Jour normalement travaillé', 'Jr Normalement Travaillé', 'Normal worked days'], 0);
+    $absenceDays = salary_import_value($data, ['ABS non justifiée en jours', 'Unjustified absence days'], 0);
+    $absenceHours = salary_import_value($data, ['ABS non justifiée en heures', 'Unjustified absence hours'], $data['abs non justifiee'] ?? 0);
+    $paidDays = salary_import_value($data, ['Jour payé', 'J Payé', 'Paid days'], 0);
+    $paidHours = salary_import_value($data, ['Heure payée', 'H Payée', 'Paid hours', 'Total hours', 'Hours'], 0);
+    $lateCount = salary_import_value($data, ['Nb retards', 'N Retards', 'Late count'], 0);
+    $fileRate = salary_import_value($data, ['Régime horaire', 'Hourly rate', 'Taux horaire'], 0);
+    foreach (['normalDays', 'absenceDays', 'paidDays', 'lateCount', 'fileRate'] as $numberKey) {
+      $$numberKey = salary_import_number($$numberKey);
+    }
+    $absenceHours = salary_import_time_to_decimal($absenceHours);
+    $paidHours = salary_import_time_to_decimal($paidHours);
 
-    if (!$code) {
-      $errors[] = 'Ligne ' . ($i + 1) . ' : matricule absent.';
+    if (!$code || !is_numeric($normalDays) || (float) $normalDays < 0 || !is_numeric($absenceDays) || (float) $absenceDays < 0 || !is_numeric($absenceHours) || (float) $absenceHours < 0 || !is_numeric($paidDays) || (float) $paidDays < 0 || !is_numeric($paidHours) || (float) $paidHours < 0 || !is_numeric($lateCount) || (int) $lateCount < 0) {
+      $errors[] = 'Ligne ' . ($i + 1) . ' : données invalides.';
       continue;
     }
 
-    $stmt = $pdo->prepare('SELECT id, hourly_rate, full_name, position FROM employees WHERE employee_code=:code LIMIT 1');
-    $stmt->execute(['code' => $code]);
-    $emp = $stmt->fetch();
-
+    $emp = $allEmployees[$code] ?? null;
     if (!$emp) {
-      $errors[] = 'Ligne ' . ($i + 1) . ' : employé introuvable pour matricule ' . $code . '.';
+      $errors[] = 'Ligne ' . ($i + 1) . ' : matricule introuvable ( ' . $code . ' ).';
       continue;
     }
-
     $empId = (int) $emp['id'];
-    $employeesExisting++;
-    
-    $position = $emp['position'];
-    $rate = (float) ($emp['hourly_rate'] ?? $rate);
-    $rate = is_numeric($rate) && (float) $rate >= 0 ? (float) $rate : 0.0;
+    $empRate = (float) $emp['hourly_rate'];
+    if ($fileRate > 0) {
+      $empRate = $fileRate;
+    }
+    if ($empRate <= 0) {
+      $empRate = 10.00;
+    }
+    $position = trim((string) salary_import_value($data, ['Poste', 'Position'], $emp['position'] ?? 'Agent'));
+    $empPosition = in_array($position, ['Responsable', 'Agent'], true) ? $position : ($emp['position'] ?? 'Agent');
+    $pseudo = trim((string) salary_import_value($data, ['Pseudo', 'Peseudo'], $emp['pseudo'] ?? ''));
+    $empName = $name !== '' ? $name : $emp['full_name'];
+    $pdo->prepare('UPDATE employees SET full_name=:name, pseudo=:pseudo, hourly_rate=:rate, position=:position WHERE id=:id')->execute([
+      'name' => $empName, 'pseudo' => $pseudo, 'rate' => $empRate, 'position' => $empPosition, 'id' => $empId
+    ]);
+    $position = $empPosition;
+    $rate = $empRate;
     $calcBase = $position === 'Responsable' ? (float) $paidDays : (float) $paidHours;
     $calc = round($calcBase * $rate, 2);
-
-    $checkStmt = $pdo->prepare('SELECT id FROM salary_records WHERE employee_id=:eid AND month=:m AND year=:y LIMIT 1');
-    $checkStmt->execute(['eid' => $empId, 'm' => $monthVal, 'y' => $yearVal]);
-    $existingRecord = $checkStmt->fetch();
-
-    if ($existingRecord) {
-      $salaryRecordsUpdated++;
-    } else {
-      $salaryRecordsImported++;
-    }
-
-    $sql = 'INSERT INTO salary_records(employee_id, month, year, total_hours, hourly_rate_used, calculated_salary, normal_worked_days, unjustified_absence_days, unjustified_absence_hours, paid_days, paid_hours, late_count, heures_sup, n_depart) VALUES(:eid, :m, :y, :h, :r, :s, :normal, :absdays, :abshours, :paiddays, :paidhours, :late, :heuresup, :ndepart) ON DUPLICATE KEY UPDATE total_hours=VALUES(total_hours), hourly_rate_used=VALUES(hourly_rate_used), calculated_salary=VALUES(calculated_salary), normal_worked_days=VALUES(normal_worked_days), unjustified_absence_days=VALUES(unjustified_absence_days), unjustified_absence_hours=VALUES(unjustified_absence_hours), paid_days=VALUES(paid_days), paid_hours=VALUES(paid_hours), late_count=VALUES(late_count), heures_sup=VALUES(heures_sup), n_depart=VALUES(n_depart), updated_at=CURRENT_TIMESTAMP';
-    $pdo->prepare($sql)->execute([
-      'eid' => $empId, 'm' => $monthVal, 'y' => $yearVal, 'h' => $paidHours, 'r' => $rate, 's' => $calc,
-      'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours,
-      'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => (int) $lateCount,
-      'heuresup' => $heuresSup, 'ndepart' => (int) $nDepart
-    ]);
+    $inserts[] = ['eid' => $empId, 'm' => $monthVal, 'y' => $yearVal, 'h' => $paidHours, 'r' => $rate, 's' => $calc, 'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours, 'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => (int) $lateCount];
     $ok++;
     $mTarget = $monthVal;
     $yTarget = $yearVal;
   }
+
+  if (!empty($inserts)) {
+    $pdo->beginTransaction();
+    foreach ($inserts as $ins) {
+      $sql = 'INSERT INTO salary_records(employee_id, month, year, total_hours, hourly_rate_used, calculated_salary, normal_worked_days, unjustified_absence_days, unjustified_absence_hours, paid_days, paid_hours, late_count) VALUES(:eid, :m, :y, :h, :r, :s, :normal, :absdays, :abshours, :paiddays, :paidhours, :late) ON DUPLICATE KEY UPDATE total_hours=VALUES(total_hours), hourly_rate_used=VALUES(hourly_rate_used), calculated_salary=VALUES(calculated_salary), normal_worked_days=VALUES(normal_worked_days), unjustified_absence_days=VALUES(unjustified_absence_days), unjustified_absence_hours=VALUES(unjustified_absence_hours), paid_days=VALUES(paid_days), paid_hours=VALUES(paid_hours), late_count=VALUES(late_count), updated_at=CURRENT_TIMESTAMP';
+      $pdo->prepare($sql)->execute($ins);
+    }
     $pdo->commit();
-  } catch (Throwable $importError) {
-    if ($pdo->inTransaction()) { $pdo->rollBack(); }
-    error_log('rh_salary_import error: ' . $importError->getMessage());
-    set_flash('error', 'Import annulé : ' . $importError->getMessage());
-    redirect_salary_page($mTarget, $yTarget);
   }
 
   $zip->close();
-
-  $parts = [];
-  if ($salaryRecordsImported > 0) {
-    $parts[] = $salaryRecordsImported . ' salaire(s) importé(s)';
-  }
-  if ($salaryRecordsUpdated > 0) {
-    $parts[] = $salaryRecordsUpdated . ' mis à jour';
-  }
-  if ($employeesExisting > 0) {
-    $parts[] = $employeesExisting . ' bulletin(s) traité(s)';
-  }
-
-  $msg = 'Import terminé : ' . implode(', ', $parts) . '.';
+  $msg = 'Import terminé : ' . $ok . ' ligne(s) traitée(s).';
   if ($errors) {
-    $msg .= ' ' . count($errors) . ' erreur(s) : ' . implode(' | ', array_slice($errors, 0, 5));
+    $msg .= ' ' . count($errors) . ' ligne(s) ignorée(s). ' . implode(' | ', array_slice($errors, 0, 5));
   }
-  set_flash(($ok > 0) ? 'success' : 'error', $msg);
+  set_flash(($ok > 0 && empty($errors)) ? 'success' : 'error', $msg);
   redirect_salary_page($mTarget, $yTarget);
 }
 
@@ -616,7 +626,7 @@ require __DIR__ . '/includes/header.php';
         <input type="hidden" name="month" value="<?= $displayMonth ?>">
         <input type="hidden" name="year" value="<?= $displayYear ?>">
         <div id="selectedIdsContainer"></div>
-        <button type="submit" class="btn btn-danger btn-sm" id="bulkDeleteBtn" onclick="return confirm('Supprimer les bulletins sélectionnés ?');" style="opacity:0.5;cursor:not-allowed;">
+        <button type="submit" class="btn btn-danger btn-sm" id="bulkDeleteBtn" data-confirm="Supprimer les bulletins sélectionnés ?" style="opacity:0.5;cursor:not-allowed;">
           🗑 Supprimer la sélection
         </button>
       </form>
@@ -625,7 +635,7 @@ require __DIR__ . '/includes/header.php';
         <input type="hidden" name="action" value="delete_all">
         <input type="hidden" name="month" value="<?= $displayMonth ?>">
         <input type="hidden" name="year" value="<?= $displayYear ?>">
-        <button type="button" class="btn btn-outline btn-sm" id="deleteAllBtn" onclick="if(confirm('Supprimer TOUS les bulletins de ce mois ?\n\nCette action est irréversible !')){document.getElementById('deleteAllForm').submit();}" style="border-color:#dc3545;color:#dc3545;" onmouseenter="this.style.color='white'" onmouseleave="this.style.color='#dc3545'">
+        <button type="button" class="btn btn-outline btn-sm" id="deleteAllBtn" data-confirm="Supprimer TOUS les bulletins de ce mois ? Cette action est irréversible !" data-confirm-target="deleteAllForm" style="border-color:#dc3545;color:#dc3545;">
           🗑🗑 Supprimer tous
         </button>
       </form>
@@ -637,15 +647,16 @@ require __DIR__ . '/includes/header.php';
       <thead>
         <tr>
           <?php if ($isAdmin): ?><th style="width:50px;text-align:center;vertical-align:middle;"><input type="checkbox" id="selectAllCheckboxes" style="width:18px;height:18px;cursor:pointer;accent-color:#0d6efd;"></th><?php endif; ?>
-          <th>Matricule</th>
+          <th>ID</th>
           <th>Nom & prénom</th>
+          <th>Pseudo</th>
           <th>Jour Normalement Travaillé</th>
           <th>ABS Non Justifiée en jours</th>
           <th>ABS Non Justifiée en heures</th>
           <th>Jour Payé</th>
           <th>Heure Payée</th>
           <th>Nb Retards</th>
-          <th>Salaire</th>
+          <th style="min-width:140px;white-space:nowrap;">Salaire</th>
           <th>Action</th>
         </tr>
       </thead>
@@ -653,31 +664,32 @@ require __DIR__ . '/includes/header.php';
         <?php foreach ($rows as $r): ?>
         <tr class="data-row">
           <?php if ($isAdmin): ?><td style="width:50px;text-align:center;vertical-align:middle;"><input type="checkbox" name="salary_ids[]" value="<?= (int) $r['id'] ?>" class="salary-checkbox" style="width:18px;height:18px;cursor:pointer;accent-color:#0d6efd;"></td><?php endif; ?>
-          <td><?= e($r['employee_code']) ?></td>
+          <td><a href="<?= e(APP_URL) ?>/rh_employees.php?edit=<?= (int) $r['employee_id'] ?>" style="color:inherit;text-decoration:underline;font-weight:600;"><?= e($r['employee_code']) ?></a></td>
           <td><b><?= e($r['full_name']) ?></b></td>
+          <td><?= e($r['pseudo'] ?? '') ?></td>
           <td><?= format_nombre((float) $r['normal_worked_days']) ?></td>
           <td><?= format_nombre((float) $r['unjustified_absence_days']) ?></td>
           <td><?= format_heure((float) $r['unjustified_absence_hours']) ?></td>
           <td><?= format_nombre((float) $r['paid_days']) ?></td>
           <td><?= format_heure((float) $r['paid_hours']) ?></td>
           <td><?= (int) $r['late_count'] ?></td>
-          <td><b><?= format_montant_tnd((float) $r['calculated_salary']) ?></b></td>
+          <td style="white-space:nowrap;"><b><?= format_montant_tnd((float) $r['calculated_salary']) ?></b></td>
           <td class="nowrap">
-            <button class="btn btn-sm btn-secondary" type="button" data-open-inline-edit>Modifier</button>
+            <button class="btn btn-sm btn-secondary btn-icon" type="button" data-open-inline-edit title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
             <?php if ($isAdmin): ?>
-            <form class="inline" method="post" action="actions/rh_salary_action.php" onsubmit="return confirm('Supprimer ce bulletin de salaire ?')">
+            <form class="inline" method="post" action="actions/rh_salary_action.php" data-confirm="Supprimer ce bulletin de salaire ?">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
               <input type="hidden" name="month" value="<?= $displayMonth ?>">
               <input type="hidden" name="year" value="<?= $displayYear ?>">
-              <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+              <button type="submit" class="btn btn-sm btn-danger btn-icon" title="Supprimer" aria-label="Supprimer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/><path d="M10 11v6M14 11v6"/></svg></button>
             </form>
             <?php endif; ?>
           </td>
         </tr>
         <tr class="edit-row" style="display:none">
-          <td colspan="11">
+          <td colspan="12">
             <form method="post" action="actions/rh_salary_action.php" class="inline-edit-form" data-position="<?= e($r['position'] ?? 'Agent') ?>">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="update">
@@ -712,7 +724,7 @@ require __DIR__ . '/includes/header.php';
         <?php endforeach; ?>
         <?php if (!$rows): ?>
         <tr>
-          <td colspan="11">
+          <td colspan="12">
             <div class="empty-state">
               <div class="empty-icon">&#128202;</div>
               Aucun salaire ne correspond à ces critères.
@@ -736,15 +748,15 @@ document.addEventListener('DOMContentLoaded', function() {
   var selectionCount = document.getElementById('selectionCount');
   var bulkDeleteForm = document.getElementById('bulkDeleteForm');
   var selectedIdsContainer = document.getElementById('selectedIdsContainer');
-  
+
   function updateSelectionUI() {
     var checked = document.querySelectorAll('.salary-checkbox:checked');
     var count = checked.length;
     var allChecked = count > 0 && count === checkboxes.length;
-    
+
     if (selectAll) selectAll.checked = allChecked;
     if (selectAllHeader) selectAllHeader.checked = allChecked;
-    
+
     if (bulkDeleteBtn) {
       if (count > 0) {
         bulkDeleteBtn.disabled = false;
@@ -756,7 +768,7 @@ document.addEventListener('DOMContentLoaded', function() {
         bulkDeleteBtn.style.cursor = 'not-allowed';
       }
     }
-    
+
     if (selectionCount) {
       if (count > 0) {
         selectionCount.textContent = count + ' sélectionné(s)';
@@ -766,26 +778,26 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   }
-  
+
   function toggleAll(source) {
     checkboxes.forEach(function(cb) {
       cb.checked = source.checked;
     });
     updateSelectionUI();
   }
-  
+
   if (selectAll) {
     selectAll.addEventListener('change', function() { toggleAll(this); });
   }
-  
+
   if (selectAllHeader) {
     selectAllHeader.addEventListener('change', function() { toggleAll(this); });
   }
-  
+
   checkboxes.forEach(function(cb) {
     cb.addEventListener('change', updateSelectionUI);
   });
-  
+
   if (bulkDeleteForm) {
     bulkDeleteForm.addEventListener('submit', function(e) {
       var checked = document.querySelectorAll('.salary-checkbox:checked');
@@ -794,7 +806,7 @@ document.addEventListener('DOMContentLoaded', function() {
         alert('Veuillez sélectionner au moins un bulletin à supprimer.');
         return false;
       }
-      
+
       if (selectedIdsContainer) {
         selectedIdsContainer.innerHTML = '';
         checked.forEach(function(cb) {
@@ -805,11 +817,11 @@ document.addEventListener('DOMContentLoaded', function() {
           selectedIdsContainer.appendChild(input);
         });
       }
-      
+
       return true;
     });
   }
-  
+
   updateSelectionUI();
 });
 </script>

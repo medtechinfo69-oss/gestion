@@ -6,7 +6,11 @@ if (!defined('APP_INIT')) {
 }
 
 $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-$isLocal = $host === '' || strpos($host, 'localhost') === 0 || strpos($host, '127.0.0.1') === 0;
+$host = preg_replace('/:\d+$/', '', $host); // retire le port éventuel
+// Accès local : localhost, 127.0.0.1 ou toute IP du réseau LAN (poste du même PC ou autre PC du réseau)
+$isLocal = $host === '' || $host === 'localhost' || $host === '127.0.0.1'
+    || filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false
+    || strpos($host, '::1') === 0;
 $configFile = $isLocal ? __DIR__ . '/config.local.php' : __DIR__ . '/config.hosting.php';
 
 if (!is_file($configFile)) {

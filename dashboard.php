@@ -87,22 +87,22 @@ require __DIR__ . '/includes/header.php';
 ?>
 
 <div class="stat-grid">
-  <div class="stat-card tone-total">
+  <div class="stat-card tone-total stat-card--ca">
     <div class="label">Total CA annuel (hors annulés)</div>
     <div class="value"><?= format_montant((float) $stats['total_ca_annuel']) ?></div>
     <div class="hint"><?= (int) $stats['nb_total'] ?> dossier(s) au total</div>
   </div>
-  <div class="stat-card tone-complet">
+  <div class="stat-card tone-complet stat-card--complet">
     <div class="label">Dossiers complets</div>
     <div class="value"><?= (int) $stats['nb_complets'] ?></div>
     <div class="hint">Prêts à être transmis</div>
   </div>
-  <div class="stat-card tone-noncomplet">
+  <div class="stat-card tone-noncomplet stat-card--noncomplet">
     <div class="label">Dossiers non complets</div>
     <div class="value"><?= (int) $stats['nb_non_complets'] ?></div>
     <div class="hint">Pièces manquantes</div>
   </div>
-  <div class="stat-card tone-annule">
+  <div class="stat-card tone-annule stat-card--annule">
     <div class="label">Dossiers annulés</div>
     <div class="value"><?= (int) $stats['nb_annules'] ?></div>
     <div class="hint">Hors calcul du CA</div>

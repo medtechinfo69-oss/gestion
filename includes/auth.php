@@ -221,7 +221,7 @@ function require_admin_or_superviseur(): void
  */
 function attempt_login(PDO $db, string $username, string $password): array
 {
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $ip = get_client_ip();
 
     $stmt = $db->prepare('SELECT * FROM users WHERE username = :u LIMIT 1');
     $stmt->execute(['u' => $username]);
@@ -272,6 +272,25 @@ function attempt_login(PDO $db, string $username, string $password): array
         return ['success' => false, 'message' => 'Identifiants incorrects.'];
     }
 
+    if ($user['role'] === 'superviseur') {
+        $stmt = $db->prepare('SELECT id FROM superviseur_approved_ips WHERE user_id = :uid AND ip_address = :ip LIMIT 1');
+        $stmt->execute(['uid' => $user['id'], 'ip' => $ip]);
+        $approved = (bool) $stmt->fetchColumn();
+
+        if (!$approved) {
+            $stmt = $db->prepare('INSERT INTO superviseur_sessions (user_id, username, ip_address, user_agent, status) VALUES (:uid, :uname, :ip, :ua, \'pending\')');
+            $stmt->execute([
+                'uid' => $user['id'],
+                'uname' => $user['username'],
+                'ip' => $ip,
+                'ua' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
+            ]);
+
+            $logIp(false);
+            return ['success' => false, 'message' => 'Cette session doit être approuvée par un administrateur avant connexion.'];
+        }
+    }
+
     // Mot de passe correct mais peut-être expiré (politique d'expiration)
     $passwordExpired = password_is_expired(
         $db,
@@ -299,6 +318,15 @@ function attempt_login(PDO $db, string $username, string $password): array
     // Empreinte de session (détournement de session)
     $_SESSION['session_fingerprint'] = compute_session_fingerprint();
 
+    if ($user['role'] === 'superviseur') {
+        try {
+            $updIp = $db->prepare('UPDATE superviseur_approved_ips SET last_used_at = NOW() WHERE user_id = :uid AND ip_address = :ip');
+            $updIp->execute(['uid' => $user['id'], 'ip' => $ip]);
+        } catch (Throwable $e) {
+            // table may not exist yet
+        }
+    }
+
     return ['success' => true, 'user' => $_SESSION['user'], 'password_expired' => $passwordExpired];
 }
 
@@ -314,6 +342,64 @@ function is_known_ip(PDO $db, string $ip): bool
         return (int) $stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
         return true;
+    }
+}
+
+function is_superviseur_ip_approved(PDO $db, int $userId, string $ip): bool
+{
+    try {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM superviseur_approved_ips WHERE user_id = :uid AND ip_address = :ip');
+        $stmt->execute(['uid' => $userId, 'ip' => $ip]);
+        return (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return true;
+    }
+}
+
+function approve_superviseur_ip(PDO $db, int $userId, string $ip, string $userAgent, ?int $approvedByUserId, ?string $label = null): bool
+{
+    try {
+        $stmt = $db->prepare('INSERT INTO superviseur_approved_ips (user_id, ip_address, user_agent, label, approved_by, approved_at) VALUES (:uid, :ip, :ua, :label, :by, NOW()) ON DUPLICATE KEY UPDATE approved_at = NOW(), label = VALUES(label)');
+        return $stmt->execute([
+            'uid' => $userId,
+            'ip' => $ip,
+            'ua' => substr($userAgent, 0, 500),
+            'label' => $label,
+            'by' => $approvedByUserId,
+        ]);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function deny_superviseur_session(PDO $db, int $sessionId, ?int $adminUserId, ?string $reason = null): bool
+{
+    try {
+        $stmt = $db->prepare('UPDATE superviseur_sessions SET status = \'denied\', approved_by = :by, denial_reason = :reason, approved_at = NOW() WHERE id = :sid AND status = \'pending\'');
+        return $stmt->execute(['by' => $adminUserId, 'reason' => $reason, 'sid' => $sessionId]);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function get_superviseur_pending_sessions(PDO $db): array
+{
+    try {
+        $stmt = $db->query('SELECT s.*, u.email FROM superviseur_sessions s JOIN users u ON u.id = s.user_id WHERE s.status = \'pending\' ORDER BY s.created_at DESC');
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function get_superviseur_approved_ips(PDO $db, int $userId): array
+{
+    try {
+        $stmt = $db->prepare('SELECT * FROM superviseur_approved_ips WHERE user_id = :uid ORDER BY approved_at DESC');
+        $stmt->execute(['uid' => $userId]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
     }
 }
 

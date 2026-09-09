@@ -1,11 +1,14 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
+require_once __DIR__ . '/includes/security_integration.php';
 require_login();
 
 $user = current_user();
 $isAdmin = is_admin();
 $canAccessAll = can_access_dossiers();
 $hideSupervisorColumns = is_superviseur();
+
+sec_log('view', 'dossier', null, 'Access dossiers list');
 
 // ---------------------------------------------------------------------
 // Filtres
@@ -317,7 +320,7 @@ require __DIR__ . '/includes/header.php';
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
 
-<?php if ($canAccessAll): ?>
+<?php if ($isAdmin): ?>
 <script>
 (function() {
   var userName = <?= json_encode($userName) ?>;

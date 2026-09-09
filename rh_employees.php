@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin_or_superviseur();
+require_admin();
 
 $pageTitle = 'Employés';
 $pageSubtitle = 'Ensemble des salariés enregistrés';
@@ -391,6 +391,7 @@ require __DIR__ . '/includes/header.php';
         <tr>
           <th><a href="<?= e($matriculeSortUrl) ?>" class="table-sort-link">Matricule <?= $sort === 'matricule' ? ($direction === 'ASC' ? '&#9650;' : '&#9660;') : '&#8597;' ?></a></th>
           <th>Nom complet</th>
+          <th>Pseudo</th>
           <th>Poste</th>
           <th>Régime horaire</th>
           <th>Statut</th>
@@ -402,13 +403,14 @@ require __DIR__ . '/includes/header.php';
         <tr class="data-row">
           <td><b><?= e($r['employee_code']) ?></b></td>
           <td><?= e($r['full_name']) ?></td>
+          <td><?= e($r['pseudo'] ?: '—') ?></td>
           <td><?= e($r['position'] ?: '—') ?></td>
           <td><?= format_montant_tnd((float) $r['hourly_rate']) ?></td>
           <td><span class="badge <?= $r['status'] === 'Active' ? 'badge-success' : 'badge-muted' ?>"><?= $r['status'] === 'Active' ? 'Actif' : 'Inactif' ?></span></td>
           <td class="nowrap">
             <a class="btn btn-sm btn-secondary" href="?edit=<?= (int) $r['id'] ?>">Modifier</a>
             <?php if ($isAdmin): ?>
-            <form class="inline" method="post" action="actions/rh_employee_action.php" onsubmit="return confirm('Supprimer définitivement cet employé et tout son historique de salaire ?')">
+            <form class="inline" method="post" action="actions/rh_employee_action.php" data-confirm="Supprimer définitivement cet employé et tout son historique de salaire ?">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
@@ -420,7 +422,7 @@ require __DIR__ . '/includes/header.php';
         <?php endforeach; ?>
         <?php if (!$rows): ?>
         <tr>
-          <td colspan="6">
+          <td colspan="7">
             <div class="empty-state">
               <div class="empty-icon">&#128188;</div>
               Aucun employé ne correspond aux critères.

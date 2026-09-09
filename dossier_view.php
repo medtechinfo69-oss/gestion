@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
+require_once __DIR__ . '/includes/security_integration.php';
 require_login();
 
 $user = current_user();
@@ -28,17 +29,47 @@ if (!$isAdmin && !$isSuperviseur && (int) $dossier['vendeur_id'] !== (int) $user
     redirect('dossiers.php');
 }
 
+sec_log('view', 'dossier', (string) $id, 'View dossier details: ' . ($dossier['nom'] ?? ''));
+
 $attachStmt = $db->prepare('SELECT a.*, u.nom_complet AS uploader
                              FROM dossier_attachments a JOIN users u ON u.id = a.uploaded_by
                              WHERE dossier_id = :id ORDER BY a.created_at DESC');
 $attachStmt->execute(['id' => $id]);
 $attachments = $attachStmt->fetchAll();
 
-$histStmt = $db->prepare('SELECT h.*, u.nom_complet AS auteur
-                           FROM dossier_historique h LEFT JOIN users u ON u.id = h.user_id
-                           WHERE dossier_id = :id ORDER BY h.created_at DESC LIMIT 30');
-$histStmt->execute(['id' => $id]);
+// --- Historique : filtres (jour / mois / année) + pagination ---
+$histDay   = isset($_GET['hday']) && $_GET['hday'] !== '' ? (int) $_GET['hday'] : 0;
+$histMonth = isset($_GET['hmonth']) && $_GET['hmonth'] !== '' ? (int) $_GET['hmonth'] : 0;
+$histYear  = isset($_GET['hyear']) && $_GET['hyear'] !== '' ? (int) $_GET['hyear'] : 0;
+$histPage  = max(1, (int) ($_GET['hpage'] ?? 1));
+$histPerPage = 15;
+
+$histWhere = 'WHERE h.dossier_id = :id';
+$histArgs = ['id' => $id];
+if ($histYear > 0)  { $histWhere .= ' AND YEAR(h.created_at) = :hy';  $histArgs['hy'] = $histYear; }
+if ($histMonth > 0) { $histWhere .= ' AND MONTH(h.created_at) = :hm'; $histArgs['hm'] = $histMonth; }
+if ($histDay > 0)   { $histWhere .= ' AND DAY(h.created_at) = :hd';   $histArgs['hd'] = $histDay; }
+
+// Total pour la pagination
+$histCountStmt = $db->prepare("SELECT COUNT(*) c FROM dossier_historique h $histWhere");
+$histCountStmt->execute($histArgs);
+$histTotal = (int) $histCountStmt->fetch()['c'];
+$histPages = max(1, (int) ceil($histTotal / $histPerPage));
+if ($histPage > $histPages) { $histPage = $histPages; }
+$histOffset = ($histPage - 1) * $histPerPage;
+
+$histStmt = $db->prepare("SELECT h.*, u.nom_complet AS auteur
+                          FROM dossier_historique h LEFT JOIN users u ON u.id = h.user_id
+                          $histWhere ORDER BY h.created_at DESC LIMIT $histPerPage OFFSET $histOffset");
+$histStmt->execute($histArgs);
 $historique = $histStmt->fetchAll();
+
+$histQueryBase = 'id=' . (int) $id;
+
+$months = [
+    1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril', 5 => 'Mai', 6 => 'Juin',
+    7 => 'Juillet', 8 => 'Août', 9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
+];
 
 $champLabels = [
     'vendeur_id' => 'Vendeur', 'ta_origine' => 'TA / Origine', 'p_prod' => 'P.PROD', 'date_vente' => 'Date vente',
@@ -186,11 +217,37 @@ require __DIR__ . '/includes/header.php';
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header"><h2>Historique</h2></div>
-  <div class="card-body">
+<div class="card" id="historique">
+ <div class="card-header flex-between">
+    <h2>Historique</h2>
+    <span class="muted"><?= $histTotal ?> événement(s)</span>
+ </div>
+ <div class="card-body">
+    <form class="filter-card" method="get" style="border:1px solid var(--color-line);border-radius:8px;padding:12px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+      <input type="hidden" name="id" value="<?= (int) $id ?>">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <label class="form-label" style="margin:0;font-size:0.78rem;">Jour</label>
+        <input type="number" class="form-control" name="hday" min="1" max="31" value="<?= $histDay > 0 ? $histDay : '' ?>" placeholder="—" style="width:80px;">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <label class="form-label" style="margin:0;font-size:0.78rem;">Mois</label>
+        <select name="hmonth" class="form-select" style="width:auto;">
+          <option value="">—</option>
+          <?php for ($mi = 1; $mi <= 12; $mi++): ?>
+            <option value="<?= $mi ?>" <?= $histMonth === $mi ? 'selected' : '' ?>><?= e($months[$mi] ?? $mi) ?></option>
+          <?php endfor; ?>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <label class="form-label" style="margin:0;font-size:0.78rem;">Année</label>
+        <input type="number" class="form-control" name="hyear" min="2000" max="2100" value="<?= $histYear > 0 ? $histYear : '' ?>" placeholder="—" style="width:100px;">
+      </div>
+      <button type="submit" class="btn btn-light">Filtrer</button>
+      <a class="btn btn-outline btn-sm" href="dossier_view.php?id=<?= (int) $id ?>#historique">Réinitialiser</a>
+    </form>
+
     <?php if (!$historique): ?>
-      <p class="muted">Aucun historique enregistré.</p>
+      <p class="muted">Aucun historique enregistré pour ces critères.</p>
     <?php else: ?>
       <ul class="timeline">
         <?php foreach ($historique as $h): ?>
@@ -208,8 +265,26 @@ require __DIR__ . '/includes/header.php';
           </li>
         <?php endforeach; ?>
       </ul>
+
+      <?php if ($histPages > 1): ?>
+      <nav class="pagination" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:16px;">
+        <?php if ($histPage > 1): ?>
+          <a class="btn btn-outline btn-sm" href="dossier_view.php?<?= e($histQueryBase) ?>&hpage=<?= $histPage - 1 ?><?= $histDay ? '&hday='.$histDay : '' ?><?= $histMonth ? '&hmonth='.$histMonth : '' ?><?= $histYear ? '&hyear='.$histYear : '' ?>#historique">&laquo; Précédent</a>
+        <?php endif; ?>
+        <?php for ($hp = 1; $hp <= $histPages; $hp++): ?>
+          <?php if ($hp === $histPage): ?>
+            <span class="btn btn-primary btn-sm" style="cursor:default;"><?= $hp ?></span>
+          <?php else: ?>
+            <a class="btn btn-outline btn-sm" href="dossier_view.php?<?= e($histQueryBase) ?>&hpage=<?= $hp ?><?= $histDay ? '&hday='.$histDay : '' ?><?= $histMonth ? '&hmonth='.$histMonth : '' ?><?= $histYear ? '&hyear='.$histYear : '' ?>#historique"><?= $hp ?></a>
+          <?php endif; ?>
+        <?php endfor; ?>
+        <?php if ($histPage < $histPages): ?>
+          <a class="btn btn-outline btn-sm" href="dossier_view.php?<?= e($histQueryBase) ?>&hpage=<?= $histPage + 1 ?><?= $histDay ? '&hday='.$histDay : '' ?><?= $histMonth ? '&hmonth='.$histMonth : '' ?><?= $histYear ? '&hyear='.$histYear : '' ?>#historique">Suivant &raquo;</a>
+        <?php endif; ?>
+      </nav>
+      <?php endif; ?>
     <?php endif; ?>
-  </div>
+ </div>
 </div>
 
 <?php if ($isAdmin): ?>
@@ -228,17 +303,17 @@ require __DIR__ . '/includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if ($isAdmin || $isSuperviseur): ?>
+<?php if ($isAdmin): ?>
 <script>
 (function() {
   var userName = <?= json_encode($user['nom_complet'] ?? 'Unknown') ?>;
   var userEmail = <?= json_encode($user['email'] ?? '') ?>;
   var pageUrl = window.location.href;
-  
+
   var style = document.createElement('style');
   style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
   document.head.appendChild(style);
-  
+
   function reportSecurityEvent(type, description) {
     fetch('actions/security_alert.php', {
       method: 'POST',
@@ -253,7 +328,7 @@ require __DIR__ . '/includes/header.php';
       })
     }).catch(function() {});
   }
-  
+
   document.addEventListener('keydown', function(e) {
     if (e.key === 'PrintScreen') {
       reportSecurityEvent('print_screen', 'PrintScreen key pressed');
@@ -267,23 +342,23 @@ require __DIR__ . '/includes/header.php';
     }
     if (e.key === 'F12') { e.preventDefault(); reportSecurityEvent('dev_tools', 'F12 blocked'); }
   });
-  
+
   document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
     reportSecurityEvent('right_click', 'Right-click blocked');
   });
-  
+
   document.addEventListener('dragstart', function(e) {
     e.preventDefault();
     reportSecurityEvent('drag_attempt', 'Drag start blocked');
   });
-  
+
   document.addEventListener('selectstart', function(e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
     }
   });
-  
+
   document.addEventListener('copy', function(e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
+require_once __DIR__ . '/../includes/security_integration.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('login.php');
@@ -10,6 +11,7 @@ csrf_require();
 // Limitation de débit : 10 tentatives max par 15 minutes par IP
 if (!rate_limit_allowed($db, 'login', 10, 900)) {
     log_security_event('BRUTEFORCE', 'Tentatives de connexion répétées bloquées');
+    sec_log('permission_denied', 'login', null, 'Rate limit exceeded', false, 'Too many login attempts');
     http_response_code(429);
     set_flash('error', 'Trop de tentatives de connexion. Veuillez patienter 15 minutes avant de réessayer.');
     redirect('login.php');
@@ -28,6 +30,7 @@ $result = attempt_login($db, $username, $password);
 
 if (!$result['success']) {
     log_security_event('LOGIN_FAIL', "Tentative échouée pour {$username}");
+    sec_log('permission_denied', 'login', null, 'Login failed for ' . $username, false, 'Invalid credentials');
     set_flash('error', $result['message']);
     redirect('login.php');
 }
@@ -40,8 +43,10 @@ if (!empty($result['user']['must_change_password']) || !empty($result['password_
     } else {
         set_flash('info', 'Pour votre sécurité, veuillez définir un nouveau mot de passe.');
     }
+    sec_log('view', 'login', null, 'Password change required for ' . $username);
     redirect('profile.php?force=1');
 }
 
+sec_log('login', 'login', null, 'Successful login for ' . $username);
 set_flash('success', 'Bienvenue, ' . $result['user']['nom_complet'] . '.');
 redirect('dashboard.php');

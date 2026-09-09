@@ -14,10 +14,17 @@ $startDate = sprintf('%04d-%02d-01', $year, $month);
 $nextMonth = $month === 12 ? 1 : $month + 1;
 $nextYear = $month === 12 ? $year + 1 : $year;
 $nextMonthStartDate = sprintf('%04d-%02d-01', $nextYear, $nextMonth);
+// Un dossier compte dans la prime du mois de production (date_vente) uniquement
+// s'il est complet/annulé au plus tard le 05 du mois qui suit le mois de production.
 $cutoffDate = sprintf('%04d-%02d-05', $nextYear, $nextMonth);
 
+// Dossiers vendus pendant le mois de production (date_vente entre le 1er et le dernier jour du mois)
+// retenus seulement si complet (date_dossier_complet) au plus tard le 05 du mois suivant.
+// Un dossier complet après le 05 du mois suivant (ou sans date de validation) n'entre PAS dans la prime.
+// Les dossiers annulés (etat_contrat <> Actif) dont l'annulation est confirmée au plus tard le 05
+// du mois suivant sont déduits du CA éligible, quelle que soit la validation.
 $stmt = $db->prepare(
-  'SELECT u.id AS vendeur_id, u.nom_complet AS vendeur,
+   'SELECT u.id AS vendeur_id, u.nom_complet AS vendeur,
           COALESCE(SUM(CASE WHEN d.etat_dossier = :complete_status_1 AND d.date_dossier_complet IS NOT NULL
                              AND d.date_vente >= :production_start_1 AND d.date_vente < :production_end_1
                              AND d.date_dossier_complet <= :cutoff_date_1
@@ -63,7 +70,7 @@ require __DIR__ . '/includes/header.php';
   <div class="card-head">
     <h2>Prime</h2>
     <div class="d-flex gap-8 flex-wrap">
-      <span class="muted">Validation prise en compte jusqu’au 5 du mois suivant</span>
+      <span class="muted">Validation au plus tard le <?= e(sprintf('%02d/%02d/%04d', 5, $nextMonth, $nextYear)) ?> (production <?= e($months[$month]) ?> <?= e($year) ?>)</span>
     </div>
   </div>
   <div class="table-wrap" style="padding:0 0 0;">

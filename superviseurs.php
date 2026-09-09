@@ -9,11 +9,77 @@ $stmt = $db->prepare("SELECT id, username, nom_complet, email, is_active
 $stmt->execute();
 $superviseurs = $stmt->fetchAll();
 
+$pendingSessions = [];
+try {
+    $stmt = $db->query('SELECT s.*, u.email FROM superviseur_sessions s JOIN users u ON u.id = s.user_id WHERE s.status = \'pending\' ORDER BY s.created_at DESC');
+    $pendingSessions = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $pendingSessions = [];
+}
+
+$approvedIps = [];
+foreach ($superviseurs as $s) {
+    try {
+        $stmt = $db->prepare('SELECT * FROM superviseur_approved_ips WHERE user_id = :uid ORDER BY approved_at DESC');
+        $stmt->execute(['uid' => $s['id']]);
+        $approvedIps[$s['id']] = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        $approvedIps[$s['id']] = [];
+    }
+}
+
 $pageTitle = 'Superviseurs';
 $pageSubtitle = 'Gérer les superviseurs';
 $activePage = 'superviseurs';
 require __DIR__ . '/includes/header.php';
 ?>
+
+<?php if ($pendingSessions): ?>
+<div class="card mb-16" style="border-left: 4px solid #f59e0b;">
+  <div class="card-header">
+    <h2>Demandes de session en attente</h2>
+    <span class="badge badge-warning"><?= count($pendingSessions) ?></span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Superviseur</th>
+          <th>Adresse IP</th>
+          <th>Navigateur</th>
+          <th>Date</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($pendingSessions as $session): ?>
+        <tr>
+          <td><?= e($session['username']) ?></td>
+          <td><code><?= e($session['ip_address']) ?></code></td>
+          <td><?= e(substr($session['user_agent'], 0, 60)) ?></td>
+          <td><?= date('d/m/Y H:i', strtotime($session['created_at'])) ?></td>
+          <td class="text-center">
+            <form method="post" action="<?= e(APP_URL) ?>/actions/superviseur_session_action.php" style="display:inline;">
+              <?= csrf_field() ?>
+              <input type="hidden" name="session_id" value="<?= (int) $session['id'] ?>">
+              <input type="hidden" name="action" value="approve">
+              <button type="submit" class="btn btn-success btn-sm">Approuver</button>
+            </form>
+            <form method="post" action="<?= e(APP_URL) ?>/actions/superviseur_session_action.php" style="display:inline;" onsubmit="var r=prompt('Motif du refus :'); if(r===null){return false;} this.querySelector('input[name=reason]').value=r;">
+              <?= csrf_field() ?>
+              <input type="hidden" name="session_id" value="<?= (int) $session['id'] ?>">
+              <input type="hidden" name="action" value="deny">
+              <input type="hidden" name="reason" value="">
+              <button type="submit" class="btn btn-danger btn-sm">Refuser</button>
+            </form>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
 
 <div class="card mb-16">
   <div class="card-header">
@@ -34,6 +100,7 @@ require __DIR__ . '/includes/header.php';
           <th>Identifiant</th>
           <th>E-mail</th>
           <th>Statut</th>
+          <th>IPs approuvées</th>
           <th class="text-center">Actions</th>
         </tr>
       </thead>
@@ -44,6 +111,28 @@ require __DIR__ . '/includes/header.php';
           <td><?= e($s['username']) ?></td>
           <td><?= e($s['email'] ?? '—') ?></td>
           <td><?= $s['is_active'] ? 'Actif' : 'Inactif' ?></td>
+          <td>
+            <?php if (!empty($approvedIps[$s['id']])): ?>
+              <?php foreach ($approvedIps[$s['id']] as $ip): ?>
+                <div style="margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                  <div>
+                    <code><?= e($ip['ip_address']) ?></code>
+                    <?php if (!empty($ip['label'])): ?><span class="muted">(<?= e($ip['label']) ?>)</span><?php endif; ?>
+                    <br><span class="muted" style="font-size:0.75rem;"><?= date('d/m/Y H:i', strtotime($ip['approved_at'])) ?></span>
+                  </div>
+                  <form action="<?= e(APP_URL) ?>/actions/superviseur_ip_delete.php" method="post"
+                        data-confirm="Supprimer l'IP <?= e($ip['ip_address']) ?> ? Le superviseur devra redemander une approbation pour cette adresse."
+                        style="display:inline;margin-left:auto;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int) $ip['id'] ?>">
+                    <button type="submit" class="btn btn-danger btn-sm" title="Supprimer cette IP" aria-label="Supprimer cette IP">&times;</button>
+                  </form>
+                </div>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <span class="muted">Aucune</span>
+            <?php endif; ?>
+          </td>
           <td class="text-center">
             <button type="button" class="btn btn-outline btn-sm" data-superviseur-edit
               data-id="<?= (int) $s['id'] ?>"

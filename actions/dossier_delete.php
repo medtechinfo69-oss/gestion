@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
+require_once __DIR__ . '/../includes/security_integration.php';
 require_admin();
 csrf_require();
 
@@ -23,10 +24,13 @@ try {
     $del = $db->prepare('DELETE FROM dossiers WHERE id = :id');
     $del->execute(['id' => $id]);
     $db->commit();
+    
+    sec_log('delete', 'dossier', (string) $id, 'Deleted dossier: ' . ($dossier['nom'] ?? ''));
 } catch (PDOException $e) {
     $db->rollBack();
     error_log('dossier_delete error: ' . $e->getMessage());
     set_flash('error', 'Impossible de supprimer ce dossier.');
+    sec_log('permission_denied', 'dossier', (string) $id, 'Delete failed: ' . $e->getMessage(), false, 'Database error');
     redirect('dossier_view.php?id=' . $id);
 }
 

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin_or_superviseur();
+require_admin();
 
 $user = current_user();
 $isAdmin = is_admin();
@@ -36,6 +36,17 @@ foreach ($stmt->fetchAll() as $r) {
   $hoursByMonth[(int) $r['month']] = (float) $r['hours'];
 }
 
+// Séries d'assiduité réelles, issues de salary_records (comme rh_salaries.php) :
+// absences non justifiées (jours) et retards, cumulés par mois sur l'année.
+$absenceByMonth = array_fill(1, 12, 0.0);
+$lateByMonth = array_fill(1, 12, 0);
+$stmt = $db->prepare('SELECT month, SUM(unjustified_absence_days) abs_days, SUM(late_count) lates FROM salary_records WHERE year=:y GROUP BY month ORDER BY month');
+$stmt->execute(['y' => $year]);
+foreach ($stmt->fetchAll() as $r) {
+  $absenceByMonth[(int) $r['month']] = (float) $r['abs_days'];
+  $lateByMonth[(int) $r['month']] = (int) $r['lates'];
+}
+
 $maxSalary = max(array_values($salaryByMonth));
 $maxSalaryMonth = (int) array_search($maxSalary, $salaryByMonth, true);
 $minSalary = min(array_values($salaryByMonth));
@@ -45,18 +56,12 @@ $maxHoursMonth = (int) array_search($maxHours, $hoursByMonth, true);
 $minHours = min(array_values($hoursByMonth));
 $minHoursMonth = (int) array_search($minHours, $hoursByMonth, true);
 
-$recentEmployees = [];
-if ($isAdmin) {
-  $stmt = $db->query('SELECT * FROM employees ORDER BY created_at DESC LIMIT 8');
-  $recentEmployees = $stmt->fetchAll();
-}
 
 require __DIR__ . '/includes/header.php';
 ?>
 
 <div class="stats-grid">
   <div class="stat-card stat-card--accent">
-    <div class="stat-accent"></div>
     <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16.5 18.5v-1a3.5 3.5 0 0 0-3.5-3.5H9A3.5 3.5 0 0 0 5.5 17.5v1"/><circle cx="12" cy="8" r="3.2"/><path d="M18.5 10.2a2.7 2.7 0 0 1 0 5.4"/><path d="M5.5 10.2a2.7 2.7 0 0 0 0 5.4"/></svg></div>
     <div class="stat-content">
       <span class="stat-label">Total employés</span>
@@ -64,7 +69,6 @@ require __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="stat-card stat-card--secondary">
-    <div class="stat-accent"></div>
     <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1v23M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
     <div class="stat-content">
       <span class="stat-label">Salaires du mois</span>
@@ -72,7 +76,6 @@ require __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="stat-card stat-card--success">
-    <div class="stat-accent"></div>
     <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
     <div class="stat-content">
       <span class="stat-label">Heures travaillées</span>
@@ -80,7 +83,6 @@ require __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="stat-card stat-card--accent">
-    <div class="stat-accent"></div>
     <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
     <div class="stat-content">
       <span class="stat-label">Moyenne / salarié</span>
@@ -136,42 +138,34 @@ require __DIR__ . '/includes/header.php';
       <div class="metric"><span class="metric-label">Mois minimum</span><strong class="metric-value"><?= format_nombre($minHours) ?> h</strong><span class="metric-sub"><?= e($months[$minHoursMonth]) ?></span></div>
     </div>
   </section>
-</div>
 
-<div class="card">
-  <div class="card-header">
-    <h2>Derniers employés ajoutés</h2>
-    <a href="<?= e(APP_URL) ?>/rh_employees.php" class="btn btn-outline btn-sm">Voir tous les employés</a>
-  </div>
-  <div class="table-wrap">
-    <?php if (!$recentEmployees): ?>
-      <div class="empty-state">
-        <div class="ico">&#128188;</div>
-        <p>Aucun employé pour le moment.</p>
+  <?php
+  $attendanceSeries = [
+    ['id' => 'absenceChart', 'title' => 'Absences non justifiées', 'unit' => 'jours', 'class' => 'primary', 'values' => $absenceByMonth],
+    ['id' => 'lateChart', 'title' => 'Retards', 'unit' => 'retards', 'class' => 'secondary', 'values' => $lateByMonth],
+  ];
+  foreach ($attendanceSeries as $series):
+    $values = array_values($series['values']);
+    $peakMonth = (int) array_search(max($values), $values, true) + 1;
+    $lowestMonth = (int) array_search(min($values), $values, true) + 1;
+  ?>
+  <section class="chart-card chart-card--<?= e($series['class']) ?>">
+    <div class="chart-card-header">
+      <div class="chart-title-group">
+        <h2 class="chart-title"><?= e($series['title']) ?></h2>
+        <div class="chart-subtitle"><?= e($year) ?> · <?= e($series['unit']) ?> par mois (données bulletins)</div>
       </div>
-    <?php else: ?>
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Matricule</th>
-          <th>Nom complet</th>
-          <th>Poste</th>
-          <th>Statut</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($recentEmployees as $e): ?>
-        <tr>
-          <td><b><?= e($e['employee_code']) ?></b></td>
-          <td><?= e($e['full_name']) ?></td>
-          <td><?= e($e['position'] ?: '—') ?></td>
-          <td><span class="badge <?= $e['status'] === 'Active' ? 'badge-success' : 'badge-muted' ?>"><?= $e['status'] === 'Active' ? 'Actif' : 'Inactif' ?></span></td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-    <?php endif; ?>
-  </div>
+      <span class="chart-badge"><?= e($year) ?></span>
+    </div>
+    <div class="chart-canvas-wrapper"><canvas id="<?= e($series['id']) ?>" data-static-attendance data-values='<?= json_encode($values) ?>' data-labels='<?= json_encode(array_values($months)) ?>' role="img" aria-label="<?= e($series['title']) ?> par mois en <?= e($series['unit']) ?>"><?= e(implode(', ', $values)) ?></canvas></div>
+    <div class="chart-metrics">
+      <div class="metric"><span class="metric-label">Total annuel</span><strong class="metric-value"><?= array_sum($values) + 0 ?> <?= e($series['unit']) ?></strong></div>
+      <div class="metric"><span class="metric-label">Moyenne / mois</span><strong class="metric-value"><?= format_nombre(array_sum($values) / 12) ?></strong></div>
+      <div class="metric"><span class="metric-label">Pic mensuel</span><strong class="metric-value"><?= max($values) + 0 ?></strong><span class="metric-sub"><?= e($months[$peakMonth]) ?></span></div>
+      <div class="metric"><span class="metric-label">Mois minimum</span><strong class="metric-value"><?= min($values) + 0 ?></strong><span class="metric-sub"><?= e($months[$lowestMonth]) ?></span></div>
+    </div>
+  </section>
+  <?php endforeach; ?>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

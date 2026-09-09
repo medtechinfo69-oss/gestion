@@ -12,6 +12,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/security_integration.php';
+require_once __DIR__ . '/SecurityDashboard.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/mailer.php';
 

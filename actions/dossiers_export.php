@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
+require_once __DIR__ . '/../includes/security_integration.php';
 require_admin();
 
 function export_xml(string $value): string
@@ -159,3 +160,6 @@ clearstatcache(true, $temporaryFile);
 header('Content-Length: ' . filesize($temporaryFile));
 readfile($temporaryFile);
 unlink($temporaryFile);
+
+sec_log('export', 'dossier', null, 'Exported dossiers: ' . count($rows) . ' rows', true);
+exit;

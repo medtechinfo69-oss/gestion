@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
+require_once __DIR__ . '/../includes/security_integration.php';
 require_dossier_access();
 csrf_require();
 
@@ -14,6 +15,7 @@ if ($isEdit) {
     $existing = $stmt->fetch();
     if (!$existing) {
         set_flash('error', 'Dossier introuvable.');
+        sec_log('permission_denied', 'dossier', (string) $id, 'Attempt to edit non-existent dossier', false, 'Dossier not found');
         redirect('dossiers.php');
     }
 }
@@ -187,13 +189,18 @@ try {
     }
 
     $db->commit();
+    
+    $action = $isEdit ? 'update' : 'create';
+    sec_log($action, 'dossier', (string) $id, ($isEdit ? 'Updated' : 'Created') . ' dossier: ' . ($data['nom'] ?? ''));
 } catch (PDOException $e) {
     $db->rollBack();
     if ((int) $e->getCode() === 23000) {
         set_flash('error', 'Ce numéro de portable existe déjà pour un autre dossier.');
+        sec_log('permission_denied', 'dossier', null, 'Duplicate phone number', false, 'Duplicate entry');
     } else {
         error_log('dossier_save error: ' . $e->getMessage());
         set_flash('error', 'Une erreur est survenue lors de l’enregistrement du dossier.');
+        sec_log('permission_denied', 'dossier', null, 'Save failed: ' . $e->getMessage(), false, 'Database error');
     }
     $_SESSION['form_data'] = $data;
     redirect('dossier_form.php' . ($isEdit ? ('?id=' . $id) : ''));

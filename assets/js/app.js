@@ -75,39 +75,57 @@
       el.addEventListener('click', function (e) {
         var msg = el.getAttribute('data-confirm') || 'Confirmez-vous cette action ?';
         e.preventDefault();
+        var isDanger = !!(el.classList.contains('btn-danger') || (el.querySelector && el.querySelector('.btn-danger')));
         showConfirm(msg, function () {
-          if (el.tagName === 'FORM') el.submit();
-          else if (el.form) el.form.submit();
-          else window.location.href = el.href;
-        });
+          var target = el.getAttribute('data-confirm-target');
+          if (target) {
+            var form = document.getElementById(target);
+            if (form) {
+              if (form.requestSubmit) form.requestSubmit(); else form.submit();
+            }
+            return;
+          }
+          if (el.tagName === 'FORM') { if (el.requestSubmit) el.requestSubmit(); else el.submit(); }
+          else if (el.form) { if (el.form.requestSubmit) el.form.requestSubmit(); else el.form.submit(); }
+          else if (el.href) window.location.href = el.href;
+        }, isDanger);
       });
     });
   }
 
-  function showConfirm(message, onConfirm) {
+  function showConfirm(message, onConfirm, isDanger) {
     var overlay = document.createElement('div');
-    overlay.className = 'confirm-modal';
+    overlay.className = 'confirm-modal confirm-modal--anim';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
-    overlay.innerHTML = '<div class="confirm-dialog">' +
+    var danger = isDanger ? ' confirm-dialog--danger' : '';
+    overlay.innerHTML = '<div class="confirm-dialog' + danger + '">' +
+      '<div class="confirm-icon" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>' +
+      '</div>' +
       '<h2>Confirmer l’action</h2>' +
       '<p>' + escapeHtml(message) + '</p>' +
       '<div class="confirm-actions"><button type="button" class="btn btn-outline" data-confirm-cancel>Annuler</button>' +
-      '<button type="button" class="btn btn-danger" data-confirm-submit>Confirmer</button></div>' +
+      '<button type="button" class="btn ' + (isDanger ? 'btn-danger' : 'btn-primary') + '" data-confirm-submit>Confirmer</button></div>' +
       '</div>';
     document.body.appendChild(overlay);
+    requestAnimationFrame(function () { overlay.classList.add('confirm-modal--open'); });
     var cancel = overlay.querySelector('[data-confirm-cancel]');
     var submit = overlay.querySelector('[data-confirm-submit]');
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKeydown); }
+    function close() {
+      overlay.classList.remove('confirm-modal--open');
+      setTimeout(function () { overlay.remove(); }, 160);
+      document.removeEventListener('keydown', onKeydown);
+    }
     function onKeydown(e) {
       if (e.key === 'Escape') close();
       if (e.key === 'Enter') submit.click();
     }
     cancel.addEventListener('click', close);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-    submit.addEventListener('click', function () { close(); onConfirm(); });
+    submit.addEventListener('click', function () { document.removeEventListener('keydown', onKeydown); onConfirm(); });
     document.addEventListener('keydown', onKeydown);
-    submit.focus();
+    cancel.focus();
   }
 
   function escapeHtml(value) {
@@ -492,7 +510,8 @@
   function initRhDashboardCharts() {
     var salaryCanvas = document.getElementById('salaryChart');
     var hoursCanvas = document.getElementById('hoursChart');
-    if (!salaryCanvas && !hoursCanvas) return;
+    var attendanceCanvases = document.querySelectorAll('[data-static-attendance]');
+    if (!salaryCanvas && !hoursCanvas && !attendanceCanvases.length) return;
 
     var salaryData = salaryCanvas ? JSON.parse(salaryCanvas.getAttribute('data-values') || '[]') : [];
     var hoursData = hoursCanvas ? JSON.parse(hoursCanvas.getAttribute('data-values') || '[]') : [];
@@ -600,6 +619,19 @@
         drawChart(hoursCanvas, hoursData, 'turquoise-gradient', 'rgba(10,159,173,0.16)', monthLabels);
       });
     }
+
+    attendanceCanvases.forEach(function (canvas) {
+      var data = JSON.parse(canvas.getAttribute('data-values') || '[]');
+      var labels = JSON.parse(canvas.getAttribute('data-labels') || '[]');
+      if (!data.length) return;
+      var isAbsence = canvas.id === 'absenceChart';
+      function renderAttendance() {
+        drawChart(canvas, data, isAbsence ? '#012B5E' : 'turquoise-gradient',
+          isAbsence ? 'rgba(1,43,94,0.14)' : 'rgba(10,159,173,0.16)', labels);
+      }
+      renderAttendance();
+      window.addEventListener('resize', renderAttendance);
+    });
   }
 
   /** Gère l’ouverture/fermeture du formulaire de saisie manuelle d'un salaire. */
