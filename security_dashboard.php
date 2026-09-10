@@ -29,11 +29,6 @@ require __DIR__ . '/includes/header.php';
       <div class="security-stat-label">Adresse IP du PC connecté</div>
       <div class="security-stat-detail">Adresse réelle de l'ordinateur qui consulte cette page</div>
     </div>
-    <div class="security-stat-card">
-      <div class="security-stat-value" style="font-size:1.3rem;word-break:break-all;"><?= e($_SERVER['SERVER_ADDR'] ?? '127.0.0.1') ?></div>
-      <div class="security-stat-label">Adresse IP du serveur</div>
-      <div class="security-stat-detail">Machine hébergeant l'application</div>
-    </div>
   </div>
 </div>
 <div class="content-card">
@@ -94,58 +89,6 @@ require __DIR__ . '/includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="content-card">
-  <div class="card-head">
-    <h2>Événements récents</h2>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Date/Heure</th>
-          <th>Utilisateur</th>
-          <th>Action</th>
-          <th>Ressource</th>
-          <th>Description</th>
-          <th>IP</th>
-          <th>Accès</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($recentEvents as $event): ?>
-        <tr class="data-row">
-          <td><?= date('d/m/Y H:i:s', strtotime($event['created_at'])) ?></td>
-          <td><?= e($event['username']) ?></td>
-          <td><span class="badge badge-<?= $event['action_type'] === 'permission_denied' ? 'danger' : ($event['action_type'] === 'export' ? 'warning' : 'info') ?>">
-            <?= e($event['action_type']) ?>
-          </span></td>
-          <td><?= e($event['resource_type']) ?></td>
-          <td><?= e($event['resource_description'] ?? $event['request_url']) ?></td>
-          <td><?= e($event['ip_address']) ?></td>
-          <td>
-            <?php if ($event['access_granted']): ?>
-              <span class="badge badge-success">Autorisé</span>
-            <?php else: ?>
-              <span class="badge badge-danger">Refusé</span>
-              <div style="font-size: 12px; color: #666;"><?= e($event['denial_reason']) ?></div>
-            <?php endif; ?>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-        <?php if (!$recentEvents): ?>
-        <tr>
-          <td colspan="7">
-            <div class="empty-state">
-              <div class="empty-icon">&#128274;</div>
-              Aucun événement de sécurité récent.
-            </div>
-          </td>
-        </tr>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-</div>
 </main>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

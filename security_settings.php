@@ -1,4 +1,5 @@
 <?php
+http://localhost/gestion-dossiers-new/rh_dashboard.php<?php
 require_once __DIR__ . '/includes/init.php';
 require_admin();
 
@@ -15,7 +16,6 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
     
-    $allowSupervisorExports = isset($_POST['allow_supervisor_exports']) ? 1 : 0;
     $alertOnBulkExport = isset($_POST['alert_on_bulk_export']) ? 1 : 0;
     $alertOnMultipleLogins = isset($_POST['alert_on_multiple_logins']) ? 1 : 0;
     $logSecurityEvents = isset($_POST['log_security_events']) ? 1 : 0;
@@ -28,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rateLimitWindow = (int) ($_POST['rate_limit_window'] ?? 900);
     $rateLimitMaxRequests = (int) ($_POST['rate_limit_max_requests'] ?? 100);
     
-    $security->updateSetting('allow_supervisor_exports', $allowSupervisorExports, current_user()['id']);
     $security->updateSetting('alert_on_bulk_export', $alertOnBulkExport, current_user()['id']);
     $security->updateSetting('alert_on_multiple_logins', $alertOnMultipleLogins, current_user()['id']);
     $security->updateSetting('log_security_events', $logSecurityEvents, current_user()['id']);
@@ -109,10 +108,10 @@ require __DIR__ . '/includes/header.php';
       </label>
       
       <div class="security-form-row">
-        <input type="checkbox" name="allow_supervisor_exports" value="1" id="allow_supervisor_exports" <?= $settings['allow_supervisor_exports'] ? 'checked' : '' ?>>
-        <label for="allow_supervisor_exports">Autoriser les exports pour les superviseurs</label>
       </div>
       
+
+
       <div class="security-section-title">Alertes et notifications</div>
       
       <div class="security-form-row">

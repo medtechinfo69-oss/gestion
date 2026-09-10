@@ -173,6 +173,49 @@ if ($isAdmin) {
 require __DIR__ . '/includes/header.php';
 ?>
 
+<style>
+  /* Les colonnes "Etat du dossier" et "Etat du contrat" doivent afficher
+     le texte intégral (sans "…"). Règles déclarées après la feuille de
+     style globale : elles l'emportent sur la troncature à 20ch. */
+  table.data-table--wide thead th.col-etat,
+  table.data-table--wide tbody td.col-etat {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  table.data-table--wide tbody td.col-etat .badge {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  /* Filtres : même traitement que la zone de filtres de l'historique RH
+     (hauteur uniforme 42px + liste déroulante confortable avec défilement). */
+  .toolbar select,
+  .toolbar input[type=search],
+  .toolbar input[type=date] {
+    height: 42px;
+    box-sizing: border-box;
+  }
+  .toolbar .form-group.toolbar-action .btn {
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    justify-content: center;
+  }
+  .toolbar select option {
+    padding: 6px 8px;
+  }
+  .toolbar select {
+    min-width: 150px;
+  }
+</style>
+
 <div class="card">
   <form class="toolbar" method="get" action="">
     <div class="form-group">
@@ -242,18 +285,15 @@ require __DIR__ . '/includes/header.php';
         <p>Aucun dossier ne correspond à ces critères.</p>
       </div>
     <?php else: ?>
-    <table class="data-table">
+    <table class="data-table data-table--wide">
       <thead>
         <tr>
           <?php if ($isAdmin): ?><th class="selection-cell"><input type="checkbox" data-select-all aria-label="Sélectionner tous les dossiers affichés"></th><?php endif; ?>
           <th>Vendeur</th><th>Origine</th><th>Prod</th>
           <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th>Civilité</th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
-          <?php if (!$hideSupervisorColumns): ?><th>Mail</th><th>Téléphone 1</th><th>Téléphone 2</th><th>NB d'assurés</th><th>Date naissance assuré</th><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><th>Age assuré principal</th><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><th>Adresse</th><th>CP</th><th>Ville</th><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><th>Type de signature</th>
-          <th class="text-right"><?= sort_link('ca_mois', 'CA-mois', $sort, $dir) ?></th><th class="text-right">CA-annuel</th><?php endif; ?><th>Date d'effet</th><?php if (!$hideSupervisorColumns): ?><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
-          <th>Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th>Etat du contrat</th><th>Contrôle qualité</th>
+          <th>Date d'effet</th>
+          <?php if (!$hideSupervisorColumns): ?><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
+          <th class="col-etat">Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th class="col-etat">Etat du contrat</th><th>Contrôle qualité</th>
           <th></th>
         </tr>
       </thead>
@@ -264,12 +304,9 @@ require __DIR__ . '/includes/header.php';
           <td><?= e($d['vendeur_nom']) ?></td><td><?= e($d['ta_origine']) ?></td><td><?= e($d['p_prod']) ?></td>
           <td class="nowrap"><?= format_date($d['date_vente']) ?></td><td><?= e($d['civilite']) ?></td>
           <td><a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>"><?= e($d['nom']) ?></a></td><td><?= e($d['prenom']) ?></td>
-          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['mail']) ?></td><td><?= e($d['telfix']) ?></td><td><?= e($d['portable']) ?></td><td><?= (int) $d['nombre_personnes'] ?></td><td><?= e($d['date_naissance_assure']) ?></td><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['age_assure_principal']) ?></td><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['adresse']) ?></td><td><?= e($d['cp']) ?></td><td><?= e($d['ville']) ?></td><?php endif; ?>
-          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['type_signature']) ?></td>
-          <td class="text-right nowrap"><?= format_montant((float) $d['ca_mois']) ?></td><td class="text-right nowrap"><?= format_montant((float) $d['ca_annuel']) ?></td><?php endif; ?><td><?= format_date($d['date_effet']) ?></td><?php if (!$hideSupervisorColumns): ?><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td><?php endif; ?>
-          <td><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td><?= badge_etat_contrat($d['etat_contrat']) ?></td><td><?= e($d['controle_qualite'] ?? '') ?: '<span class="muted">—</span>' ?></td>
+          <td><?= format_date($d['date_effet']) ?></td>
+          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td><?php endif; ?>
+          <td class="col-etat"><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td class="col-etat"><?= badge_etat_contrat($d['etat_contrat']) ?></td><td><?= e($d['controle_qualite'] ?? '') ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap">
             <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm">Voir</a>
             <?php if ($isAdmin): ?>
@@ -327,11 +364,11 @@ require __DIR__ . '/includes/header.php';
   var userEmail = <?= json_encode($userEmail) ?>;
   var pageUrl = window.location.href;
   var startTime = Date.now();
-  
+
   var style = document.createElement('style');
   style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
   document.head.appendChild(style);
-  
+
   function reportSecurityEvent(type, description, details) {
     fetch('actions/security_alert.php', {
       method: 'POST',
@@ -347,7 +384,7 @@ require __DIR__ . '/includes/header.php';
       })
     }).catch(function() {});
   }
-  
+
   document.addEventListener('keydown', function(e) {
     if (e.key === 'PrintScreen') {
       reportSecurityEvent('print_screen', 'PrintScreen key pressed');
@@ -379,45 +416,45 @@ require __DIR__ . '/includes/header.php';
       reportSecurityEvent('dev_tools_attempt', 'F12 (Dev Tools) blocked');
     }
   });
-  
+
   document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
     reportSecurityEvent('right_click', 'Right-click blocked');
   });
-  
+
   document.addEventListener('dragstart', function(e) {
     e.preventDefault();
     reportSecurityEvent('drag_attempt', 'Drag start blocked');
     return false;
   });
-  
+
   document.addEventListener('selectstart', function(e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
       return false;
     }
   });
-  
+
   document.addEventListener('copy', function(e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
       reportSecurityEvent('copy_attempt', 'Copy blocked');
     }
   });
-  
+
   document.addEventListener('cut', function(e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
       reportSecurityEvent('cut_attempt', 'Cut blocked');
     }
   });
-  
+
   document.addEventListener('paste', function(e) {
     // Allow paste in inputs
   });
-  
 
-  
+
+
 })();
 </script>
 <?php endif; ?>

@@ -452,7 +452,7 @@ class SecurityDashboard
             $value = json_encode($value);
         }
 
-        $stmt = $this->db->prepare('INSERT INTO security_settings (setting_key, setting_value, setting_type, updated_by) VALUES (:key, :value, :type, :uid) ON DUPLICATE KEY UPDATE setting_value = :value, setting_type = :type, updated_by = :uid');
+        $stmt = $this->db->prepare('INSERT INTO security_settings (setting_key, setting_value, setting_type, updated_by) VALUES (:key, :value, :type, :uid) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_type = VALUES(setting_type), updated_by = VALUES(updated_by)');
         return $stmt->execute(['key' => $key, 'value' => $value, 'type' => $type, 'uid' => $updatedBy]);
     }
 

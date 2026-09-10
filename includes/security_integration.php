@@ -16,7 +16,11 @@ if (!defined('APP_INIT')) {
  */
 function get_client_ip(): string
 {
+    // InfinityFree (Incapsula) expose la vraie IP du visiteur dans Incap-Client-IP ;
+    // Cloudflare le fait via Cf-Connecting-IP. On les teste en premier.
     $headers = [
+        'HTTP_INCAP_CLIENT_IP',
+        'HTTP_CF_CONNECTING_IP',
         'HTTP_X_FORWARDED_FOR',
         'HTTP_CLIENT_IP',
         'HTTP_X_REAL_IP',

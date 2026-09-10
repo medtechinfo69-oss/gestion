@@ -2259,6 +2259,122 @@ html { overflow-x: clip; }
   .card-header form .btn { flex: 0 0 auto; }
 }
 
+/* Dashboard dossiers : filtres et espacement harmonisés, sans effet sur les autres pages. */
+.dashboard-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+.dashboard-layout > .card,
+.dashboard-layout > .chart-card,
+.dashboard-layout > .stat-grid {
+  min-width: 0;
+  margin: 0;
+}
+.dashboard-layout > .card { overflow: hidden; }
+.dashboard-layout .card-header { gap: 16px 24px; }
+.dashboard-filter-card .card-header { border-bottom: 0; }
+.dashboard-layout .dashboard-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+.dashboard-filter-field,
+.dashboard-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.dashboard-filter-field label { white-space: nowrap; }
+.dashboard-layout .dashboard-filter-field select,
+.dashboard-layout .dashboard-filter-field input {
+  width: auto;
+  max-width: 100%;
+  min-width: 100px;
+  height: 40px;
+  font-size: 0.85rem;
+}
+.dashboard-filter-field #vendeur { min-width: 160px; max-width: 240px; }
+/* Filtres dashboard : saisie texte libre (jour / mois / année), compacte comme demandé. */
+.dashboard-text-input {
+  width: 72px;
+  min-width: 0 !important;
+  max-width: 72px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.dashboard-text-input::-webkit-outer-spin-button,
+.dashboard-text-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.dashboard-text-input.year-input { width: 86px; max-width: 86px; }
+/* Filtres dashboard : listes déroulantes jour / mois / année avec défilement.
+   Les valeurs proviennent directement des dates enregistrées dans dossiers.php.
+   La liste s’ouvre avec une hauteur limitée provoquant le scroll vertical. */
+.dashboard-scroll-select {
+  width: auto;
+  min-width: 90px;
+  max-width: 160px;
+  height: 40px;
+  font-size: 0.85rem;
+  padding: 0 8px;
+}
+.dashboard-scroll-select#annee { min-width: 100px; max-width: 120px; }
+/* Force l’affichage d’une liste déroulante scrollable quand elle est ouverte : */
+.dashboard-scroll-select option { padding: 6px 8px; }
+.dashboard-layout .dashboard-filter-actions .btn {
+  min-height: 40px;
+  padding: 8px 14px;
+  justify-content: center;
+  white-space: nowrap;
+}
+.dashboard-layout .chart-card-header { padding: 20px 22px 0; }
+.dashboard-layout .chart-canvas-wrapper { padding: 16px 22px 0; }
+.dashboard-layout .chart-metrics { padding: 20px 22px; }
+.dashboard-layout .metric { min-width: 0; }
+.dashboard-layout .metric-value { overflow-wrap: anywhere; }
+
+@media (max-width: 768px) {
+  .dashboard-layout { gap: 16px; }
+  .dashboard-layout .card-header { padding: 16px; }
+  .dashboard-layout .dashboard-filters { width: 100%; align-items: flex-end; }
+  .dashboard-filter-field {
+    flex: 1 1 160px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .dashboard-layout .dashboard-filter-field select,
+  .dashboard-layout .dashboard-filter-field input {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .dashboard-filter-actions { flex-wrap: wrap; }
+  .dashboard-layout .dashboard-filter-actions .btn { width: auto; }
+  .dashboard-layout .chart-card-header { padding: 16px 16px 0; }
+  .dashboard-layout .chart-canvas-wrapper { padding: 12px 16px 0; }
+  .dashboard-layout .chart-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 0;
+    padding: 16px;
+  }
+  .dashboard-layout .metric:nth-child(even) { border-right: 0; }
+  .dashboard-layout .metric:nth-child(odd) { padding-left: 0; }
+}
+@media (max-width: 480px) {
+  .dashboard-layout .dashboard-filters { gap: 12px; }
+  .dashboard-filter-field,
+  .dashboard-filter-actions { flex-basis: 100%; }
+  .dashboard-layout .dashboard-filter-actions .btn { flex: 1 1 auto; }
+}
+
 /* --- Bulk actions bar --- */
 .bulk-actions-bar {
   transition: all 0.2s ease;
@@ -2685,4 +2801,189 @@ html { overflow-x: clip; }
   .filter-actions .btn {
     flex: 1;
   }
+}
+
+/* =====================================================================
+   TABLEAUX — Design unifié v4 (alignement, lisibilité, confort visuel)
+   Corrige :
+   - l'alignement en-têtes / colonnes (layout auto au lieu de fixe),
+   - l'alignement des bords du tableau avec le titre de la carte (22px),
+   - la lisibilité : zébrage léger, bordures adoucies, hauteur de ligne,
+   - l'en-tête collant avec ombre douce au défilement.
+   ===================================================================== */
+table.data-table,
+.content-card .table-wrap table,
+.security-logs-page table {
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Colonnes : largeur naturelle, texte qui reste lisible */
+.data-table tbody td,
+.content-card .table-wrap tbody td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  line-height: 1.45;
+  color: var(--color-ink);
+  white-space: normal;
+}
+/* Le HTML historique force nowrap sur la dernière cellule : on assouplit
+   pour éviter tout débordement horizontal inutile. */
+.data-table tbody td:last-child,
+.content-card .table-wrap tbody td:last-child {
+  white-space: normal;
+}
+
+/* En-têtes : alignés visuellement avec le titre de la carte (22px) */
+.data-table thead th,
+.content-card .table-wrap thead th,
+.security-logs-page thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-soft);
+  background: var(--color-surface-alt);
+  border-bottom: 2px solid var(--color-line-strong, var(--color-line));
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+  white-space: nowrap;
+}
+
+/* Première / dernière colonne : respirent avec les marges de la carte */
+.data-table thead th:first-child,
+.content-card .table-wrap thead th:first-child,
+.security-logs-page thead th:first-child,
+.data-table tbody td:first-child,
+.content-card .table-wrap tbody td:first-child,
+.security-logs-page tbody td:first-child {
+  padding-left: 22px;
+}
+.data-table thead th:last-child,
+.content-card .table-wrap thead th:last-child,
+.security-logs-page thead th:last-child,
+.data-table tbody td:last-child,
+.content-card .table-wrap tbody td:last-child,
+.security-logs-page tbody td:last-child {
+  padding-right: 22px;
+}
+
+/* Lignes : zébrage très léger + hover franc, séparateurs adoucis */
+.data-table tbody tr:nth-child(even) td,
+.content-card .table-wrap tbody tr:nth-child(even) td,
+.security-logs-page tbody tr:nth-child(even) td {
+  background: rgba(245, 251, 252, 0.6);
+  background: color-mix(in srgb, var(--color-surface-alt) 55%, transparent);
+}
+.data-table tbody td,
+.content-card .table-wrap tbody td,
+.security-logs-page tbody td {
+  border-bottom: 1px solid var(--color-line);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
+}
+.data-table tbody tr:last-child td,
+.content-card .table-wrap tbody tr:last-child td,
+.security-logs-page tbody tr:last-child td {
+  border-bottom: none;
+}
+.data-table tbody tr:hover td,
+.content-card .table-wrap tbody tr:hover td,
+.security-logs-page tbody tr:hover td {
+  background: var(--color-surface-alt);
+}
+.data-table tbody tr:hover td:first-child,
+.content-card .table-wrap tbody tr:hover td:first-child,
+.security-logs-page tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-cabinet);
+}
+
+/* Cellules marquées text-right / text-center : la règle s'applique aussi
+   à l'en-tête correspondant pour un alignement parfait. */
+.data-table th.text-right,
+.content-card .table-wrap th.text-right,
+.data-table td.text-right,
+.content-card .table-wrap td.text-right {
+  text-align: right;
+}
+.data-table th.text-center,
+.content-card .table-wrap th.text-center,
+.data-table td.text-center,
+.content-card .table-wrap td.text-center {
+  text-align: center;
+}
+
+/* Cartes : coins arrondis propres, le tableau ne dépasse jamais */
+.content-card { overflow: hidden; }
+.content-card .table-wrap { padding: 0; }
+.content-card .table-wrap table { margin: 0; }
+
+/* Valeurs chiffrées : chiffres alignés proprement à droite */
+.data-table td.text-right strong,
+.content-card .table-wrap td.text-right strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Écrans étroits : on garde le défilement interne, jamais de casse */
+@media (max-width: 768px) {
+  .data-table thead th,
+  .content-card .table-wrap thead th,
+  .security-logs-page thead th {
+    white-space: normal;
+  }
+  .data-table thead th:first-child,
+  .content-card .table-wrap thead th:first-child,
+  .data-table tbody td:first-child,
+  .content-card .table-wrap tbody td:first-child {
+    padding-left: 14px;
+  }
+  .data-table thead th:last-child,
+  .content-card .table-wrap thead th:last-child,
+  .data-table tbody td:last-child,
+  .content-card .table-wrap tbody td:last-child {
+    padding-right: 14px;
+  }
+  table.data-table { min-width: 640px; }
+}
+
+/* =====================================================================
+   Tableau des dossiers — version « large » (jusqu'à ~30 colonnes)
+   Largeur naturelle des colonnes + défilement horizontal dans .table-wrap,
+   afin que le texte ne soit plus coupé au milieu des mots et que l'en-tête
+   reste aligné avec sa colonne. Les autres tableaux gardent width:100%.
+   ===================================================================== */
+table.data-table.data-table--wide {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+table.data-table.data-table--wide thead th {
+  white-space: nowrap;
+}
+table.data-table.data-table--wide tbody td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* =====================================================================
+   Troncature des colonnes : chaque cellule (en-tête incluse) est limitée
+   à ~20 caractères ; au-delà le texte est coupé et suivi d'une ellipse « … ».
+   S'applique à TOUS les tableaux (data-table, RH, journal, prime, …).
+   La dernière colonne (souvent les actions) est exclue pour ne pas
+   masquer les boutons.
+   ===================================================================== */
+table.data-table thead th,
+table.data-table tbody td:not(:last-child),
+.table-wrap table thead th,
+.table-wrap table tbody td:not(:last-child) {
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

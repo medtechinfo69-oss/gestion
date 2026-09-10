@@ -432,14 +432,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     if ($empRate <= 0) {
       $empRate = 10.00;
     }
-    $position = trim((string) salary_import_value($data, ['Poste', 'Position'], $emp['position'] ?? 'Agent'));
-    $empPosition = in_array($position, ['Responsable', 'Agent'], true) ? $position : ($emp['position'] ?? 'Agent');
-    $pseudo = trim((string) salary_import_value($data, ['Pseudo', 'Peseudo'], $emp['pseudo'] ?? ''));
-    $empName = $name !== '' ? $name : $emp['full_name'];
-    $pdo->prepare('UPDATE employees SET full_name=:name, pseudo=:pseudo, hourly_rate=:rate, position=:position WHERE id=:id')->execute([
-      'name' => $empName, 'pseudo' => $pseudo, 'rate' => $empRate, 'position' => $empPosition, 'id' => $empId
-    ]);
-    $position = $empPosition;
+    // L'import ne modifie plus la fiche employé : on utilise uniquement
+    // les informations déjà enregistrées dans rh_employees.php.
+    $position = $emp['position'] ?? 'Agent';
     $rate = $empRate;
     $calcBase = $position === 'Responsable' ? (float) $paidDays : (float) $paidHours;
     $calc = round($calcBase * $rate, 2);
@@ -505,6 +500,37 @@ $displayYear = $year;
 
 require __DIR__ . '/includes/header.php';
 ?>
+
+<style>
+  /* Page "Salaires mensuels" :
+     - Tout le texte est affiché en entier (aucune troncature « … »).
+     - Chaque ligne reste sur UNE seule ligne (aucun retour à la ligne) :
+       les bordures inférieures des lignes sont ainsi nettes et régulières.
+     - La table s'élargit naturellement avec défilement horizontal dans
+       .table-wrap si le contenu est large. */
+  .content-card .table-wrap table {
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+    border-collapse: collapse;
+  }
+  .content-card .table-wrap table thead th,
+  .content-card .table-wrap table tbody td,
+  .content-card .table-wrap table tbody td:not(:last-child) {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .content-card .table-wrap table tbody td {
+    border-bottom: 1px solid var(--color-line);
+  }
+  .content-card .table-wrap table tbody tr:last-child td {
+    border-bottom: none;
+  }
+</style>
 
 <section class="salary-import-panel">
   <div class="salary-import-heading">
@@ -650,9 +676,9 @@ require __DIR__ . '/includes/header.php';
           <th>ID</th>
           <th>Nom & prénom</th>
           <th>Pseudo</th>
-          <th>Jour Normalement Travaillé</th>
-          <th>ABS Non Justifiée en jours</th>
-          <th>ABS Non Justifiée en heures</th>
+          <th>Jour Normalement <br> Travaillé</th>
+          <th>ABS Non Justifiée <br> en jours</th>
+          <th>ABS Non Justifiée <br> en heures</th>
           <th>Jour Payé</th>
           <th>Heure Payée</th>
           <th>Nb Retards</th>
@@ -674,7 +700,7 @@ require __DIR__ . '/includes/header.php';
           <td><?= format_heure((float) $r['paid_hours']) ?></td>
           <td><?= (int) $r['late_count'] ?></td>
           <td style="white-space:nowrap;"><b><?= format_montant_tnd((float) $r['calculated_salary']) ?></b></td>
-          <td class="nowrap">
+          <td class="nowrap"><div style="display:flex;align-items:center;gap:8px;">
             <button class="btn btn-sm btn-secondary btn-icon" type="button" data-open-inline-edit title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
             <?php if ($isAdmin): ?>
             <form class="inline" method="post" action="actions/rh_salary_action.php" data-confirm="Supprimer ce bulletin de salaire ?">
@@ -685,7 +711,7 @@ require __DIR__ . '/includes/header.php';
               <input type="hidden" name="year" value="<?= $displayYear ?>">
               <button type="submit" class="btn btn-sm btn-danger btn-icon" title="Supprimer" aria-label="Supprimer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/><path d="M10 11v6M14 11v6"/></svg></button>
             </form>
-            <?php endif; ?>
+            <?php endif; ?></div>
           </td>
         </tr>
         <tr class="edit-row" style="display:none">

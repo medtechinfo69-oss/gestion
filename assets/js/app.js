@@ -23,6 +23,7 @@
     initSalaryInlineEdit();
     initSalaryFileImport();
     initRhDashboardCharts();
+    initPerformanceNoScroll();
   });
 
   /** Bascule le menu latéral en affichage mobile. */
@@ -625,12 +626,68 @@
       var labels = JSON.parse(canvas.getAttribute('data-labels') || '[]');
       if (!data.length) return;
       var isAbsence = canvas.id === 'absenceChart';
+      var lineColor = canvas.getAttribute('data-chart-color') || (isAbsence ? '#012B5E' : 'turquoise-gradient');
+      var fillColor = canvas.getAttribute('data-chart-fill') || (isAbsence ? 'rgba(1,43,94,0.14)' : 'rgba(10,159,173,0.16)');
       function renderAttendance() {
-        drawChart(canvas, data, isAbsence ? '#012B5E' : 'turquoise-gradient',
-          isAbsence ? 'rgba(1,43,94,0.14)' : 'rgba(10,159,173,0.16)', labels);
+        drawChart(canvas, data, lineColor, fillColor, labels);
       }
       renderAttendance();
       window.addEventListener('resize', renderAttendance);
+    });
+  }
+
+  /**
+   * Met à jour "Performance par vendeur" sans rechargement ni déplacement du scroll.
+   * En cas d'échec réseau, le formulaire soumet normalement (avec ancre #performance-vendeurs-card).
+   */
+  function initPerformanceNoScroll() {
+    var form = document.querySelector('[data-performance-form]');
+    if (!form) return;
+    var card = document.getElementById('performance-vendeurs-card') || form.closest('.card');
+    var tbody = card ? card.querySelector('[data-performance-tbody]') : null;
+    var submitBtn = form.querySelector('[data-performance-submit]');
+    var statusEl = form.querySelector('[data-performance-status]');
+    if (!card || !tbody) return;
+
+    // Repli sans JS/AJAX : rester ancré sur la carte après rechargement.
+    form.setAttribute('action', '#performance-vendeurs-card');
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      var params = new URLSearchParams(new FormData(form));
+      params.set('ajax', 'performance');
+      var url = window.location.pathname + '?' + params.toString();
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Chargement...';
+      }
+      if (statusEl) statusEl.textContent = '';
+
+      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        })
+        .then(function (data) {
+          if (!data || !data.ok) throw new Error('bad-response');
+          tbody.innerHTML = data.rowsHtml || '';
+          var nextUrl = window.location.pathname + '?' + params.toString().replace(/(^|&)ajax=performance(&|$)/, function (m, a, b) { return a && b ? a : ''; });
+          nextUrl = nextUrl.replace(/\?$/, '');
+          try { window.history.replaceState(null, '', nextUrl); } catch (e) {}
+          if (statusEl) statusEl.textContent = 'Mis à jour.';
+        })
+        .catch(function () {
+          // Échec : soumission classique, l'ancre garde la position sur la carte.
+          form.submit();
+        })
+        .finally(function () {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Actualiser';
+          }
+        });
     });
   }
 

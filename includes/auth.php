@@ -273,18 +273,31 @@ function attempt_login(PDO $db, string $username, string $password): array
     }
 
     if ($user['role'] === 'superviseur') {
-        $stmt = $db->prepare('SELECT id FROM superviseur_approved_ips WHERE user_id = :uid AND ip_address = :ip LIMIT 1');
-        $stmt->execute(['uid' => $user['id'], 'ip' => $ip]);
-        $approved = (bool) $stmt->fetchColumn();
+        try {
+            $stmt = $db->prepare('SELECT id FROM superviseur_approved_ips WHERE user_id = :uid AND ip_address = :ip LIMIT 1');
+            $stmt->execute(['uid' => $user['id'], 'ip' => $ip]);
+            $approved = (bool) $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            // Table absente sur l'hébergement : on tente de la créer, sinon on refuse la connexion proprement.
+            if (!superviseur_tables_ensure($db)) {
+                $logIp(false);
+                return ['success' => false, 'message' => 'Module de supervision indisponible. Contactez un administrateur.'];
+            }
+            $approved = false;
+        }
 
         if (!$approved) {
-            $stmt = $db->prepare('INSERT INTO superviseur_sessions (user_id, username, ip_address, user_agent, status) VALUES (:uid, :uname, :ip, :ua, \'pending\')');
-            $stmt->execute([
-                'uid' => $user['id'],
-                'uname' => $user['username'],
-                'ip' => $ip,
-                'ua' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
-            ]);
+            try {
+                $stmt = $db->prepare('INSERT INTO superviseur_sessions (user_id, username, ip_address, user_agent, status) VALUES (:uid, :uname, :ip, :ua, \'pending\')');
+                $stmt->execute([
+                    'uid' => $user['id'],
+                    'uname' => $user['username'],
+                    'ip' => $ip,
+                    'ua' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
+                ]);
+            } catch (PDOException $e) {
+                superviseur_tables_ensure($db);
+            }
 
             $logIp(false);
             return ['success' => false, 'message' => 'Cette session doit être approuvée par un administrateur avant connexion.'];
@@ -413,4 +426,40 @@ function logout_user(): void
         );
     }
     session_destroy();
+}
+
+/**
+ * Crée les tables de supervision si elles n'existent pas (utile sur hébergement
+ * où install_hosting.sql ne les contenait pas). Retourne true si OK.
+ */
+function superviseur_tables_ensure(PDO $db): bool
+{
+    try {
+        $db->exec("CREATE TABLE IF NOT EXISTS superviseur_approved_ips (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            label VARCHAR(100) NULL,
+            approved_by_user_id INT UNSIGNED NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME NULL,
+            UNIQUE KEY uq_user_ip (user_id, ip_address)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE IF NOT EXISTS superviseur_sessions (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            username VARCHAR(100) NOT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            user_agent VARCHAR(500) NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            decided_by INT UNSIGNED NULL,
+            decided_at DATETIME NULL,
+            reason VARCHAR(255) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        return true;
+    } catch (Throwable $e) {
+        error_log('superviseur_tables_ensure: ' . $e->getMessage());
+        return false;
+    }
 }

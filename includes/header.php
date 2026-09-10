@@ -31,8 +31,7 @@ $user = current_user();
           <img src="<?= e(APP_URL) ?>/assets/img/favicon-transparent.png" alt="Assurialis">
         </div>
         <div class="sidebar-brand-text">
-          <div class="sidebar-brand-title">Gestion des dossiers</div>
-          <div class="sidebar-brand-subtitle">Administration RH</div>
+          <div class="sidebar-brand-title">Gestion Prod & RH</div>
         </div>
       </div>
       <?php if ($user): ?>

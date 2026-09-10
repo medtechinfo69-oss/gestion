@@ -296,3 +296,33 @@ SET FOREIGN_KEY_CHECKS = 1;
 --   identifiant : admin   /   mot de passe : Admin@2026
 --   (le changement de mot de passe sera force a la premiere connexion)
 -- =====================================================================
+-- =====================================================================
+-- Supervision des sessions superviseurs (ajout)
+-- =====================================================================
+SET FOREIGN_KEY_CHECKS = 0;
+
+CREATE TABLE IF NOT EXISTS `superviseur_approved_ips` (
+    `id`                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `user_id`             INT UNSIGNED NOT NULL,
+    `ip_address`          VARCHAR(45) NOT NULL,
+    `label`               VARCHAR(100) NULL,
+    `approved_by_user_id` INT UNSIGNED NULL,
+    `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_used_at`        DATETIME NULL,
+    UNIQUE KEY `uq_user_ip` (`user_id`, `ip_address`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `superviseur_sessions` (
+    `id`         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `user_id`    INT UNSIGNED NOT NULL,
+    `username`   VARCHAR(100) NOT NULL,
+    `ip_address` VARCHAR(45) NOT NULL,
+    `user_agent` VARCHAR(500) NULL,
+    `status`     VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `decided_by` INT UNSIGNED NULL,
+    `decided_at` DATETIME NULL,
+    `reason`     VARCHAR(255) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SET FOREIGN_KEY_CHECKS = 1;

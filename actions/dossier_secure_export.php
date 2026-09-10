@@ -2,6 +2,18 @@
 require_once __DIR__ . '/../includes/init.php';
 require_admin();
 
+/** Convertit un index de colonne (1 -> A, 27 -> AA) pour les références de cellules Excel. */
+function export_column(int $number): string
+{
+    $column = '';
+    while ($number > 0) {
+        $remainder = ($number - 1) % 26;
+        $column = chr(65 + $remainder) . $column;
+        $number = (int) (($number - $remainder - 1) / 26);
+    }
+    return $column;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ' . APP_URL . '/dossiers.php');
     exit;
@@ -88,7 +100,7 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $dossiers = $stmt->fetchAll();
 
-$rows = [['Vendeur', 'Date Vente', 'Civilité', 'Nom', 'Prénom', 'Email', 'Téléphone Fixe', 'Téléphone Portable', 'NB Assurés', 'Date Naissance', 'Age Assuré Principal', 'Adresse', 'CP', 'Ville', 'Type Signature', 'CA Mois', 'CA Annuel', 'Date Effet', 'Produit', 'Compagnie', 'TA Origine', 'Etat Dossier', 'Courrier', 'Commentaire', 'Etat Contrat', 'Contrôle Qualité']];
+$rows = [['Vendeur', 'Date Vente', 'Civilité', 'Nom', 'Prénom', 'Email', 'Téléphone Fixe', 'Téléphone Portable', 'NB Assurés', 'Date Naissance', 'Age Assuré Principal', 'Adresse', 'CP', 'Ville', 'Type Signature', 'CA Mois', 'CA Annuel', 'Date Effet', 'Produit', 'Compagnie', 'TA Origine', 'Etat Dossier', 'Date Validation', 'Courrier', 'Commentaire', 'Etat Contrat', "Date d'annulation", 'Contrôle Qualité']];
 
 foreach ($dossiers as $d) {
     $rows[] = [
@@ -114,9 +126,11 @@ foreach ($dossiers as $d) {
         $d['compagnie'] ?? '',
         $d['ta_origine'] ?? '',
         $d['etat_dossier'] ?? '',
+        format_date((string) ($d['date_dossier_complet'] ?? '')),
         $d['courrier'] ?? '',
         $d['commentaire'] ?? '',
         $d['etat_contrat'] ?? '',
+        format_date((string) ($d['date_contrat_non_actif'] ?? '')),
         $d['controle_qualite'] ?? '',
     ];
 }
@@ -155,7 +169,7 @@ foreach ($rows as $ri => $row) {
     $r = $ri + 1;
     $sheet .= '<row r="' . $r . '">';
     foreach (array_values($row) as $ci => $v) {
-        $cell = chr(65 + $ci) . $r;
+        $cell = export_column($ci + 1) . $r;
         $sheet .= '<c r="' . $cell . '" t="s"><v>' . $map[(string) $v] . '</v></c>';
     }
     $sheet .= '</row>';
