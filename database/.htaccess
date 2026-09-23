@@ -1,0 +1,7 @@
+# Ces fichiers sont des outils d'administration (installation et reparation
+# de la base de donnees). Ils ne doivent jamais etre executes ni telecharges
+# depuis le navigateur : utilisez uniquement la ligne de commande.
+#   Import SQL   : phpMyAdmin (Onglet Importer)
+#   Reparation   : php database/repair_schema.php
+# config/.htaccess et includes/.htaccess suivent la meme convention.
+Require all denied
