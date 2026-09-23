@@ -70,12 +70,14 @@ require __DIR__ . '/includes/header.php';
           <td><?= e($o['nom']) ?></td>
           <td><?= format_date($o['created_at']) ?></td>
           <td class="text-center">
-            <button type="button" class="btn btn-outline btn-sm" data-origine-edit data-id="<?= (int) $o['id'] ?>" data-nom="<?= e($o['nom']) ?>">Modifier</button>
+            <span class="row-actions">
+            <button type="button" class="btn btn-outline btn-sm btn-icon-action" data-origine-edit data-id="<?= (int) $o['id'] ?>" data-nom="<?= e($o['nom']) ?>" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
             <form action="<?= e(APP_URL) ?>/actions/origine_delete.php" method="post" data-confirm="Supprimer cette origine ?" style="display:inline;">
               <?= csrf_field() ?>
               <input type="hidden" name="id" value="<?= (int) $o['id'] ?>">
-              <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+              <button type="submit" class="btn btn-danger btn-sm btn-icon-action" title="Supprimer" aria-label="Supprimer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
             </form>
+            </span>
           </td>
         </tr>
         <?php endforeach; ?>

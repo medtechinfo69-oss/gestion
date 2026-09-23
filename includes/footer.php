@@ -23,6 +23,13 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-<script src="<?= e(APP_URL) ?>/assets/js/app.js?v=<?= defined('CACHE_VERSION') ? CACHE_VERSION : (int) filemtime(__DIR__ . '/../assets/js/app.js') ?>"></script>
+<?php
+// Widget de chat flottant (admin <-> superviseur)
+require_once __DIR__ . '/chat_widget.php';
+?>
+<?php /* defer : le HTML n'est plus bloqué pendant le téléchargement et
+         l'exécution des scripts ; l'ordre d'exécution reste garanti. */ ?>
+<script defer src="<?= e(APP_URL) ?>/assets/js/multiselect.js?v=<?= e(asset_version('js/multiselect.js')) ?>"></script>
+<script defer src="<?= e(APP_URL) ?>/assets/js/app.js?v=<?= e(asset_version('js/app.js')) ?>"></script>
 </body>
 </html>

@@ -84,20 +84,27 @@ $champLabels = [
 $pageTitle = $dossier['nom'] . ' ' . $dossier['prenom'];
 $pageSubtitle = 'Dossier #' . $dossier['id'] . ' — ' . $dossier['produit'];
 $activePage = 'dossiers';
-$topbarActions = ($isAdmin || $isSuperviseur)
-    ? '<a href="' . e(APP_URL) . '/dossier_form.php?id=' . (int) $dossier['id'] . '" class="btn btn-primary">Modifier</a>'
+// Le bouton « Modifier » est réservé à l'admin et au rôle superviseur strict.
+// Les vendeurs (même avec can_supervise = 1) sont en lecture seule : pas de
+// bouton Modifier, et l'accès direct à dossier_form.php?id=… est bloqué
+// côté serveur (voir dossier_form.php + actions/dossier_save.php).
+$canEditDossier = $isAdmin || (($user['role'] ?? '') === 'superviseur');
+$topbarActions = $canEditDossier
+    ? '<a href="' . e(APP_URL) . '/dossier_form.php?id=' . (int) $dossier['id'] . '" class="btn btn-primary btn-icon-action" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></a>'
     : '';
-if ($isAdmin && ($dossier['date_dossier_complet'] !== null
-  || $dossier['date_contrat_non_actif'] !== null
-  || ($dossier['date_courrier_supervision'] ?? null) !== null
-  || ($dossier['date_etat_contrat_supervision'] ?? null) !== null
-  || ($dossier['date_controle_qualite_supervision'] ?? null) !== null)) {
-    $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_reactivate.php" style="display:inline;">'
-        . csrf_field()
-        . '<input type="hidden" name="id" value="' . (int) $dossier['id'] . '">'
-        . '<button type="submit" class="btn btn-outline">Réactiver supervision</button>'
-        . '</form>';
-}
+// Un dossier est « sous supervision verrouillée » dès qu'une des dates de
+// supervision est renseignée, ou que son contrat n'est plus « Actif » (ce qui
+// bloque de toute façon le superviseur) : c'est ce qui ouvre le droit à la
+// réactivation.
+$supervisionActive = ($dossier['date_dossier_complet'] ?? null) !== null
+    || ($dossier['date_contrat_non_actif'] ?? null) !== null
+    || ($dossier['date_courrier_supervision'] ?? null) !== null
+    || ($dossier['date_etat_contrat_supervision'] ?? null) !== null
+    || ($dossier['date_controle_qualite_supervision'] ?? null) !== null
+    || ($dossier['etat_contrat'] ?? 'Actif') !== 'Actif';
+
+// Le bouton « Réactiver supervision » est affiché une seule fois, dans la carte
+// « Supervision » plus bas (voir $supervisionActive), pour éviter un doublon.
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -159,12 +166,29 @@ require __DIR__ . '/includes/header.php';
 
       <div class="detail-item"><div class="k">Contrôle qualité</div><div class="v"><?= e($dossier['controle_qualite'] ?? '') ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Commentaire</div><div class="v"><?= $dossier['commentaire'] ? nl2br(e($dossier['commentaire'])) : '—' ?></div></div>
-      <?php if ($dossier['motif_annulation']): ?>
-      <div class="detail-item detail-item--wide"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
+            <?php if ($dossier['motif_annulation']): ?>
+            <div class="detail-item detail-item--wide"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
+            <?php endif; ?>
+          </div>
+       </div>
+      </div>
+
+      <?php if ($isAdmin && $supervisionActive): ?>
+      <div class="card mb-16">
+       <div class="card-header"><h2>Supervision</h2></div>
+       <div class="card-body flex-between" style="flex-wrap:wrap;gap:12px;">
+          <div>
+            <div>Ce dossier est actuellement <strong>verrouillé</strong> par la supervision.</div>
+            <div class="muted" style="font-size:0.82rem;">La réactivation efface les dates de validation et d'annulation pour permettre de modifier à nouveau le dossier.</div>
+          </div>
+          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" data-confirm="Réactiver la supervision pour ce dossier ? Ses dates de validation et d'annulation seront effacées.">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+            <button type="submit" class="btn btn-primary">Réactiver supervision</button>
+          </form>
+       </div>
+      </div>
       <?php endif; ?>
-    </div>
-  </div>
-</div>
 
 <div class="card mb-16">
   <div class="card-header">
@@ -185,16 +209,16 @@ require __DIR__ . '/includes/header.php';
                 </audio>
               <?php endif; ?>
             </span>
-            <span class="flex gap-8">
+            <span class="flex gap-8 row-actions">
               <?php if (!$isSuperviseur): ?>
-              <a href="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>" class="btn btn-outline btn-sm">Télécharger</a>
+              <a href="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Télécharger" aria-label="Télécharger"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></a>
               <?php endif; ?>
               <?php if ($isAdmin): ?>
               <form action="<?= e(APP_URL) ?>/actions/attachment_delete.php" method="post" style="margin:0;" data-confirm="Supprimer cette pièce jointe ?">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
                 <input type="hidden" name="dossier_id" value="<?= (int) $dossier['id'] ?>">
-                <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                <button type="submit" class="btn btn-danger btn-sm btn-icon-action" title="Supprimer" aria-label="Supprimer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
               </form>
               <?php endif; ?>
             </span>
@@ -297,7 +321,7 @@ require __DIR__ . '/includes/header.php';
     <form action="<?= e(APP_URL) ?>/actions/dossier_delete.php" method="post" data-confirm="Supprimer définitivement ce dossier et ses pièces jointes ?">
       <?= csrf_field() ?>
       <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
-      <button type="submit" class="btn btn-danger">Supprimer le dossier</button>
+      <button type="submit" class="btn btn-danger btn-icon-action" title="Supprimer le dossier" aria-label="Supprimer le dossier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
     </form>
   </div>
 </div>
@@ -309,6 +333,7 @@ require __DIR__ . '/includes/header.php';
   var userName = <?= json_encode($user['nom_complet'] ?? 'Unknown') ?>;
   var userEmail = <?= json_encode($user['email'] ?? '') ?>;
   var pageUrl = window.location.href;
+  var csrfToken = <?= json_encode(csrf_token()) ?>;
 
   var style = document.createElement('style');
   style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
@@ -317,7 +342,7 @@ require __DIR__ . '/includes/header.php';
   function reportSecurityEvent(type, description) {
     fetch('actions/security_alert.php', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify({
         type: type,
         description: description,

@@ -408,15 +408,17 @@ require __DIR__ . '/includes/header.php';
           <td><?= format_montant_tnd((float) $r['hourly_rate']) ?></td>
           <td><span class="badge <?= $r['status'] === 'Active' ? 'badge-success' : 'badge-muted' ?>"><?= $r['status'] === 'Active' ? 'Actif' : 'Inactif' ?></span></td>
           <td class="nowrap">
-            <a class="btn btn-sm btn-secondary" href="?edit=<?= (int) $r['id'] ?>">Modifier</a>
+            <span class="row-actions">
+            <a class="btn btn-sm btn-secondary btn-icon-action" href="?edit=<?= (int) $r['id'] ?>" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></a>
             <?php if ($isAdmin): ?>
             <form class="inline" method="post" action="actions/rh_employee_action.php" data-confirm="Supprimer définitivement cet employé et tout son historique de salaire ?">
               <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-              <button type="submit" class="btn btn-sm btn-danger">Supprimer définitivement</button>
+              <button type="submit" class="btn btn-sm btn-danger btn-icon-action" title="Supprimer définitivement" aria-label="Supprimer définitivement"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
             </form>
             <?php endif; ?>
+            </span>
           </td>
         </tr>
         <?php endforeach; ?>

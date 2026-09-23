@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
 require_admin();
+users_schema_ensure($db); // répare un éventuel ancien schéma de la table users
+superviseur_tables_ensure($db); // crée au besoin les tables de supervision
+superviseur_schema_repair($db); // restaure clé primaire + auto-increment (id=0 => « Demande invalide »)
 
 $stmt = $db->prepare("SELECT id, username, nom_complet, email, is_active
                       FROM users
@@ -125,7 +128,7 @@ require __DIR__ . '/includes/header.php';
                         style="display:inline;margin-left:auto;">
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $ip['id'] ?>">
-                    <button type="submit" class="btn btn-danger btn-sm" title="Supprimer cette IP" aria-label="Supprimer cette IP">&times;</button>
+                    <button type="submit" class="btn btn-danger btn-sm btn-icon-action" title="Supprimer cette IP" aria-label="Supprimer cette IP"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
                   </form>
                 </div>
               <?php endforeach; ?>
@@ -134,17 +137,19 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
           </td>
           <td class="text-center">
-            <button type="button" class="btn btn-outline btn-sm" data-superviseur-edit
+            <span class="row-actions">
+            <button type="button" class="btn btn-outline btn-sm btn-icon-action" data-superviseur-edit
               data-id="<?= (int) $s['id'] ?>"
               data-nom="<?= e($s['nom_complet']) ?>"
               data-username="<?= e($s['username']) ?>"
               data-email="<?= e($s['email'] ?? '') ?>"
-              data-active="<?= (int) $s['is_active'] ?>">Modifier</button>
+              data-active="<?= (int) $s['is_active'] ?>" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
             <form action="<?= e(APP_URL) ?>/actions/superviseur_delete.php" method="post" data-confirm="Supprimer ce superviseur ?" style="display:inline;">
               <?= csrf_field() ?>
               <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-              <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+              <button type="submit" class="btn btn-danger btn-sm btn-icon-action" title="Supprimer" aria-label="Supprimer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
             </form>
+            </span>
           </td>
         </tr>
         <?php endforeach; ?>
@@ -154,53 +159,55 @@ require __DIR__ . '/includes/header.php';
   </div>
 </div>
 
-<div id="superviseur-modal" class="confirm-modal" style="display:none;" role="dialog" aria-modal="true">
-  <div class="confirm-dialog" style="width:min(100%,520px);">
+<div id="superviseur-modal" class="confirm-modal superviseur-modal" style="display:none;" role="dialog" aria-modal="true">
+ <div class="confirm-dialog superviseur-dialog">
     <h2 id="modal-title">Nouveau superviseur</h2>
     <form id="superviseur-form" method="post" data-create-action="<?= e(APP_URL) ?>/actions/superviseur_save.php" data-edit-action="<?= e(APP_URL) ?>/actions/superviseur_update.php" action="<?= e(APP_URL) ?>/actions/superviseur_save.php" novalidate>
       <?= csrf_field() ?>
       <input type="hidden" name="id" id="modal-id">
-      <div class="form-group" style="margin-bottom:14px;">
-        <label for="modal-nom">Nom <span class="req">*</span></label>
-        <input type="text" id="modal-nom" name="nom_complet" maxlength="150" required>
-      </div>
-      <div class="form-group" style="margin-bottom:14px;">
-        <label for="modal-username">Identifiant <span class="req">*</span></label>
-        <input type="text" id="modal-username" name="username" maxlength="60" required>
-      </div>
-      <div class="form-group" style="margin-bottom:14px;">
-        <label for="modal-email">E-mail</label>
-        <input type="email" id="modal-email" name="email" maxlength="190">
-      </div>
-      <div class="form-group" style="margin-bottom:14px;">
-        <label for="modal-active">Statut</label>
-        <select id="modal-active" name="is_active">
-          <option value="1">Actif</option>
-          <option value="0">Inactif</option>
-        </select>
-      </div>
-      <input type="hidden" id="password-id" name="password_id" value="">
-      <div class="form-group" style="margin-bottom:14px;">
-        <label for="modal-password">Mot de passe</label>
-        <div class="password-wrapper" style="display:flex;align-items:center;gap:8px;">
-          <input type="password" id="modal-password" name="password" autocomplete="new-password" minlength="10" style="flex:1;">
-          <button type="button" id="password-toggle" class="btn btn-outline" aria-pressed="false" title="Afficher/Masquer">Afficher</button>
+      <div class="superviseur-fields">
+        <div class="form-group">
+          <label for="modal-nom">Nom <span class="req">*</span></label>
+          <input type="text" id="modal-nom" name="nom_complet" maxlength="150" required>
         </div>
-        <div class="help-text" id="password-help">10 caractères minimum, avec au moins une majuscule, une minuscule et un chiffre. Laisser vide pour conserver le mot de passe actuel.</div>
-        <div id="password-strength" class="password-strength" aria-live="polite">
-          <div class="password-strength-bar" aria-hidden="true"></div>
-          <span class="password-strength-label">Très faible</span>
+        <div class="form-group">
+          <label for="modal-username">Identifiant <span class="req">*</span></label>
+          <input type="text" id="modal-username" name="username" maxlength="60" required>
         </div>
-        <div id="password-strength-hints" class="password-strength-hints" style="display:none;">
-          <ul id="password-hints-list"></ul>
+        <div class="form-group">
+          <label for="modal-email">E-mail</label>
+          <input type="email" id="modal-email" name="email" maxlength="190">
+        </div>
+        <div class="form-group">
+          <label for="modal-active">Statut</label>
+          <select id="modal-active" name="is_active">
+            <option value="1">Actif</option>
+            <option value="0">Inactif</option>
+          </select>
+        </div>
+        <input type="hidden" id="password-id" name="password_id" value="">
+        <div class="form-group">
+          <label for="modal-password">Mot de passe</label>
+          <div class="password-wrapper" style="display:flex;align-items:center;gap:8px;">
+            <input type="password" id="modal-password" name="password" autocomplete="new-password" minlength="12" style="flex:1;">
+            <button type="button" id="password-toggle" class="btn btn-outline" aria-pressed="false" title="Afficher/Masquer">Afficher</button>
+          </div>
+          <div class="help-text" id="password-help">12 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial. Laisser vide pour conserver le mot de passe actuel.</div>
+          <div id="password-strength" class="password-strength" aria-live="polite">
+            <div class="password-strength-bar" aria-hidden="true"></div>
+            <span class="password-strength-label">Très faible</span>
+          </div>
+          <div id="password-strength-hints" class="password-strength-hints" style="display:none;">
+            <ul id="password-hints-list"></ul>
+          </div>
         </div>
       </div>
-      <div class="confirm-actions">
+      <div class="superviseur-actions">
         <button type="button" class="btn btn-outline" id="modal-cancel">Annuler</button>
         <button type="submit" class="btn btn-primary" id="modal-submit">Enregistrer</button>
       </div>
     </form>
-  </div>
+ </div>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

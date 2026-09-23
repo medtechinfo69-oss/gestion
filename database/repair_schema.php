@@ -126,6 +126,11 @@ function repair_pk_id(PDO $db, string $table, bool $verbose = true): bool
     // Cas 2 : la PK est absente ou porte sur d'autres colonnes -> on la
     //         reconstruit dans une seule instruction, car MySQL exige que la
     //         colonne AUTO_INCREMENT soit une cle dans la meme instruction.
+    // Plan B : certains hebergeurs mutualises (InfinityFree...) ou proxys SQL
+    //          refusent l'ALTER combine. On retente alors instruction par
+    //          instruction, en creant au prealable un index d'appui sur `id`
+    //          pour pouvoir dropper une PK referencee par une cle etrangere
+    //          (erreur 1553 « needed in a foreign key constraint »).
     if ($hasPrimary) {
         $pkCols = [];
         foreach ($db->query("SHOW INDEX FROM `$table`") as $idx) {
@@ -137,12 +142,27 @@ function repair_pk_id(PDO $db, string $table, bool $verbose = true): bool
         if (array_values($pkCols) === ['id']) {
             $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT");
         } else {
-            $db->exec('SET FOREIGN_KEY_CHECKS = 0');
-            $db->exec("ALTER TABLE `$table` DROP PRIMARY KEY, MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (id)");
-            $db->exec('SET FOREIGN_KEY_CHECKS = 1');
+            try {
+                $db->exec('SET FOREIGN_KEY_CHECKS = 0');
+                $db->exec("ALTER TABLE `$table` DROP PRIMARY KEY, MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (id)");
+            } catch (Throwable $e) {
+                // Plan B : instructions separees + index d'appui.
+                $helper = false;
+                try { $db->exec("ALTER TABLE `$table` ADD INDEX `tmp_repair_pk` (id)"); $helper = true; } catch (Throwable $e2) {}
+                $db->exec("ALTER TABLE `$table` DROP PRIMARY KEY");
+                $db->exec("ALTER TABLE `$table` ADD PRIMARY KEY (id)");
+                if ($helper) { try { $db->exec("ALTER TABLE `$table` DROP INDEX `tmp_repair_pk`"); } catch (Throwable $e2) {} }
+                $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT");
+            }
         }
     } else {
-        $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (id)");
+        try {
+            $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (id)");
+        } catch (Throwable $e) {
+            // Plan B : instructions separees (ALTER combine refuse).
+            $db->exec("ALTER TABLE `$table` ADD PRIMARY KEY (id)");
+            $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT");
+        }
     }
     if ($verbose) {
         echo "  $table : PK + AUTO_INCREMENT restaures"
@@ -155,8 +175,18 @@ function repair_pk_id(PDO $db, string $table, bool $verbose = true): bool
  * Ajoute une cle UNIQUE manquante.
  * Si $autoDedupe est vrai (tables d'etat uniquement), les doublons sont
  * supprimes en conservant la ligne la plus recente (id le plus grand).
+ *
+ * $warnings (par reference) : incremente quand un point demande une action
+ * manuelle (doublons dans une table metier, qu'on ne supprime jamais tout
+ * seul). C'est un AVERTISSEMENT, pas une erreur : la reparation continue.
+ *
+ * Compatibilite hebergeurs mutualises (InfinityFree...) :
+ *  - cle deja presente ou « Duplicate key name » : considere comme OK ;
+ *  - erreur 1071 « Specified key was too long » (index utf8mb4 > 767 octets,
+ *    row format COMPACT) : retente avec un index de PREFIXE crible a
+ *    191 caracteres (= 764 octets), suffisant en pratique.
  */
-function repair_unique_key(PDO $db, string $table, string $indexName, array $columns, bool $autoDedupe = false, bool $verbose = true): bool
+function repair_unique_key(PDO $db, string $table, string $indexName, array $columns, bool $autoDedupe = false, bool $verbose = true, int &$warnings = 0): bool
 {
     $q = $db->quote($table);
     if (!$db->query("SHOW TABLES LIKE $q")->fetchColumn()) {
@@ -185,9 +215,31 @@ function repair_unique_key(PDO $db, string $table, string $indexName, array $col
     if ($dupGroups > 0) {
         if (!$autoDedupe) {
             if ($verbose) {
-                echo "  $table.$indexName : MANQUANTE, $dupGroups doublon(s) — action manuelle requise.\n";
+                echo "  $table.$indexName : MANQUANTE, $dupGroups doublon(s) — action manuelle requise (avertissement : la reparation continue, aucune ligne supprimee).\n";
+                // Preview des lignes en doublon : permet a l'administrateur de
+                // voir exactement quelles lignes font conflit (ids + valeurs).
+                $cond = [];
+                foreach ($columns as $col) { $cond[] = "k.`$col` <=> t.`$col`"; }
+                try {
+                    $rows = $db->query(
+                        "SELECT id, $colList FROM `$table` t
+                          WHERE EXISTS (SELECT 1 FROM `$table` k
+                                        WHERE k.id <> t.id AND " . implode(' AND ', $cond) . ")
+                          ORDER BY id LIMIT 10"
+                    )->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($rows as $r) {
+                        $parts = [];
+                        foreach ($columns as $col) {
+                            $parts[] = $col . "='" . mb_substr((string) $r[$col], 0, 60) . "'";
+                        }
+                        echo "      ligne id={$r['id']} : " . implode(', ', $parts) . "\n";
+                    }
+                    if ($dupGroups > 5) { echo "      (+ autres groupes non affiches)\n"; }
+                    echo "      -> cochez « Supprimer aussi les doublons metier » et relancez pour corriger automatiquement (ligne la plus recente conservee).\n";
+                } catch (Throwable $e2) { /* aperçu indisponible : pas bloquant */ }
             }
-            return false;
+            $warnings++;
+            return true; // avertissement, pas une erreur
         }
         // Conserve la ligne la plus recente (id le plus grand) de chaque groupe.
         $join = '';
@@ -206,18 +258,62 @@ function repair_unique_key(PDO $db, string $table, string $indexName, array $col
     try {
         $db->exec("ALTER TABLE `$table` ADD UNIQUE KEY `$indexName` ($colList)");
         if ($verbose) { echo "  $table.$indexName : cle unique ajoutee.\n"; }
+        return true;
     } catch (Throwable $e) {
-        if ($verbose) { echo "  $table.$indexName : ECHEC (" . $e->getMessage() . ")\n"; }
+        $msg = $e->getMessage();
+        // La cle a pu etre ajoutee entre-temps (execution concurrente) :
+        // MySQL le signale par « Duplicate key name » — c'est un succes.
+        if (stripos($msg, 'Duplicate key name') !== false) {
+            if ($verbose) { echo "  $table.$indexName : cle unique deja presente (OK).\n"; }
+            return true;
+        }
+        // 1071 : index utf8mb4 trop long pour l'hebergeur (limite 767 octets).
+        // Repli : index de prefixe crible a 191 caracteres (= 764 octets).
+        if (stripos($msg, 'key was too long') !== false || strpos($msg, '1071') !== false) {
+            $shortList = implode(', ', array_map(static function (string $c): string {
+                return '`' . $c . '`(191)';
+            }, $columns));
+            try {
+                $db->exec("ALTER TABLE `$table` ADD UNIQUE KEY `$indexName` ($shortList)");
+                if ($verbose) {
+                    echo "  $table.$indexName : cle unique ajoutee (prefixe 191 caracteres — limite de l'hebergeur).\n";
+                }
+                return true;
+            } catch (Throwable $e2) {
+                if ($verbose) { echo "  $table.$indexName : ECHEC (" . $e2->getMessage() . ")\n"; }
+                return false;
+            }
+        }
+        if ($verbose) { echo "  $table.$indexName : ECHEC ($msg)\n"; }
         return false;
     }
-    return true;
 }
 /**
  * Point d'entree : repare tout le schema. Idempotent.
+ *
+ * $dedupeBusiness (FAUX par defaut) : autorise aussi le dedoublonnage des
+ * TABLES METIER (dossiers, users, employees, dossier_attachments,
+ * secure_downloads) en conservant la ligne la plus recente de chaque doublon.
+ * Reserve a l'administrateur (case a cocher explicite sur l'ecran web) :
+ * supprime des lignes metier, donc a utiliser en connaissance de cause.
+ *
+ * Retourne ['ok' => bool, 'warnings' => int, 'errors' => int] :
+ *  - ok = true  : aucune erreur bloquante (les AVERTISSEMENTS — ex. doublons
+ *                 de donnees metier a dedoublonner a la main — ne font pas
+ *                 echouer la reparation) ;
+ *  - warnings   : nombre de points demandant une action manuelle ;
+ *  - errors     : nombre d'erreurs reelles (echecs ALTER/SQL).
  */
-function repair_schema_all(PDO $db, bool $verbose = true): bool
+function repair_schema_all(PDO $db, bool $verbose = true, bool $dedupeBusiness = false): array
 {
-    $ok = true;
+    $warnings = 0;
+    $errors = 0;
+
+    // Les ALTER TABLE portant sur des colonnes referencees par des cles
+    // etrangeres (users.id, dossiers.id, employees.id, ...) sont refusees
+    // tant que la verification des contraintes est active. On la desactive
+    // le temps de la reparation, puis on la retablit.
+    try { $db->exec('SET FOREIGN_KEY_CHECKS = 0'); } catch (Throwable $e) {}
 
     // 1) Tables dont la colonne `id` doit etre PRIMARY KEY + AUTO_INCREMENT.
     $idTables = [
@@ -230,15 +326,42 @@ function repair_schema_all(PDO $db, bool $verbose = true): bool
     ];
     if ($verbose) { echo "--- 1. Cles primaires / AUTO_INCREMENT ---\n"; }
     foreach ($idTables as $t) {
-        try { $ok = repair_pk_id($db, $t, $verbose) && $ok; }
-        catch (Throwable $e) { $ok = false; echo "  $t : ERREUR " . $e->getMessage() . "\n"; }
+        try { repair_pk_id($db, $t, $verbose); }
+        catch (Throwable $e) { $errors++; echo "  $t : ERREUR " . $e->getMessage() . "\n"; }
     }
 
     // 2) chat_presence : PK sur user_id (une seule ligne par utilisateur).
     if ($verbose) { echo "--- 2. Table chat_presence ---\n"; }
     try {
         if ($db->query("SHOW TABLES LIKE " . $db->quote('chat_presence'))->fetchColumn()) {
-            $db->exec('DELETE p FROM chat_presence p JOIN chat_presence k ON k.user_id = p.user_id AND k.last_seen_at > p.last_seen_at');
+            // Deduplication COMPLETE : le simple self-join laisse les lignes
+            // strictement identiques (meme user_id ET meme last_seen_at),
+            // qui font ensuite echouer le ADD PRIMARY KEY (#1062 - entree en
+            // double) chez certains hebergeurs — c'est une cause frequente
+            // de « reparation terminee avec des erreurs ». On reconstruit
+            // donc la table via une table temporaire ; si celle-ci est
+            // refusee (privileges limites), repli sur l'ancienne methode.
+            $presDedup = false;
+            try {
+                $db->exec('CREATE TEMPORARY TABLE chat_presence_dedup (
+                    user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+                    last_seen_at DATETIME NOT NULL
+                ) ENGINE=InnoDB');
+                $db->exec('INSERT INTO chat_presence_dedup (user_id, last_seen_at)
+                           SELECT user_id, MAX(last_seen_at) FROM chat_presence GROUP BY user_id');
+                $db->exec('DELETE FROM chat_presence');
+                $db->exec('INSERT INTO chat_presence (user_id, last_seen_at)
+                           SELECT user_id, last_seen_at FROM chat_presence_dedup');
+                $presDedup = true;
+            } catch (Throwable $e) {
+                // table temporaire refusee -> repli sur le self-join
+            }
+            try { $db->exec('DROP TEMPORARY TABLE IF EXISTS chat_presence_dedup'); } catch (Throwable $e) {}
+            if ($presDedup) {
+                if ($verbose) { echo "  chat_presence : deduplication completee (table reconstruite, 1 ligne par utilisateur).\n"; }
+            } else {
+                $db->exec('DELETE p FROM chat_presence p JOIN chat_presence k ON k.user_id = p.user_id AND k.last_seen_at > p.last_seen_at');
+            }
             $hasPk = false;
             foreach ($db->query('SHOW INDEX FROM chat_presence') as $idx) {
                 if (($idx['Key_name'] ?? '') === 'PRIMARY' && ($idx['Column_name'] ?? '') === 'user_id') { $hasPk = true; break; }
@@ -264,10 +387,12 @@ function repair_schema_all(PDO $db, bool $verbose = true): bool
                 }
             }
         }
-    } catch (Throwable $e) { $ok = false; echo '  chat_presence : ERREUR ' . $e->getMessage() . "\n"; }
+    } catch (Throwable $e) { $errors++; echo '  chat_presence : ERREUR ' . $e->getMessage() . "\n"; }
 
     // 3) Cles UNIQUE indispensables aux "INSERT ... ON DUPLICATE KEY UPDATE".
-    if ($verbose) { echo "--- 3. Cles UNIQUE ---\n"; }
+    if ($verbose) {
+        echo "--- 3. Cles UNIQUE" . ($dedupeBusiness ? " (DEDOUBLONNAGE DES TABLES METIER ACTIVE)" : "") . " ---\n";
+    }
     $keys = [
         'settings'                 => ['uq_settings_key',      ['setting_key'],                   true],
         'security_settings'        => ['uq_secset_key',        ['setting_key'],                   true],
@@ -283,11 +408,13 @@ function repair_schema_all(PDO $db, bool $verbose = true): bool
         'secure_downloads'         => ['uq_secure_token',      ['token'],                         false],
     ];
     foreach ($keys as $table => $def) {
-        try { $ok = repair_unique_key($db, $table, $def[0], $def[1], $def[2], $verbose) && $ok; }
-        catch (Throwable $e) { $ok = false; echo "  $table.{$def[0]} : ERREUR " . $e->getMessage() . "\n"; }
+        try { repair_unique_key($db, $table, $def[0], $def[1], $def[2] || $dedupeBusiness, $verbose, $warnings); }
+        catch (Throwable $e) { $errors++; echo "  $table.{$def[0]} : ERREUR " . $e->getMessage() . "\n"; }
     }
 
-    return $ok;
+    try { $db->exec('SET FOREIGN_KEY_CHECKS = 1'); } catch (Throwable $e) {}
+
+    return ['ok' => $errors === 0, 'warnings' => $warnings, 'errors' => $errors];
 }
 
 // ---------------------------------------------------------------------
@@ -297,9 +424,15 @@ function repair_schema_all(PDO $db, bool $verbose = true): bool
 if (!defined('REPAIR_SCHEMA_LIBRARY')) {
     if (PHP_SAPI === 'cli') {
         echo "=== Reparation du schema ===\n";
-        $ok = repair_schema_all($db, true);
-        echo $ok ? "\nOK\n" : "\nECHEC (voir les details ci-dessus)\n";
-        exit($ok ? 0 : 1);
+        $result = repair_schema_all($db, true);
+        if ($result['errors'] > 0) {
+            echo "\nECHEC ({$result['errors']} erreur(s) — voir les details ci-dessus)\n";
+            exit(1);
+        }
+        echo "\nOK" . ($result['warnings'] > 0
+            ? " ({$result['warnings']} avertissement(s) : action manuelle requise, voir le rapport)"
+            : '') . "\n";
+        exit(0);
     }
 
     set_flash('success', 'Schéma de la base réparé.');

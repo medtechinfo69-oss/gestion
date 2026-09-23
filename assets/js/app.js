@@ -7,8 +7,11 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     initSidebarToggle();
+    initSidebarCollapse();
     initCaAutoCalc();
     initConfirmActions();
+    initNotifDetailModal();
+    initNotifDropdown();
     initFlashAutoHide();
     initNewVendeurToggle();
     initBulkSelection();
@@ -18,13 +21,79 @@
     initVendeurEditModal();
     initSuperviseurModal();
     initSuperviseurPasswordUx();
+    initVendeurPasswordUx();
     initTrashSelection();
     initSalaryCardToggle();
     initSalaryInlineEdit();
     initSalaryFileImport();
     initRhDashboardCharts();
     initPerformanceNoScroll();
+    initPerformanceCaNoScroll();
   });
+
+  /**
+   * Cloche de notification de l'en-tête.
+   *
+   * Desktop : le menu s'ouvre au survol (CSS .notif-wrap:hover), la cloche
+   * reste un lien direct vers notifications.php.
+   *
+   * Mobile (pas de survol) : le clic bascule le menu déroulant au lieu de
+   * naviguer. « Tout voir » et chaque élément du menu redirigent toujours
+   * vers la page complète des notifications. Clic extérieur ou touche Échap
+   * referme le menu.
+   */
+  function initNotifDropdown() {
+    var wrap = document.querySelector('.notif-wrap');
+    if (!wrap) return;
+    var bell = wrap.querySelector('.notif-bell');
+    var dropdown = wrap.querySelector('.notif-dropdown');
+    if (!bell || !dropdown) return;
+
+    var setOpen = function (open) {
+      dropdown.classList.toggle('open', open);
+      bell.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    var isOpen = function () { return dropdown.classList.contains('open'); };
+
+    bell.setAttribute('aria-haspopup', 'true');
+    bell.setAttribute('aria-expanded', 'false');
+
+    // Clic sur la cloche : menu sur mobile, navigation sur desktop.
+    bell.addEventListener('click', function (event) {
+      // Pointeur fin (souris/trackpad) = le survol gère déjà l'ouverture :
+      // on laisse le lien fonctionner normalement.
+      if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        return;
+      }
+      // Écran tactile : le survol n'existe pas, on bascule le menu.
+      event.preventDefault();
+      setOpen(!isOpen());
+    });
+
+    // « Tout voir » et les éléments du menu naviguent normalement, puis
+    // referment le menu (sécurité si la navigation est interceptée).
+    dropdown.addEventListener('click', function (event) {
+      var link = event.target.closest('a');
+      if (link) { setOpen(false); }
+    });
+
+    // Clic extérieur referme le menu (mobile uniquement : sur desktop le
+    // menu suit le survol et se referme déjà tout seul).
+    document.addEventListener('click', function (event) {
+      if (!isOpen()) return;
+      if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches && !wrap.contains(event.target)) {
+        setOpen(false);
+      }
+    });
+
+    // Touche Échap referme le menu et rend le focus à la cloche.
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && isOpen()) {
+        setOpen(false);
+        bell.focus();
+      }
+    });
+  }
 
   /** Bascule le menu latéral en affichage mobile. */
   function initSidebarToggle() {
@@ -42,6 +111,36 @@
           !toggle.contains(e.target)) {
         sidebar.classList.remove('open');
       }
+    });
+  }
+
+  /**
+   * Bascule le menu latéral entre mode complet et mode icônes seules.
+   * L'état est mémorisé dans localStorage pour être conservé entre les pages.
+   */
+  function initSidebarCollapse() {
+    var sidebar = document.getElementById('sidebar');
+    var btn = document.querySelector('[data-sidebar-collapse]');
+    if (!sidebar || !btn) return;
+
+    var STORAGE_KEY = 'sidebar_collapsed';
+
+    function apply(collapsed) {
+      sidebar.classList.toggle('collapsed', collapsed);
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.setAttribute('aria-label', collapsed ? 'Afficher le menu' : 'Réduire le menu');
+      btn.title = collapsed ? 'Afficher le menu' : 'Réduire le menu';
+      try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch (err) { /* stockage indisponible */ }
+    }
+
+    var saved = null;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (err) { /* stockage indisponible */ }
+    if (saved === '1') {
+      apply(true);
+    }
+
+    btn.addEventListener('click', function () {
+      apply(!sidebar.classList.contains('collapsed'));
     });
   }
 
@@ -260,31 +359,52 @@
     refresh();
   }
 
-  function openVendorEditModal(id, nom, email) {
-    var modal = document.getElementById('vendeur-edit-modal');
-    var idInput = document.getElementById('vendeur-edit-id');
-    var nameInput = document.getElementById('vendeur-edit-name');
-    var emailInput = document.getElementById('vendeur-edit-email');
-    if (!modal || !idInput || !nameInput || !emailInput) return;
-
-    idInput.value = String(id || '');
-    nameInput.value = String(nom || '');
-    emailInput.value = String(email || '');
-    modal.style.display = 'flex';
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    setTimeout(function () {
-      nameInput.focus();
-      nameInput.select();
-    }, 50);
-  }
-
+  /**
+   * Popup vendeur : création ET modification dans le même dialogue.
+   * Champs : nom, identifiant, e-mail, statut (tous les vendeurs sont
+   * connectables) et mot de passe (obligatoire à la création). L'action
+   * du formulaire bascule entre vendeur_save.php et vendeur_update.php
+   * selon le mode.
+   */
   function initVendeurEditModal() {
-    var modal = document.getElementById('vendeur-edit-modal');
-    var idInput = document.getElementById('vendeur-edit-id');
-    var nameInput = document.getElementById('vendeur-edit-name');
-    var emailInput = document.getElementById('vendeur-edit-email');
-    if (!modal || !idInput || !nameInput || !emailInput) return;
+    var modal = document.getElementById('vendeur-modal');
+    var form = document.getElementById('vendeur-modal-form');
+    var idInput = document.getElementById('vendeur-modal-id');
+    var nomInput = document.getElementById('vendeur-modal-nom');
+    var usernameInput = document.getElementById('vendeur-modal-username');
+    var emailInput = document.getElementById('vendeur-modal-email');
+    var activeInput = document.getElementById('vendeur-modal-active');
+    var superviseInput = document.getElementById('vendeur-modal-supervise');
+    var passwordInput = document.getElementById('vendeur-modal-password');
+    var title = document.getElementById('vendeur-modal-title');
+    if (!modal || !form || !idInput || !nomInput) return;
+
+    function setMode(isEdit) {
+      var action = isEdit
+        ? form.getAttribute('data-edit-action')
+        : form.getAttribute('data-create-action');
+      if (action) form.action = action;
+      if (title) title.textContent = isEdit ? 'Modifier le vendeur' : 'Nouveau vendeur';
+      if (passwordInput) passwordInput.required = !isEdit;
+      if (usernameInput) usernameInput.required = false;
+    }
+
+    function openModal(data) {
+      var isEdit = !!data.id;
+      setMode(isEdit);
+      idInput.value = isEdit ? String(data.id) : '';
+      nomInput.value = data.nom || '';
+      if (usernameInput) usernameInput.value = data.username || '';
+      if (emailInput) emailInput.value = data.email || '';
+      if (activeInput) activeInput.value = (data.active === 0 || data.active === '0') ? '0' : '1';
+      // Tous les vendeurs sont connectables : le champ reste toujours à 1.
+      if (superviseInput) superviseInput.value = '1';
+      if (passwordInput) passwordInput.value = '';
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      setTimeout(function () { nomInput.focus(); nomInput.select(); }, 50);
+    }
 
     function closeModal() {
       modal.style.display = 'none';
@@ -295,6 +415,13 @@
       }
     }
 
+    var newButton = document.getElementById('vendeur-new-btn');
+    if (newButton) {
+      newButton.addEventListener('click', function () {
+        openModal({ id: '', nom: '', username: '', email: '', active: 1, supervise: 1 });
+      });
+    }
+
     document.addEventListener('click', function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
@@ -302,15 +429,18 @@
       var editButton = target.closest('[data-vendeur-edit]');
       if (editButton) {
         event.preventDefault();
-        openVendorEditModal(
-          editButton.getAttribute('data-id') || '',
-          editButton.getAttribute('data-nom') || '',
-          editButton.getAttribute('data-email') || ''
-        );
+        openModal({
+          id: editButton.getAttribute('data-id') || '',
+          nom: editButton.getAttribute('data-nom') || '',
+          username: editButton.getAttribute('data-username') || '',
+          email: editButton.getAttribute('data-email') || '',
+          active: editButton.getAttribute('data-active'),
+          supervise: 1
+        });
         return;
       }
 
-      if (target.closest('[data-vendeur-close]')) {
+      if (target.closest('#vendeur-modal-cancel')) {
         closeModal();
         return;
       }
@@ -691,6 +821,65 @@
     });
   }
 
+  /**
+   * Met à jour « Performance vendeur par chiffre d'affaire » sans rechargement
+   * ni déplacement du scroll (le tableau est remplacé sur place via AJAX).
+   * En cas d'échec réseau, le formulaire soumet normalement, avec l'ancre
+   * #performance-ca-card pour rester positionné sur la carte après rechargement.
+   */
+  function initPerformanceCaNoScroll() {
+    var form = document.querySelector('[data-performance-ca-form]');
+    if (!form) return;
+    var card = document.getElementById('performance-ca-card') || form.closest('.card');
+    var tbody = card ? card.querySelector('[data-performance-ca-tbody]') : null;
+    var submitBtn = form.querySelector('[data-performance-ca-submit]');
+    var statusEl = form.querySelector('[data-performance-ca-status]');
+    var subtitleEl = document.getElementById('performance-ca-subtitle');
+    if (!card || !tbody) return;
+
+    // Repli sans JS/AJAX : rester ancré sur la carte après rechargement.
+    form.setAttribute('action', '#performance-ca-card');
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      var params = new URLSearchParams(new FormData(form));
+      params.set('ajax', 'performance_ca');
+      var url = window.location.pathname + '?' + params.toString();
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Chargement...';
+      }
+      if (statusEl) statusEl.textContent = '';
+
+      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        })
+        .then(function (data) {
+          if (!data || !data.ok) throw new Error('bad-response');
+          tbody.innerHTML = data.caRowsHtml || '';
+          if (subtitleEl && data.caSubtitle) subtitleEl.textContent = data.caSubtitle;
+          var nextUrl = window.location.pathname + '?' + params.toString().replace(/(^|&)ajax=performance_ca(&|$)/, function (m, a, b) { return a && b ? a : ''; });
+          nextUrl = nextUrl.replace(/\?$/, '');
+          try { window.history.replaceState(null, '', nextUrl); } catch (e) {}
+          if (statusEl) statusEl.textContent = 'Mis à jour.';
+        })
+        .catch(function () {
+          // Échec : soumission classique, l'ancre garde la position sur la carte.
+          form.submit();
+        })
+        .finally(function () {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Actualiser';
+          }
+        });
+    });
+  }
+
   /** Gère l’ouverture/fermeture du formulaire de saisie manuelle d'un salaire. */
   function initSalaryCardToggle() {
     var newSalaryBtn = document.getElementById('newSalaryBtn');
@@ -926,9 +1115,9 @@
     });
   }
 
-  /** Améliore l'UX du champ mot de passe : bascule afficher/masquer et indicateur de robustesse. */
-  function initSuperviseurPasswordUx() {
-    var pwd = document.getElementById('modal-password');
+  /** Améliore l'UX d'un champ mot de passe : bascule afficher/masquer + robustesse. */
+  function initPasswordUxFor(passwordId) {
+    var pwd = document.getElementById(passwordId);
     var toggle = document.getElementById('password-toggle');
     if (!pwd || !toggle) return;
 
@@ -1063,6 +1252,80 @@
       var val = pwd.value || '';
       var res = scorePassword(val);
       renderScoreData(res);
+    });
+  }
+
+  /** Champ mot de passe de la popup superviseur. */
+  function initSuperviseurPasswordUx() {
+    initPasswordUxFor('modal-password');
+  }
+
+  /** Champ mot de passe de la popup vendeur. */
+  function initVendeurPasswordUx() {
+    initPasswordUxFor('vendeur-modal-password');
+  }
+
+  /**
+   * Popup « Voir » du journal des notifications de supervision.
+   * Le bouton (icône œil) de chaque ligne porte le détail dans des attributs
+   * data-* : on recopie ces valeurs dans le dialogue puis on l'affiche.
+   * Les clics sont captés par délégation pour que les boutons continuent de
+   * fonctionner après un filtrage ou un changement de page (contenu re-rendu).
+   */
+  function initNotifDetailModal() {
+    var modal = document.getElementById('notif-detail-modal');
+    if (!modal) return;
+
+    var closeBtn = document.getElementById('notif-detail-close');
+    var okBtn = document.getElementById('notif-detail-ok');
+    var lastFocus = null;
+
+    /** Remplit un champ du dialogue (« — » quand la valeur est vide). */
+    function setField(id, value) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = (value === null || value === undefined || value === '') ? '—' : value;
+    }
+
+    function open(btn) {
+      setField('nd-date', btn.getAttribute('data-date'));
+      setField('nd-actor', btn.getAttribute('data-actor'));
+      setField('nd-action', btn.getAttribute('data-action'));
+      setField('nd-entity', btn.getAttribute('data-entity'));
+      setField('nd-title', btn.getAttribute('data-title'));
+      setField('nd-ip', btn.getAttribute('data-ip'));
+      setField('nd-state', btn.getAttribute('data-state'));
+      // Le détail reste vide si absent : le CSS affiche alors un tiret.
+      var detail = document.getElementById('nd-detail');
+      if (detail) detail.textContent = btn.getAttribute('data-detail') || '';
+      lastFocus = btn;
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      if (okBtn) okBtn.focus();
+    }
+
+    function close() {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (lastFocus && document.body.contains(lastFocus)) lastFocus.focus();
+    }
+
+    document.addEventListener('click', function (e) {
+      var target = e.target;
+      if (!target || !target.closest) return;
+      var btn = target.closest('[data-notif-view]');
+      if (!btn) return;
+      e.preventDefault();
+      open(btn);
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (okBtn) okBtn.addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.style.display === 'flex') close();
     });
   }
 

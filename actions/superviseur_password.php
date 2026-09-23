@@ -44,7 +44,7 @@ try {
     }
 
     log_security_event('PASSWORD_CHANGE', "Mot de passe défini par l'administrateur pour {$superviseur['username']}");
-    notify_admins($db, 'Mot de passe superviseur modifié', 'Le mot de passe du superviseur ' . $superviseur['username'] . ' a été modifié par un administrateur.');
+    // Aucun envoi d'e-mail n'est demandé pour les modifications RH.
 
     if (function_exists('log_dossier_history') && function_exists('current_user')) {
         try {

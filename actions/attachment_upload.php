@@ -99,7 +99,13 @@ try {
         'mime' => $realMime, 'taille' => $file['size'], 'u' => $user['id'],
     ]);
     log_dossier_history($db, $dossierId, $user['id'], 'ajout_piece_jointe', null, null, $originalName);
-    notify_admins($db, 'Nouvelle pièce jointe dans un dossier', 'Une pièce jointe nommée "' . $originalName . '" a été ajoutée au dossier #' . $dossierId . ' par ' . (string) ($user['nom_complet'] ?? 'un utilisateur') . '.', $destination, $originalName);
+    if (is_superviseur()) {
+        $whoUp = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur');
+        notify_superviseur_action($db, 'upload', 'piece_jointe', $dossierId,
+            $whoUp . ' a ajoute une piece jointe au dossier #' . $dossierId . ' (' . $originalName . ')',
+            'Piece jointe « ' . $originalName . ' » ajoutee au dossier #' . $dossierId . ' par ' . $whoUp . '.');
+    }
+    // Aucun envoi d'e-mail n'est demandé pour les pièces jointes.
 } catch (PDOException $e) {
     @unlink($destination);
     error_log('attachment_upload error: ' . $e->getMessage());

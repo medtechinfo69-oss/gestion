@@ -5,6 +5,9 @@ require_login();
 $user = current_user();
 $isAdmin = is_admin();
 $canAccessAll = can_access_dossiers();
+// Rôle strict « vendeur » (même si can_supervise=1) : ses tableaux de
+// performance n'afficheront QUE sa propre ligne.
+$isVendeurSession = is_vendeur_user();
 $currentYear = (int) date('Y');
 
 // ---------------------------------------------------------------------
@@ -15,9 +18,11 @@ $currentYear = (int) date('Y');
 // GET (perf_*) pour ne pas affecter les autres cartes du tableau de bord.
 // ---------------------------------------------------------------------
 $perfVendeurFilter = (int) (filter_var($_GET['perf_vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);
-$perfJourRaw = trim((string) ($_GET['perf_jour'] ?? ''));
-$perfMoisRaw = trim((string) ($_GET['perf_mois'] ?? ''));
-$perfAnneeRaw = trim((string) ($_GET['perf_annee'] ?? ''));
+// Par défaut : la date du jour. Si le paramètre est présent mais vide (« Tous »),
+// aucun filtre n'est appliqué sur ce champ.
+$perfJourRaw = array_key_exists('perf_jour', $_GET) ? trim((string) $_GET['perf_jour']) : (string) date('j');
+$perfMoisRaw = array_key_exists('perf_mois', $_GET) ? trim((string) $_GET['perf_mois']) : (string) date('n');
+$perfAnneeRaw = array_key_exists('perf_annee', $_GET) ? trim((string) $_GET['perf_annee']) : (string) $currentYear;
 $perfJourFilter = filter_var($perfJourRaw, FILTER_VALIDATE_INT);
 $perfJourFilter = ($perfJourFilter !== false && $perfJourFilter >= 1 && $perfJourFilter <= 31) ? (int) $perfJourFilter : null;
 $perfMoisFilter = filter_var($perfMoisRaw, FILTER_VALIDATE_INT);
@@ -25,6 +30,26 @@ $perfMoisFilter = ($perfMoisFilter !== false && $perfMoisFilter >= 1 && $perfMoi
 $perfAnneeFilter = filter_var($perfAnneeRaw !== '' ? $perfAnneeRaw : (string) $currentYear, FILTER_VALIDATE_INT);
 $perfAnneeFilter = ($perfAnneeFilter !== false && $perfAnneeFilter >= 1900 && $perfAnneeFilter <= 2100) ? (int) $perfAnneeFilter : $currentYear;
 $perfHasDateFilter = $perfJourRaw !== '' || $perfMoisRaw !== '' || $perfAnneeRaw !== '';
+
+// Filtres « Performance vendeur par chiffre d'affaire » — indépendants des
+// filtres ci-dessus, avec par défaut la date du jour (jour / mois / année).
+$caVendeurFilter = (int) (filter_var($_GET['ca_vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);
+$caJourRaw = array_key_exists('ca_jour', $_GET) ? trim((string) $_GET['ca_jour']) : (string) date('j');
+$caMoisRaw = array_key_exists('ca_mois', $_GET) ? trim((string) $_GET['ca_mois']) : (string) date('n');
+$caAnneeRaw = array_key_exists('ca_annee', $_GET) ? trim((string) $_GET['ca_annee']) : (string) $currentYear;
+$caJourFilter = filter_var($caJourRaw, FILTER_VALIDATE_INT);
+$caJourFilter = ($caJourFilter !== false && $caJourFilter >= 1 && $caJourFilter <= 31) ? (int) $caJourFilter : null;
+$caMoisFilter = filter_var($caMoisRaw, FILTER_VALIDATE_INT);
+$caMoisFilter = ($caMoisFilter !== false && $caMoisFilter >= 1 && $caMoisFilter <= 12) ? (int) $caMoisFilter : null;
+$caAnneeFilter = filter_var($caAnneeRaw !== '' ? $caAnneeRaw : (string) $currentYear, FILTER_VALIDATE_INT);
+$caAnneeFilter = ($caAnneeFilter !== false && $caAnneeFilter >= 1900 && $caAnneeFilter <= 2100) ? (int) $caAnneeFilter : $currentYear;
+
+// Session au rôle « vendeur » : le filtre « Vendeur » est sans objet et les
+// tableaux de performance ne contiennent que la propre ligne du vendeur.
+if ($isVendeurSession) {
+    $perfVendeurFilter = 0;
+    $caVendeurFilter = 0;
+}
 
 $monthLabels = [
   1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril', 5 => 'Mai', 6 => 'Juin',
@@ -37,8 +62,10 @@ $monthLabels = [
 //  - "Jour", "Mois", "Année" : champs texte (saisie libre, sans liste déroulante)
 //    Jour et Mois vides = pas de filtre sur ce champ. Année vide = année en cours.
 // ---------------------------------------------------------------------
-$jourRaw = trim((string) ($_GET['jour'] ?? ''));
-$moisRaw = trim((string) ($_GET['mois'] ?? ''));
+// Par défaut (premier chargement, sans paramètre GET) : la date du jour.
+// Si le paramètre est présent mais vide (« Tous »), aucun filtre n'est appliqué.
+$jourRaw = array_key_exists('jour', $_GET) ? trim((string) $_GET['jour']) : (string) date('j');
+$moisRaw = array_key_exists('mois', $_GET) ? trim((string) $_GET['mois']) : (string) date('n');
 $anneeRaw = trim((string) ($_GET['annee'] ?? ''));
 $vendeurFilter = (int) (filter_var($_GET['vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);
 $jourFilter = filter_var($jourRaw, FILTER_VALIDATE_INT);
@@ -60,12 +87,22 @@ $availableJours = $db->query("SELECT DISTINCT DAY(date_vente) AS j
         WHERE date_vente IS NOT NULL
         ORDER BY j")->fetchAll(PDO::FETCH_COLUMN);
 $availableJours = array_map('intval', $availableJours);
+// Le jour d'aujourd'hui doit toujours être sélectionnable (valeur par défaut du filtre).
+if (!in_array((int) date('j'), $availableJours, true)) {
+    $availableJours[] = (int) date('j');
+}
+sort($availableJours);
 
 $availableMois = $db->query("SELECT DISTINCT MONTH(date_vente) AS m
         FROM dossiers
         WHERE date_vente IS NOT NULL
         ORDER BY m")->fetchAll(PDO::FETCH_COLUMN);
 $availableMois = array_map('intval', $availableMois);
+// Le mois d'aujourd'hui doit toujours être sélectionnable (valeur par défaut du filtre).
+if (!in_array((int) date('n'), $availableMois, true)) {
+    $availableMois[] = (int) date('n');
+}
+sort($availableMois);
 
 $availableAnnees = $db->query("SELECT DISTINCT YEAR(date_vente) AS a
         FROM dossiers
@@ -159,9 +196,12 @@ $stmt = $db->prepare("SELECT
 $stmt->execute($statsParams);
 $stats = $stmt->fetch();
 
-// Répartition par vendeur (visible pour l'administrateur uniquement)
+// Répartition par vendeur : mêmes tableaux pour l'admin et pour une session
+// au rôle « vendeur » — un vendeur ne voit que SA propre ligne (son nom),
+// même avec can_supervise=1 ; admin / superviseurs voient tous les vendeurs.
 $parVendeur = [];
-if ($isAdmin) {
+$parVendeurCa = [];
+{
   // Mêmes règles de filtrage que « Filtres du tableau de bord » :
   // année (plage du 01/01 au 01/01), puis mois et jour si sélectionnés.
   $performanceParams = [];
@@ -183,6 +223,10 @@ if ($isAdmin) {
   if ($perfVendeurFilter > 0) {
     $performanceParams['performance_vendeur'] = $perfVendeurFilter;
   }
+  if ($isVendeurSession) {
+    $performanceVendeurWhere .= ' AND u.id = :performance_self';
+    $performanceParams['performance_self'] = (int) $user['id'];
+  }
   $stmt = $db->prepare("SELECT u.nom_complet,
             COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' THEN d.ca_annuel ELSE 0 END), 0) AS total_ca,
             SUM(CASE WHEN d.etat_dossier = 'Dossier complet' THEN 1 ELSE 0 END) AS nb_complets,
@@ -197,9 +241,54 @@ if ($isAdmin) {
     $stmt->execute($performanceParams);
     $parVendeur = $stmt->fetchAll();
 
-    // Réponse AJAX : met à jour uniquement le tableau, sans recharger la page
-    // (donc sans remonter le scroll en haut).
-    if (($isAdmin || $canAccessAll) && isset($_GET['ajax']) && $_GET['ajax'] === 'performance') {
+    // Performance vendeur par chiffre d'affaire : CA réparti selon
+    // l'état des dossiers (Complets / Non complets / Annulés / Total),
+    // avec ses propres filtres (ca_*) — par défaut la date du jour.
+    $caParams = [];
+    $caStart = sprintf('%04d-01-01', $caAnneeFilter);
+    $caEnd = sprintf('%04d-01-01', $caAnneeFilter + 1);
+    $caOn = "d.vendeur_id = u.id
+                AND d.date_vente >= :ca_start AND d.date_vente < :ca_end";
+    $caParams['ca_start'] = $caStart;
+    $caParams['ca_end'] = $caEnd;
+    if ($caMoisFilter !== null) {
+        $caOn .= ' AND MONTH(d.date_vente) = :ca_fmois';
+        $caParams['ca_fmois'] = $caMoisFilter;
+    }
+    if ($caJourFilter !== null) {
+        $caOn .= ' AND DAY(d.date_vente) = :ca_fjour';
+        $caParams['ca_fjour'] = $caJourFilter;
+    }
+    $caVendeurWhere = $caVendeurFilter > 0 ? ' AND u.id = :ca_fvendeur' : '';
+    if ($caVendeurFilter > 0) {
+        $caParams['ca_fvendeur'] = $caVendeurFilter;
+    }
+    if ($isVendeurSession) {
+        $caVendeurWhere .= ' AND u.id = :ca_self';
+        $caParams['ca_self'] = (int) $user['id'];
+    }
+    $stmt = $db->prepare("SELECT u.nom_complet,
+                COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' AND d.etat_dossier = 'Dossier complet' THEN d.ca_annuel ELSE 0 END), 0) AS ca_complets,
+                COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' AND d.etat_dossier = 'Dossier incomplet' THEN d.ca_annuel ELSE 0 END), 0) AS ca_non_complets,
+                COALESCE(SUM(CASE WHEN d.etat_contrat <> 'Actif' THEN d.ca_annuel ELSE 0 END), 0) AS ca_annules,
+                COALESCE(SUM(d.ca_annuel), 0) AS ca_total
+            FROM users u
+            LEFT JOIN dossiers d ON $caOn
+            WHERE u.role = 'vendeur'$caVendeurWhere
+            GROUP BY u.id, u.nom_complet
+            ORDER BY ca_total DESC");
+    $stmt->execute($caParams);
+    $parVendeurCa = $stmt->fetchAll();
+
+    // Réponse AJAX : met à jour uniquement les tableaux, sans recharger la page
+    // (donc sans remonter le scroll en haut). Deux cibles possibles :
+    //   - ajax=performance      -> carte « Performance vendeur par contrat »
+    //   - ajax=performance_ca   -> carte « Performance vendeur par chiffre d'affaire »
+    // Accessible aussi en session vendeur (ses lignes sont déjà restreintes).
+    if (isset($_GET['ajax'])) {
+        $ajaxTarget = $_GET['ajax'];
+
+        // Lignes de la carte « Performance vendeur par contrat ».
         $rowsHtml = '';
         foreach ($parVendeur as $v) {
             $rowsHtml .= '<tr>'
@@ -210,17 +299,40 @@ if ($isAdmin) {
                 . '<td class="text-center">' . (int) $v['nb_total'] . '</td>'
                 . '</tr>';
         }
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok' => true,
-            'rowsHtml' => $rowsHtml,
-            'count' => count($parVendeur),
-            'vendeur' => $perfVendeurFilter,
-            'jour' => $perfJourFilter,
-            'mois' => $perfMoisFilter,
-            'annee' => $perfAnneeFilter,
-        ]);
-        exit;
+
+        // Lignes de la carte « Performance vendeur par chiffre d'affaire ».
+        $caRowsHtml = '';
+        foreach ($parVendeurCa as $v) {
+            $caRowsHtml .= '<tr>'
+                . '<td>' . e($v['nom_complet']) . '</td>'
+                . '<td class="text-center">' . format_montant((float) $v['ca_complets']) . '</td>'
+                . '<td class="text-center">' . format_montant((float) $v['ca_non_complets']) . '</td>'
+                . '<td class="text-center">' . format_montant((float) $v['ca_annules']) . '</td>'
+                . '<td class="text-center"><strong>' . format_montant((float) $v['ca_total']) . '</strong></td>'
+                . '</tr>';
+        }
+
+        // Sous-titre de la carte CA (année · mois · jour), reconstruit côté serveur.
+        $caSubtitle = 'CA réparti par état de dossier — ' . (int) $caAnneeFilter
+            . ($caMoisFilter !== null ? ' · ' . e($monthLabels[$caMoisFilter] ?? '') : '')
+            . ($caJourFilter !== null ? ' · jour ' . sprintf('%02d', $caJourFilter) : '');
+
+        if (in_array($ajaxTarget, ['performance', 'performance_ca'], true)) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'ok' => true,
+                'rowsHtml' => $rowsHtml,
+                'caRowsHtml' => $caRowsHtml,
+                'caSubtitle' => $caSubtitle,
+                'count' => count($parVendeur),
+                'countCa' => count($parVendeurCa),
+                'vendeur' => $perfVendeurFilter,
+                'jour' => $perfJourFilter,
+                'mois' => $perfMoisFilter,
+                'annee' => $perfAnneeFilter,
+            ]);
+            exit;
+        }
     }
 }
 
@@ -362,10 +474,89 @@ require __DIR__ . '/includes/header.php';
   </div>
 </section>
 
-<?php if ($isAdmin && $parVendeur): ?>
+<?php if ($parVendeurCa): ?>
+<div class="card" id="performance-ca-card">
+  <div class="card-header">
+    <div>
+      <h2>Performance vendeur par chiffre d'affaire</h2>
+      <div class="muted" id="performance-ca-subtitle" style="font-size:0.8rem;margin-top:4px;">CA réparti par état de dossier — <?= (int) $caAnneeFilter ?><?= $caMoisFilter !== null ? ' · ' . e($monthLabels[$caMoisFilter] ?? '') : '' ?><?= $caJourFilter !== null ? ' · jour ' . sprintf('%02d', $caJourFilter) : '' ?></div>
+    </div>
+    <form method="get" class="dashboard-filters" id="performance-ca-form" data-performance-ca-form action="#performance-ca-card">
+      <?php if ($canAccessAll && !$isVendeurSession): ?>
+      <div class="dashboard-filter-field">
+        <label for="ca_vendeur" class="muted">Vendeur</label>
+        <select id="ca_vendeur" name="ca_vendeur">
+          <option value="0">Tous</option>
+          <?php foreach ($vendeurs as $v): ?>
+            <option value="<?= (int) $v['id'] ?>" <?= $caVendeurFilter === (int) $v['id'] ? 'selected' : '' ?>><?= e($v['nom_complet']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php endif; ?>
+      <div class="dashboard-filter-field">
+        <label for="ca_jour" class="muted">Jour</label>
+        <select id="ca_jour" name="ca_jour" class="dashboard-scroll-select" size="1">
+          <option value="" <?= $caJourFilter === null ? 'selected' : '' ?>>Tous</option>
+          <?php foreach ($availableJours as $j): ?>
+            <option value="<?= $j ?>" <?= $caJourFilter === $j ? 'selected' : '' ?>><?= sprintf('%02d', $j) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="dashboard-filter-field">
+        <label for="ca_mois" class="muted">Mois</label>
+        <select id="ca_mois" name="ca_mois" class="dashboard-scroll-select" size="1">
+          <option value="" <?= $caMoisFilter === null ? 'selected' : '' ?>>Tous</option>
+          <?php foreach ($availableMois as $m): ?>
+            <option value="<?= $m ?>" <?= $caMoisFilter === $m ? 'selected' : '' ?>><?= e($monthLabels[$m] ?? sprintf('%02d', $m)) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="dashboard-filter-field">
+        <label for="ca_annee" class="muted">Année</label>
+        <select id="ca_annee" name="ca_annee" class="dashboard-scroll-select" size="1">
+          <?php foreach ($availableAnnees as $a): ?>
+            <option value="<?= $a ?>" <?= $caAnneeFilter === $a ? 'selected' : '' ?>><?= $a ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+            <div class="dashboard-filter-actions">
+              <button type="submit" class="btn btn-primary btn-sm" data-performance-ca-submit>Actualiser</button>
+              <a href="<?= e(APP_URL) ?>/dashboard.php#performance-ca-card" class="btn btn-outline btn-sm">Réinitialiser</a>
+              <span class="muted" data-performance-ca-status role="status" aria-live="polite" style="font-size:0.8rem;"></span>
+            </div>
+          </form>
+       </div>
+       <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Vendeur</th>
+                <th class="text-center">CA Complets</th>
+                <th class="text-center">CA Non complets</th>
+                <th class="text-center">CA Annulés</th>
+                <th class="text-center">CA Total</th>
+              </tr>
+            </thead>
+            <tbody data-performance-ca-tbody>
+              <?php foreach ($parVendeurCa as $v): ?>
+              <tr>
+                <td><?= e($v['nom_complet']) ?></td>
+                <td class="text-center"><?= format_montant((float) $v['ca_complets']) ?></td>
+                <td class="text-center"><?= format_montant((float) $v['ca_non_complets']) ?></td>
+                <td class="text-center"><?= format_montant((float) $v['ca_annules']) ?></td>
+                <td class="text-center"><strong><?= format_montant((float) $v['ca_total']) ?></strong></td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+       </div>
+      </div>
+      <?php endif; ?>
+
+<?php if ($parVendeur): ?>
 <div class="card" id="performance-vendeurs-card">
   <div class="card-header">
-    <h2>Performance par vendeur</h2>
+    <h2>Performance vendeur par contrat</h2>
     <form method="get" class="dashboard-filters" id="performance-filter-form" data-performance-form action="">
       <?php if ($canAccessAll): ?>
       <input type="hidden" name="vendeur" value="<?= (int) $vendeurFilter ?>">
@@ -373,6 +564,7 @@ require __DIR__ . '/includes/header.php';
       <input type="hidden" name="mois" value="<?= e($moisRaw) ?>">
       <input type="hidden" name="annee" value="<?= e($anneeRaw !== '' ? $anneeRaw : (string) $anneeFilter) ?>">
       <?php endif; ?>
+      <?php if ($canAccessAll && !$isVendeurSession): ?>
       <div class="dashboard-filter-field">
         <label for="perf_vendeur" class="muted">Vendeur</label>
         <select id="perf_vendeur" name="perf_vendeur">
@@ -382,6 +574,7 @@ require __DIR__ . '/includes/header.php';
           <?php endforeach; ?>
         </select>
       </div>
+      <?php endif; ?>
       <div class="dashboard-filter-field">
         <label for="perf_jour" class="muted">Jour</label>
         <select id="perf_jour" name="perf_jour" class="dashboard-scroll-select" size="1">

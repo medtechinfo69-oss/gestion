@@ -73,10 +73,18 @@ if ($action === 'save') {
         'start' => $startDate,
       ]);
     }
-    employee_redirect('Employé enregistré avec succès.', 'success');
+    if (is_superviseur()) {
+      $me = current_user();
+      $who = (string) ($me['nom_complet'] ?? $me['username'] ?? 'Un superviseur');
+      $label = $id > 0 ? ('Employe modifie : ' . $name) : ('Employe cree : ' . $name . ' (' . $code . ')');
+      notify_superviseur_action($pdo, $id > 0 ? 'update' : 'create', 'employe', $id > 0 ? $id : null,
+        $who . ' - ' . $label,
+        $label . ' par ' . $who . '.');
+    }
+    employee_redirect('Employe enregistre avec succes.', 'success');
   } catch (PDOException $e) {
     error_log('rh_employee_save: ' . $e->getMessage());
-    employee_redirect($e->getCode() === '23000' ? 'Le matricule existe déjà.' : 'Impossible d\'enregistrer l\'employé.');
+    employee_redirect($e->getCode() === '23000' ? 'Le matricule existe deja.' : 'Impossible d\'enregistrer l\'employe.');
   }
 }
 

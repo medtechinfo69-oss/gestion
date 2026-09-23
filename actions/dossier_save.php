@@ -8,6 +8,15 @@ $user = current_user();
 $id = filter_var($_POST['id'] ?? '', FILTER_VALIDATE_INT);
 $isEdit = (bool) $id;
 
+// Garde-fou serveur : un vendeur ne peut jamais modifier un dossier existant
+// (même avec can_supervise = 1). Le bouton Modifier lui est déjà masqué.
+if ($isEdit && !is_admin() && !is_role_superviseur()) {
+    sec_log('permission_denied', 'dossier', (string) $id, 'Vendeur attempted to edit dossier', false, 'Edit reserved to admin/superviseur');
+    http_response_code(403);
+    set_flash('error', 'Modification réservée aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
+
 $existing = null;
 if ($isEdit) {
     $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');
@@ -20,7 +29,9 @@ if ($isEdit) {
     }
 }
 
-if (is_superviseur() && $isEdit) {
+if (is_role_superviseur() && $isEdit) {
+    // Section « supervision » : réservée au rôle superviseur strict.
+    // (Un vendeur avec can_supervise = 1 est déjà rejeté plus haut.)
     $courrierValues = $_POST['courrier'] ?? [];
     $courrierLockedValues = $_POST['courrier_locked'] ?? [];
     if (!is_array($courrierValues)) {
@@ -38,7 +49,10 @@ if (is_superviseur() && $isEdit) {
     if ($dossierCompletLocked) {
         $courrierValues = $existingCourrier;
     }
-    $etatContratLocked = ($existing['date_etat_contrat_supervision'] ?? null) !== null || ($existing['etat_contrat'] ?? 'Actif') !== 'Actif';
+    // Même règle que dans dossier_form.php : l'état du contrat n'est verrouillé
+    // que s'il a réellement quitté « Actif ». Le fait d'avoir déjà enregistré la
+    // section (date_etat_contrat_supervision renseignée) ne bloque plus rien.
+    $etatContratLocked = ($existing['etat_contrat'] ?? 'Actif') !== 'Actif';
     $controleQualiteLocked = ($existing['date_controle_qualite_supervision'] ?? null) !== null;
     if ($saveSection !== 'courrier' && $saveSection !== 'all') {
         $courrierValues = courrier_values($existing['courrier'] ?? '');
@@ -106,19 +120,48 @@ if (is_superviseur() && $isEdit) {
         'id' => $id,
     ]);
 
+    $changedLabels = [];
+    $brief = static function (string $v): string {
+        $v = trim($v);
+        if ($v === '') { $v = '—'; }
+        return mb_strlen($v) > 40 ? mb_substr($v, 0, 40) . '…' : $v;
+    };
     foreach (['courrier' => $courrier, 'etat_dossier' => $etat, 'etat_contrat' => $etatContrat, 'controle_qualite' => $controleQualite, 'commentaire' => $commentaire] as $champ => $nouvelle) {
         if ((string) $nouvelle !== (string) $existing[$champ]) {
             log_dossier_history($db, $id, $user['id'], 'modification', $champ, (string) $existing[$champ], (string) $nouvelle);
+            $changedLabels[] = dossier_field_label($champ) . ' : ' . $brief((string) $existing[$champ]) . ' → ' . $brief((string) $nouvelle);
         }
     }
 
-    notify_admins($db, 'Modification superviseur dans un dossier', 'Le superviseur ' . (string) ($user['nom_complet'] ?? 'un superviseur') . ' a modifié le dossier #' . $id . '.');
+
+    $notifDetail = 'Modification (section supervision) du dossier #' . $id . '.';
+    if ($changedLabels) {
+        $notifDetail .= ' Champs modifiés : ' . implode(', ', array_values(array_unique($changedLabels))) . '.';
+    }
+    notify_superviseur_action($db, 'update', 'dossier', $id,
+        (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur') . ' a modifié le dossier #' . $id,
+        $notifDetail);
 
     set_flash('success', 'Dossier mis à jour avec succès.');
     redirect('dossier_view.php?id=' . $id);
 }
 
 $result = validate_dossier_input($_POST, $db, $isEdit ? $id : null);
+
+// Un vendeur connecté ne peut jamais choisir ni sélectionner un autre vendeur
+// (voir dossier_form.php où le champ est figé en lecture seule). La valeur
+// envoyée par la requête est donc purement ignorée : on force le vendeur porté
+// par le dossier en modification, ou le vendeur connecté en création. Le
+// contrôle a lieu APRÈS validation pour rester robuste : une valeur falsifiée
+// (ou un dossier importé dont le vendeur n'a plus le rôle « vendeur ») ne peut
+// ni s'enregistrer, ni bloquer l'enregistrement du dossier.
+if (is_vendeur_user()) {
+    $forcedVendeurId = $isEdit ? (int) $existing['vendeur_id'] : (int) ($user['id'] ?? 0);
+    if ($forcedVendeurId > 0) {
+        $result['data']['vendeur_id'] = $forcedVendeurId;
+        unset($result['errors']['vendeur_id']);
+    }
+}
 
 if ($result['errors']) {
     $_SESSION['form_data'] = $result['data'];
@@ -139,7 +182,7 @@ try {
                     portable = :portable, nombre_personnes = :nombre_personnes, date_naissance_assure = :date_naissance_assure,
                     age_assure_principal = :age_assure_principal, adresse = :adresse, cp = :cp, ville = :ville,
                     type_signature = :type_signature, ca_mois = :ca_mois, ca_annuel = :ca_annuel, date_effet = :date_effet,
-                    produit = :produit, compagnie = :compagnie, courrier = :courrier, etat_dossier = :etat_dossier,
+                    date_injection = :date_injection, produit = :produit, compagnie = :compagnie, courrier = :courrier, etat_dossier = :etat_dossier,
                     date_dossier_complet = :date_dossier_complet, etat_contrat = :etat_contrat,
                     controle_qualite = :controle_qualite,
                     date_contrat_non_actif = :date_contrat_non_actif, commentaire = :commentaire,
@@ -157,11 +200,18 @@ try {
         $stmt->execute($data);
 
         // Historique : uniquement les champs modifiés
+        $generalChanged = [];
+        $briefGen = static function (string $v): string {
+            $v = trim($v);
+            if ($v === '') { $v = '—'; }
+            return mb_strlen($v) > 40 ? mb_substr($v, 0, 40) . '…' : $v;
+        };
         foreach ($data as $champ => $nouvelle) {
             if (!array_key_exists($champ, $existing)) continue;
             $ancienne = (string) $existing[$champ];
             if ((string) $nouvelle !== $ancienne) {
                 log_dossier_history($db, $id, $user['id'], 'modification', $champ, $ancienne, (string) $nouvelle);
+                $generalChanged[] = dossier_field_label($champ) . ' : ' . $briefGen($ancienne) . ' → ' . $briefGen((string) $nouvelle);
             }
         }
 
@@ -170,12 +220,12 @@ try {
         $sql = 'INSERT INTO dossiers
                     (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
                      nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville,
-                     type_signature, ca_mois, ca_annuel, date_effet, produit, compagnie, courrier, etat_dossier,
-                     date_dossier_complet, etat_contrat, date_contrat_non_actif, commentaire, motif_annulation, created_by)
+                     type_signature, ca_mois, ca_annuel, date_effet, date_injection, produit, compagnie, courrier, etat_dossier,
+                     date_dossier_complet, etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation, created_by)
                 VALUES
                     (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
                      :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville,
-                     :type_signature, :ca_mois, :ca_annuel, :date_effet, :produit, :compagnie, :courrier, :etat_dossier,
+                     :type_signature, :ca_mois, :ca_annuel, :date_effet, :date_injection, :produit, :compagnie, :courrier, :etat_dossier,
                      :date_dossier_complet, :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
         $stmt = $db->prepare($sql);
         $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
@@ -189,7 +239,25 @@ try {
     }
 
     $db->commit();
-    
+
+    if (is_superviseur()) {
+        $who = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur');
+        $label = trim((string) (($data['prenom'] ?? '') . ' ' . ($data['nom'] ?? '')));
+        if ($isEdit) {
+            $updateDetail = 'Dossier #' . $id . ' modifié par ' . $who . '.';
+            if (!empty($generalChanged)) {
+                $updateDetail .= ' Champs modifiés : ' . implode(', ', array_values(array_unique($generalChanged))) . '.';
+            }
+            notify_superviseur_action($db, 'update', 'dossier', $id,
+                $who . ' a modifié le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
+                $updateDetail);
+        } else {
+            notify_superviseur_action($db, 'create', 'dossier', $id,
+                $who . ' a créé le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
+                'Dossier #' . $id . ' créé par ' . $who . '.');
+        }
+    }
+
     $action = $isEdit ? 'update' : 'create';
     sec_log($action, 'dossier', (string) $id, ($isEdit ? 'Updated' : 'Created') . ' dossier: ' . ($data['nom'] ?? ''));
 } catch (PDOException $e) {

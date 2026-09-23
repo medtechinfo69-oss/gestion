@@ -1,0 +1,23 @@
+# =====================================================================
+# Gestion des Dossiers — actions/
+# =====================================================================
+# Ce dossier contient les points d'entree appeles par l'application
+# (soumissions de formulaires POST et requetes fetch/AJAX). Ces scripts
+# PHP DOIVENT rester joignables, mais rien d'autre ne doit l'etre :
+#   - un fichier depose ici par erreur (dump .sql, sauvegarde .bak,
+#     fichier de travail d'editeur, .log, .env, ...) ne doit jamais
+#     pouvoir etre lu ni telecharge ;
+#   - un fichier non-PHP ne doit jamais etre interprete ni servi.
+#
+# Cette protection est complementaire des controles integres a chaque
+# script (require_login() / require_admin() / csrf_require()).
+
+# Pas de listing de dossier, pas de negociation de contenu
+# (protege contre le "double-extension trick" : image.php.jpg).
+Options -Indexes -MultiViews
+
+# Seuls les scripts *.php sont autorises. Tout le reste est refuse.
+# (Expression : un nom qui NE se termine PAS par « .php » est refuse.)
+<FilesMatch "^(?!.*\.php$).+$">
+    Require all denied
+</FilesMatch>

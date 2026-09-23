@@ -15,6 +15,52 @@ function e(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Version d'un asset statique (cache-busting via ?v=…), mémorisée par requête.
+ *
+ * En production, CACHE_VERSION fixe la version : aucune statistique de
+ * fichier n'est nécessaire, les assets restent donc servis depuis le cache
+ * navigateur (1 mois) sans invalidation inutile.
+ *
+ * En développement, on retombe sur filemtime() pour que toute modification
+ * soit immédiatement visible sans vider le cache du navigateur. Le résultat
+ * est mis en cache dans un tableau statique : filemtime() est un appel
+ * système (stat), et sans mémorisation il était exécuté plusieurs fois par
+ * requête et par asset (une fois pour le <link> preload, une fois pour le
+ * <link> stylesheet).
+ */
+function asset_version(string $relativePath): string
+{
+    static $cache = [];
+
+    if (array_key_exists($relativePath, $cache)) {
+        return $cache[$relativePath];
+    }
+
+    if (defined('CACHE_VERSION')) {
+        return $cache[$relativePath] = (string) CACHE_VERSION;
+    }
+
+    $absolute = __DIR__ . '/../assets/' . ltrim($relativePath, '/');
+    $mtime = @filemtime($absolute);
+
+    return $cache[$relativePath] = (string) ($mtime !== false ? $mtime : '1');
+}
+
+/**
+ * Tronque un texte à $limit caractères (50 par défaut) pour l'affichage
+ * dans les tableaux. Ajoute une ellipse « … » si le texte est coupe.
+ * La coupe se fait proprement sur les caracteres UTF-8 (multibyte).
+ */
+function truncate_chars(?string $value, int $limit = 50): string
+{
+    $value = (string) ($value ?? '');
+    if ($limit <= 0 || mb_strlen($value, 'UTF-8') <= $limit) {
+        return $value;
+    }
+    return rtrim(mb_substr($value, 0, $limit, 'UTF-8')) . '…';
+}
+
 /** Enregistre un message flash affiché une seule fois à la page suivante. */
 function set_flash(string $type, string $message): void
 {
@@ -137,6 +183,43 @@ function clean_str(?string $value): string
     return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $value) ?? '';
 }
 
+/**
+ * Nettoie une adresse e-mail saisie, en tolérant les défauts fréquents :
+ * espaces invisibles (insécable, zero-width, BOM) issus d'un copier-coller,
+ * espaces à l'intérieur ("nom @gmail.com"), guillemets/chevrons et
+ * ponctuation collés au début/fin ("<x@gmail.com>", "x@gmail.com.").
+ * Retourne une chaîne vide si rien d'exploitable.
+ */
+function clean_email_input(?string $value): string
+{
+    $value = trim((string) $value);
+    // Espaces "invisibles" : insécable, fines, zero-width, BOM...
+    $value = preg_replace('/[\x{00A0}\x{1680}\x{2000}-\x{200B}\x{202F}\x{205F}\x{3000}\x{FEFF}]/u', '', $value) ?? '';
+    // Tous les autres espaces/tabulations à l'intérieur
+    $value = preg_replace('/\s+/u', '', $value) ?? '';
+    // Guillemets / chevrons / ponctuation en début ou fin (copier-coller depuis un mail)
+    $value = trim($value, '"“”«»<>\'');
+    $value = rtrim($value, '.,;:');
+    return $value;
+}
+
+/**
+ * Validation SOUPLE d'une adresse e-mail :
+ * accepte aussi les adresses correctes mais refusées par FILTER_VALIDATE_EMAIL
+ * (caractères accentués, domaines internationaux) dès lors qu'elles ont la
+ * forme plausible nom@domaine.tld. Une adresse vide renvoie false (champ optionnel).
+ */
+function email_plausible(string $email): bool
+{
+    if ($email === '') {
+        return false;
+    }
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
+        return true;
+    }
+    return preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/u', $email) === 1;
+}
+
 /** Badge HTML coloré selon l'état du dossier (reprend le code couleur du classeur d'origine). */
 function badge_etat(string $etat): string
 {
@@ -253,6 +336,28 @@ function compagnies_suggerees(): array
  * `$currentPortable` permet d'exclure le dossier courant du contrôle
  * d'unicité lors d'une modification.
  */
+/** Libellé français lisible d'un champ de dossier (pour l'historique et les notifications). */
+function dossier_field_label(string $field): string
+{
+    $labels = [
+        'vendeur_id' => 'Vendeur', 'ta_origine' => 'Origine', 'p_prod' => 'Prod',
+        'date_vente' => 'Date vente', 'civilite' => 'Civilité', 'nom' => 'Nom', 'prenom' => 'Prénom',
+        'mail' => 'Mail', 'telfix' => 'Téléphone 1', 'portable' => 'Téléphone 2',
+        'nombre_personnes' => "NB d'assurés", 'date_naissance_assure' => 'Date naissance assuré',
+        'age_assure_principal' => 'Age assuré principal', 'adresse' => 'Adresse', 'cp' => 'CP', 'ville' => 'Ville',
+        'type_signature' => 'Type de signature', 'ca_mois' => 'CA-mois', 'ca_annuel' => 'CA-annuel',
+        'date_effet' => "Date d'effet", 'date_injection' => "Date d'injection",
+        'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'Etat du dossier',
+        'date_dossier_complet' => 'Date validation', 'courrier' => 'Courrier', 'commentaire' => 'Commentaire',
+        'etat_contrat' => 'Etat du contrat', 'date_contrat_non_actif' => "Date d'annulation",
+        'controle_qualite' => 'Contrôle qualité', 'motif_annulation' => "Motif d'annulation",
+        'date_courrier_supervision' => 'Date courrier (superv.)',
+        'date_etat_contrat_supervision' => 'Date état contrat (superv.)',
+        'date_controle_qualite_supervision' => 'Date contrôle qualité (superv.)',
+    ];
+    return $labels[$field] ?? ucfirst(str_replace('_', ' ', $field));
+}
+
 function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bool $allowImportCompatibility = false): array
 {
     $errors = [];
@@ -409,7 +514,13 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         }
     }
 
-    $caMoisVal = filter_var(str_replace(',', '.', $post['ca_mois'] ?? ''), FILTER_VALIDATE_FLOAT);
+    // Parsing robuste du CA mensuel : on retire les separateurs de milliers
+    // (espaces, espaces insecables) et les symboles monnaie, puis on convertit
+    // la virgule decimale en point. Ex. "1 200,50 €" -> 1200.50.
+    $caMoisRaw = (string) ($post['ca_mois'] ?? '');
+    $caMoisRaw = str_replace(["\xC2\xA0", ' ', '€'], '', $caMoisRaw);
+    $caMoisRaw = str_replace(',', '.', $caMoisRaw);
+    $caMoisVal = filter_var($caMoisRaw, FILTER_VALIDATE_FLOAT);
     if ($caMoisVal === false || $caMoisVal < 0) {
         if (!$allowImportCompatibility) {
             $errors['ca_mois'] = 'CA mensuel invalide.';
@@ -430,7 +541,8 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
         }
     }
     $data['date_effet'] = $parsedDateEffet ?: date('Y-m-d');
-
+    $parsedDateInjection = parse_date_fr($post['date_injection'] ?? '');
+    $data['date_injection'] = $parsedDateInjection ?: null;
     $data['produit'] = clean_str($post['produit'] ?? '');
     if ($data['produit'] === '') {
         if ($allowImportCompatibility) {
@@ -481,8 +593,13 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
 
     $data['commentaire'] = clean_str($post['commentaire'] ?? '') ?: null;
 
+    // Le motif d'annulation n'a de sens que lorsque le contrat n'est plus
+    // « Actif » : c'est l'état du CONTRAT qui porte l'annulation, pas l'état du
+    // dossier (qui ne vaut que « Dossier complet / incomplet »). L'ancienne
+    // condition « etat_dossier === 'Annuler' » n'était jamais vraie, si bien que
+    // le motif saisi au formulaire n'était jamais enregistré.
     $data['motif_annulation'] = null;
-    if ($data['etat_dossier'] === 'Annuler') {
+    if (($data['etat_contrat'] ?? 'Actif') !== 'Actif') {
         $data['motif_annulation'] = clean_str($post['motif_annulation'] ?? '') ?: null;
     }
 
@@ -669,4 +786,70 @@ function archive_dossier(PDO $db, int $dossierId, int $deletedBy): void
         'historique' => json_encode($historique, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
         'deleted_by' => $deletedBy,
     ]);
+}
+
+/**
+ * Dossier temporaire inscriptible pour les fichiers d'export (XLSX, CSV...).
+ *
+ * Pourquoi ne pas utiliser sys_get_temp_dir() seul : sur les hébergements
+ * mutualisés (InfinityFree, etc.) il renvoie /home/tmp qui est HORS de la
+ * directive open_basedir => tempnam() échoue et le script meurt en erreur 500.
+ * On privilégie donc un dossier interne au projet (uploads/tmp), déjà non
+ * servi par le web (uploads/.htaccess : Require all denied).
+ *
+ * @return string Chemin du dossier (sans slash final), ou '' si aucun n'est utilisable.
+ */
+function app_temp_dir(): string
+{
+    static $dir = null;
+    if ($dir !== null) {
+        return $dir;
+    }
+
+    $root = dirname(__DIR__);
+    $candidates = [
+        $root . '/uploads/tmp',     // dans le projet : toujours autorisé par open_basedir
+        $root . '/tmp',
+        sys_get_temp_dir(),         // /home/tmp sur certains hébergements : interdit
+        '/tmp',                     // autorisé par open_basedir sur InfinityFree
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (!is_string($candidate) || $candidate === '') {
+            continue;
+        }
+        if (!is_dir($candidate) && !@mkdir($candidate, 0775, true) && !is_dir($candidate)) {
+            continue;
+        }
+        if (@is_writable($candidate)) {
+            // Le dossier est dans le projet : on garantit qu'il n'est pas servi.
+            if (strpos($candidate, $root) === 0) {
+                $deny = $candidate . '/.htaccess';
+                if (!is_file($deny)) {
+                    @file_put_contents($deny, "Require all denied\n");
+                }
+            }
+            return $dir = rtrim($candidate, "/\\");
+        }
+    }
+
+    return $dir = '';
+}
+
+/**
+ * Crée un fichier temporaire inscriptible (nom unique) et retourne son chemin.
+ * Retourne '' si aucun dossier temporaire n'est disponible : l'appelant doit
+ * alors afficher un message clair au lieu de laisser PHP lever une erreur 500.
+ */
+function app_temp_file(string $prefix = 'tmp'): string
+{
+    $dir = app_temp_dir();
+    if ($dir === '') {
+        return '';
+    }
+
+    $path = $dir . DIRECTORY_SEPARATOR . $prefix . '_' . bin2hex(random_bytes(8)) . '.tmp';
+
+    // Écriture-test : détecte immédiatement un quota ou des droits insuffisants.
+    return @file_put_contents($path, '') === 0 ? $path : '';
 }

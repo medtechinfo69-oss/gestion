@@ -6,14 +6,14 @@ csrf_require();
 $file = $_FILES['backup'] ?? null;
 if (!$file || $file['error'] !== UPLOAD_ERR_OK || $file['size'] > 20 * 1024 * 1024) {
     set_flash('error', 'Fichier de sauvegarde invalide ou trop volumineux.');
-    redirect('profile.php');
+    redirect('repair_schema_admin.php');
 }
 
 try {
     $backup = json_decode(file_get_contents($file['tmp_name']), true, 512, JSON_THROW_ON_ERROR);
 } catch (Throwable $e) {
     set_flash('error', 'Le fichier de sauvegarde JSON est invalide.');
-    redirect('profile.php');
+    redirect('repair_schema_admin.php');
 }
 
 $allowed = [
@@ -23,16 +23,19 @@ $allowed = [
     'dossier_attachments' => ['id', 'dossier_id', 'nom_original', 'nom_fichier', 'type_mime', 'taille', 'uploaded_by', 'created_at'],
     'login_log' => ['id', 'username', 'ip_address', 'success', 'created_at'],
     'dossier_trash' => ['id', 'original_dossier_id', 'dossier_data', 'attachments_data', 'historique_data', 'deleted_by', 'deleted_at'],
+    // Chat interne : messages (texte chiffré conservé tel quel) + présence.
+    'chat_messages' => ['id', 'sender_id', 'receiver_id', 'message', 'is_read', 'created_at'],
+    'chat_presence' => ['user_id', 'last_seen_at'],
 ];
 
 if (($backup['format'] ?? '') !== 'gestion-dossiers-backup' || !is_array($backup['tables'] ?? null)) {
     set_flash('error', 'Format de sauvegarde non reconnu.');
-    redirect('profile.php');
+    redirect('repair_schema_admin.php');
 }
 
 try {
     $db->beginTransaction();
-    foreach (['users', 'dossiers', 'dossier_historique', 'dossier_attachments', 'login_log', 'dossier_trash'] as $table) {
+    foreach (['users', 'dossiers', 'dossier_historique', 'dossier_attachments', 'login_log', 'dossier_trash', 'chat_messages', 'chat_presence'] as $table) {
         if (!is_array($backup['tables'][$table] ?? null)) continue;
         foreach ($backup['tables'][$table] as $row) {
             if (!is_array($row)) continue;
@@ -52,8 +55,8 @@ try {
     if ($db->inTransaction()) $db->rollBack();
     error_log('backup_import error: ' . $e->getMessage());
     set_flash('error', 'Import impossible. La base a été laissée dans son état précédent.');
-    redirect('profile.php');
+    redirect('repair_schema_admin.php');
 }
 
 set_flash('success', 'Sauvegarde importée avec succès.');
-redirect('profile.php');
+redirect('repair_schema_admin.php');

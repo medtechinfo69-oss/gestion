@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/init.php';
 require_admin();
 
-$tables = ['users', 'dossiers', 'dossier_historique', 'dossier_attachments', 'login_log', 'dossier_trash'];
+$tables = ['users', 'dossiers', 'dossier_historique', 'dossier_attachments', 'login_log', 'dossier_trash', 'chat_messages', 'chat_presence'];
 $backup = [
     'format' => 'gestion-dossiers-backup',
     'version' => 1,
@@ -10,7 +10,13 @@ $backup = [
     'tables' => [],
 ];
 foreach ($tables as $table) {
-    $backup['tables'][$table] = $db->query('SELECT * FROM `' . $table . '`')->fetchAll();
+    try {
+        $backup['tables'][$table] = $db->query('SELECT * FROM `' . $table . '`')->fetchAll();
+    } catch (Throwable $e) {
+        // Table absente (module jamais utilisé) : on l'ignore sans
+        // faire échouer la sauvegarde du reste.
+        $backup['tables'][$table] = [];
+    }
 }
 
 $data = json_encode($backup, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);

@@ -149,14 +149,65 @@ function is_admin(): bool
     return is_logged_in() && $_SESSION['user']['role'] === 'admin';
 }
 
+/**
+ * Vrai pour un compte dont le rôle est « vendeur ». Distinct de
+ * is_superviseur() : un vendeur « can_supervise » agit comme un superviseur
+ * tout en conservant son rôle.
+ */
+function is_vendeur_user(): bool
+{
+    return is_logged_in() && ($_SESSION['user']['role'] ?? '') === 'vendeur';
+}
+
+/** Vrai pour un superviseur « strict » (rôle = superviseur), hors vendeurs. */
+function is_role_superviseur(): bool
+{
+    return is_logged_in() && ($_SESSION['user']['role'] ?? '') === 'superviseur';
+}
+
+/**
+ * Vrai pour tout compte habilité à travailler comme un superviseur :
+ *   - les superviseurs eux-mêmes ;
+ *   - les VENDEURS dont le drapeau « can_supervise » est actif (rôle conservé
+ *     « vendeur » mais mêmes accès : dashboard, dossiers, import, notifications,
+ *     approbation IP).
+ *
+ * C'est LE prédicat qui pilote les autorisations dans toute l'application :
+ * chaque endroit qui testait « is_superviseur() » pour autoriser une action
+ * bénéficie donc automatiquement aux vendeurs connectables, sans divergence
+ * de comportement entre les deux profils.
+ */
 function is_superviseur(): bool
 {
-    return is_logged_in() && $_SESSION['user']['role'] === 'superviseur';
+    if (!is_logged_in()) {
+        return false;
+    }
+    $role = $_SESSION['user']['role'] ?? '';
+    if ($role === 'superviseur') {
+        return true;
+    }
+    return $role === 'vendeur' && !empty($_SESSION['user']['can_supervise']);
+}
+
+/** Alias sémantique de is_superviseur() (profil superviseur ou vendeur habilité). */
+function is_supervisor_like(): bool
+{
+    return is_superviseur();
+}
+
+/**
+ * Vrai pour tout compte soumis à l'approbation d'adresse IP à la connexion :
+ * superviseurs et vendeurs « superviseur-like ». Le drapeau est enregistré en
+ * session à l'authentification (voir attempt_login).
+ */
+function requires_ip_approval(): bool
+{
+    return is_logged_in() && !empty($_SESSION['user']['requires_ip_approval']);
 }
 
 function can_access_dossiers(): bool
 {
-    return is_admin() || is_superviseur();
+    return is_admin() || is_supervisor_like();
 }
 
 function require_dossier_access(): void
@@ -177,7 +228,7 @@ function require_login(): void
         exit;
     }
 
-    if (!in_array($_SESSION['user']['role'] ?? '', ['admin', 'superviseur'], true)) {
+    if (!in_array($_SESSION['user']['role'] ?? '', ['admin', 'superviseur', 'vendeur'], true)) {
         logout_user();
         header('Location: ' . APP_URL . '/login.php');
         exit;
@@ -207,7 +258,7 @@ function require_admin(): void
 function require_admin_or_superviseur(): void
 {
     require_login();
-    if (!is_admin() && !is_superviseur()) {
+    if (!is_admin() && !is_supervisor_like()) {
         http_response_code(403);
         set_flash('error', 'Accès réservé aux administrateurs et superviseurs.');
         header('Location: ' . APP_URL . '/dashboard.php');
@@ -246,7 +297,10 @@ function attempt_login(PDO $db, string $username, string $password): array
         return ['success' => false, 'message' => 'Identifiants incorrects.'];
     }
 
-    if (!$user['is_active'] || $user['role'] === 'vendeur') {
+    // Un compte inactif est refusé. Les VENDEURS sont désormais autorisés à se
+    // connecter : ceux portant le drapeau « can_supervise » disposent des mêmes
+    // accès que les superviseurs (dashboard, dossiers, import, notifications).
+    if (!$user['is_active']) {
         $logIp(false);
         return ['success' => false, 'message' => 'Ce compte a été désactivé. Contactez un administrateur.'];
     }
@@ -272,7 +326,13 @@ function attempt_login(PDO $db, string $username, string $password): array
         return ['success' => false, 'message' => 'Identifiants incorrects.'];
     }
 
-    if ($user['role'] === 'superviseur') {
+    // Approbation d'adresse IP : s'applique aux superviseurs ET aux vendeurs
+    // « superviseur-like » (can_supervise = 1). Une IP inconnue crée une demande
+    // en attente qu'un administrateur doit approuver depuis la page dédiée.
+    $canSupervise = ($user['role'] === 'vendeur' && !empty($user['can_supervise']));
+    $requiresIpApproval = ($user['role'] === 'superviseur' || $canSupervise);
+
+    if ($requiresIpApproval) {
         try {
             $stmt = $db->prepare('SELECT id FROM superviseur_approved_ips WHERE user_id = :uid AND ip_address = :ip LIMIT 1');
             $stmt->execute(['uid' => $user['id'], 'ip' => $ip]);
@@ -326,12 +386,16 @@ function attempt_login(PDO $db, string $username, string $password): array
         'role'                  => $user['role'],
         'nom_complet'           => $user['nom_complet'],
         'must_change_password'  => (bool) $user['must_change_password'],
+        // Drapeaux d'habilitations : un vendeur « can_supervise » conserve son
+        // rôle mais agit comme un superviseur (cf. is_supervisor_like()).
+        'can_supervise'         => $canSupervise,
+        'requires_ip_approval'  => $requiresIpApproval,
     ];
 
     // Empreinte de session (détournement de session)
     $_SESSION['session_fingerprint'] = compute_session_fingerprint();
 
-    if ($user['role'] === 'superviseur') {
+    if ($requiresIpApproval) {
         try {
             $updIp = $db->prepare('UPDATE superviseur_approved_ips SET last_used_at = NOW() WHERE user_id = :uid AND ip_address = :ip');
             $updIp->execute(['uid' => $user['id'], 'ip' => $ip]);
@@ -430,7 +494,7 @@ function logout_user(): void
 
 /**
  * Crée les tables de supervision si elles n'existent pas (utile sur hébergement
- * où install_hosting.sql ne les contenait pas). Retourne true si OK.
+ * où database/install.sql n'a pas encore été importé). Retourne true si OK.
  */
 function superviseur_tables_ensure(PDO $db): bool
 {
@@ -457,9 +521,149 @@ function superviseur_tables_ensure(PDO $db): bool
             reason VARCHAR(255) NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // Les tables existent déjà (CREATE IF NOT EXISTS inopérant) : on s'assure
+        // que leur structure est correcte (clé primaire, auto-increment, colonnes).
+        superviseur_schema_repair($db);
         return true;
     } catch (Throwable $e) {
         error_log('superviseur_tables_ensure: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Répare le schéma des tables de supervision.
+ *
+ * Sur certaines bases, `superviseur_sessions` / `superviseur_approved_ips`
+ * ont perdu leur PRIMARY KEY et AUTO_INCREMENT : les nouvelles lignes
+ * s'insèrent alors avec id = 0 et l'approbation d'une session échoue avec
+ * « Demande invalide. » (session_id = 0). Cette fonction restaure la clé
+ * primaire, l'auto-increment, déduplique les lignes et aligne les colonnes
+ * des deux variantes de schéma (approved_* / decided_*). Idempotente.
+ */
+function superviseur_schema_repair(PDO $db): bool
+{
+    static $done = false;
+    if ($done) {
+        return true;
+    }
+    $done = true;
+
+    try {
+        foreach (['superviseur_sessions', 'superviseur_approved_ips'] as $table) {
+            if (!$db->query('SHOW TABLES LIKE ' . $db->quote($table))->fetchColumn()) {
+                continue;
+            }
+
+            $cols = $db->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            if (!$cols) {
+                continue;
+            }
+            $names = array_column($cols, 'Field');
+
+            // --- Alignement des colonnes entre les deux variantes de schéma ---
+            if ($table === 'superviseur_sessions') {
+                // Variante ancienne : approved_by / approved_at / denial_reason
+                if (!in_array('approved_by', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN approved_by INT UNSIGNED NULL");
+                }
+                if (!in_array('approved_at', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN approved_at DATETIME NULL");
+                }
+                if (!in_array('denial_reason', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN denial_reason VARCHAR(255) NULL");
+                }
+                // Variante récente : decided_by / decided_at / reason
+                if (!in_array('decided_by', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN decided_by INT UNSIGNED NULL");
+                }
+                if (!in_array('decided_at', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN decided_at DATETIME NULL");
+                }
+                if (!in_array('reason', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_sessions ADD COLUMN reason VARCHAR(255) NULL");
+                }
+            } else {
+                // superviseur_approved_ips
+                if (!in_array('label', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN label VARCHAR(150) NULL");
+                }
+                if (!in_array('user_agent', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN user_agent VARCHAR(500) NOT NULL DEFAULT ''");
+                }
+                if (!in_array('approved_by', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN approved_by INT UNSIGNED NULL");
+                }
+                if (!in_array('approved_at', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN approved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+                }
+                if (!in_array('approved_by_user_id', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN approved_by_user_id INT UNSIGNED NULL");
+                }
+                if (!in_array('created_at', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+                }
+                if (!in_array('last_used_at', $names, true)) {
+                    $db->exec("ALTER TABLE superviseur_approved_ips ADD COLUMN last_used_at DATETIME NULL");
+                }
+            }
+
+            // --- Restauration de la clé primaire et de l'auto-increment ---
+            $indexes = $db->query("SHOW INDEX FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            $hasPrimary = false;
+            foreach ($indexes as $idx) {
+                if (($idx['Key_name'] ?? '') === 'PRIMARY') {
+                    $hasPrimary = true;
+                    break;
+                }
+            }
+
+            $idIsAuto = false;
+            $idType = 'bigint(20) unsigned';
+            foreach ($cols as $c) {
+                if (($c['Field'] ?? '') === 'id') {
+                    $idType = (string) ($c['Type'] ?? $idType);
+                    $idIsAuto = stripos((string) ($c['Extra'] ?? ''), 'auto_increment') !== false;
+                    break;
+                }
+            }
+
+            if ($hasPrimary && $idIsAuto) {
+                continue; // schéma déjà sain
+            }
+
+            // Déduplique les id avant de poser la clé primaire.
+            $dups = $db->query("SELECT id, COUNT(*) c FROM `$table` GROUP BY id HAVING c > 1")->fetchAll(PDO::FETCH_ASSOC);
+            if ($dups) {
+                $del = $db->prepare("DELETE FROM `$table` WHERE id = :id LIMIT 1");
+                foreach ($dups as $d) {
+                    for ($i = 1; $i < (int) $d['c']; $i++) {
+                        $del->execute(['id' => (int) $d['id']]);
+                    }
+                }
+            }
+
+            // Renumérote les lignes dont l'id est nul ou négatif.
+            if ((int) $db->query("SELECT COUNT(*) FROM `$table` WHERE id <= 0")->fetchColumn() > 0) {
+                $nextId = (int) $db->query("SELECT COALESCE(MAX(id), 0) FROM `$table`")->fetchColumn() + 1;
+                $rows = $db->query("SELECT id FROM `$table` WHERE id <= 0")->fetchAll(PDO::FETCH_ASSOC);
+                $upd = $db->prepare("UPDATE `$table` SET id = :new WHERE id = :old LIMIT 1");
+                foreach ($rows as $r) {
+                    $upd->execute(['new' => $nextId, 'old' => (int) $r['id']]);
+                    $nextId++;
+                }
+            }
+
+            if ($hasPrimary) {
+                $db->exec("ALTER TABLE `$table` DROP PRIMARY KEY");
+            }
+            // MySQL impose que la colonne AUTO_INCREMENT soit clé dans la même instruction.
+            $db->exec("ALTER TABLE `$table` MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (id)");
+        }
+
+        return true;
+    } catch (Throwable $e) {
+        error_log('superviseur_schema_repair: ' . $e->getMessage());
         return false;
     }
 }

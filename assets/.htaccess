@@ -1,0 +1,28 @@
+# =====================================================================
+# Gestion des Dossiers — assets/
+# =====================================================================
+# Ce dossier ne contient que des ressources statiques publiques
+# (feuilles de style, JavaScript, images et polices). Elles DOIVENT
+# rester servies normalement. En revanche :
+#   - aucun script ne doit pouvoir s'y executer : un fichier depose par
+#     erreur ne doit jamais etre interprete par PHP ;
+#   - aucun autre type de fichier (dump SQL, sauvegarde, journal,
+#     fichier de configuration, ...) ne doit pouvoir etre telecharge.
+#
+# Chaque sous-dossier (css/, js/, img/) possede en plus son propre
+# .htaccess qui n'autorise que ses extensions legitimes.
+
+Options -Indexes -MultiViews
+
+# 1. Aucune execution de script, quelle que soit l'extension.
+<FilesMatch "\.(php|phar|phtml|php[0-9]|pht|shtml|pl|py|rb|cgi|sh|bash|bat|cmd|com|exe|dll|jar|asp|aspx|ashx|asmx|jsp|jspx|swf)$">
+    Require all denied
+</FilesMatch>
+
+# 2. Seules les extensions legitimes d'assets sont servies.
+# (?i) rend la comparaison INSENSIBLE A LA CASSE : sans cela, un fichier
+# en majuscules (ex. logo.JPG) est refuse avec un HTTP 403 (bug constate
+# sur l'hebergement Apache).
+<FilesMatch "(?i)^(?!.*\.(css|js|mjs|map|jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|woff|woff2|ttf|otf|eot)$).+$">
+    Require all denied
+</FilesMatch>

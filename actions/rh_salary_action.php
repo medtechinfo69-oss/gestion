@@ -54,6 +54,13 @@ if ($action === 'update') {
   $salary = round($salaryBase * (float) $rate, 2);
   $stmt = $pdo->prepare('UPDATE salary_records SET total_hours=:h, hourly_rate_used=:r, calculated_salary=:s, normal_worked_days=:normal, unjustified_absence_days=:absdays, unjustified_absence_hours=:abshours, paid_days=:paiddays, paid_hours=:paidhours, late_count=:late, heures_sup=:heuresup, n_depart=:ndepart WHERE id=:id');
   $stmt->execute(['h' => $paidHours, 'r' => round((float) $rate, 2), 's' => $salary, 'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours, 'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => $lateCount, 'heuresup' => $heuresSup, 'ndepart' => $nDepart, 'id' => $id]);
+  if (is_superviseur()) {
+    $me = current_user();
+    $who = (string) ($me['nom_complet'] ?? $me['username'] ?? 'Un superviseur');
+    notify_superviseur_action($pdo, 'salary', 'salaire', $id,
+      $who . ' a recalcule un salaire (' . number_format((float) $salary, 2, ',', ' ') . ')',
+      'Bulletin #' . $id . ' recalcule par ' . $who . ' : ' . (int) $month . '/' . (int) $year . ' — salaire ' . number_format((float) $salary, 2, ',', ' ') . '.');
+  }
   salary_redirect('Salaire recalculé avec succès.', 'success', $month, $year);
 }
 
@@ -89,6 +96,13 @@ if ($action === 'add') {
     $stmt = $pdo->prepare('INSERT INTO salary_records(employee_id, month, year, total_hours, hourly_rate_used, calculated_salary, normal_worked_days, unjustified_absence_days, unjustified_absence_hours, paid_days, paid_hours, late_count, heures_sup, n_depart) VALUES(:eid, :m, :y, :h, :r, :s, :normal, :absdays, :abshours, :paiddays, :paidhours, :late, :heuresup, :ndepart) ON DUPLICATE KEY UPDATE total_hours=VALUES(total_hours), hourly_rate_used=VALUES(hourly_rate_used), calculated_salary=VALUES(calculated_salary), normal_worked_days=VALUES(normal_worked_days), unjustified_absence_days=VALUES(unjustified_absence_days), unjustified_absence_hours=VALUES(unjustified_absence_hours), paid_days=VALUES(paid_days), paid_hours=VALUES(paid_hours), late_count=VALUES(late_count), heures_sup=VALUES(heures_sup), n_depart=VALUES(n_depart), updated_at=CURRENT_TIMESTAMP');
     $stmt->execute(['eid' => $employee['id'], 'm' => $month, 'y' => $year, 'h' => $paidHours, 'r' => $rate, 's' => $salary, 'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours, 'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => $lateCount, 'heuresup' => $heuresSup, 'ndepart' => $nDepart]);
     $pdo->commit();
+    if (is_superviseur()) {
+      $me = current_user();
+      $who = (string) ($me['nom_complet'] ?? $me['username'] ?? 'Un superviseur');
+      notify_superviseur_action($pdo, 'salary', 'salaire', null,
+        $who . ' a ajoute un salaire pour « ' . $employee['full_name'] . ' » (' . (int) $month . '/' . (int) $year . ')',
+        'Salaire ' . (int) $month . '/' . (int) $year . ' ajouté par ' . $who . ' pour « ' . $employee['full_name'] . ' » : ' . number_format((float) $salary, 2, ',', ' ') . '.');
+    }
     salary_redirect('Salaire calculé et enregistré avec succès.', 'success', $month, $year);
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) { $pdo->rollBack(); }

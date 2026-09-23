@@ -37,37 +37,28 @@ valeurs dans le panneau InfinityFree avant de televerser la configuration.
 ### 1.2 Importer la base avec phpMyAdmin
 
 InfinityFree ne permet generalement pas a un script SQL de creer une base ou
-un utilisateur. Le fichier `database/install.sql` contient des commandes
-locales `CREATE DATABASE`, `CREATE USER`, `GRANT` et `USE` qui peuvent etre
-refusees sur un hebergement mutualise.
+un utilisateur. `database/install.sql` ne contient donc aucune commande
+`CREATE DATABASE`, `CREATE USER`, `GRANT` ou `USE` : selectionnez d'abord la
+base dans phpMyAdmin, puis importez le fichier.
 
 Dans phpMyAdmin InfinityFree :
 
 1. Selectionnez `if0_42713899_gestion_dossiers` dans la colonne de gauche.
 2. Ouvrez l'onglet **Importer**.
 3. Importez `database/install.sql`.
-4. Si l'import est refuse a cause de `CREATE DATABASE`, `CREATE USER`,
-   `GRANT` ou `USE`, ouvrez une copie du fichier et supprimez ces commandes :
-
-```sql
-CREATE DATABASE IF NOT EXISTS `gestion_dossiers` ...;
-USE `gestion_dossiers`;
-CREATE USER ...;
-GRANT ...;
-FLUSH PRIVILEGES;
-```
-
-5. Relancez l'import avec la base deja selectionnee.
-6. Verifiez la presence des tables `users`, `dossiers`,
+4. Verifiez la presence des tables `users`, `dossiers`,
    `dossier_historique`, `dossier_attachments` et `login_log`.
 
 `install.sql` installe le compte administrateur de demonstration. Connectez-
 vous avec `admin` et `Admin@2026`, puis changez immediatement ce mot de passe.
 
 Toutes les tables, les comptes initiaux et les donnees de demonstration sont
-maintenant reunis dans `database/install.sql`. Pour une base existante, faites
-une sauvegarde avant de le reutiliser : il contient des `CREATE TABLE` et des
-`INSERT`.
+maintenant reunis dans `database/install.sql`. Le fichier est **non
+destructif** : il utilise `CREATE TABLE IF NOT EXISTS` et `INSERT IGNORE`,
+donc une table ou une donnee deja presente n'est jamais ecrasee. Vous pouvez
+l'importer sans risque sur une base deja en production pour ajouter seulement
+les tables manquantes. Pour reparer les cles primaires d'une base existante,
+voir la section 5.
 
 ### 1.3 Configurer la connexion PHP
 
@@ -117,6 +108,38 @@ Avec le gestionnaire de fichiers InfinityFree ou un client FTP :
 4. Conservez `assets/`, `actions/`, `includes/`, `uploads/` et `logs/`.
 5. Verifiez que `uploads/dossiers/` et `logs/` sont accessibles en ecriture
    par PHP, selon les permissions autorisees par l'hebergeur.
+
+### 1.4 bis Deploiement par FTP (procedure utilisee)
+
+Le site est deploye par FTP sur `ftpupload.net` (racine web : `htdocs/`).
+Identifiants FTP : utilisateur `if0_42713899`, mot de passe identique a celui de
+la base (`config/config.hosting.php`). Ne jamais committer ce mot de passe.
+
+Particularites rencontrees sur cet hebergement :
+
+- **La base MySQL n'est PAS joignable depuis l'exterieur** (le hostname
+  `sql301.infinityfree.com` ne resout que depuis leur reseau). Impossible de
+  modifier les donnees en local : toute modification de donnees passe par un
+  script PHP execute SUR le serveur (navigateur), pas par une connexion distante.
+- **Les fichiers `.htaccess` sont sensibles a la casse** : un motif
+  `FilesMatch "\.(jpg|png|...)$"` refuse `logo.JPG` (majuscules) avec un
+  HTTP 403. Les listes d'extensions utilisent desormais le drapeau `(?i)`
+  (voir `assets/.htaccess` et `assets/img/.htaccess`).
+- **Defi JavaScript anti-bot** : les requetes HTTP simples recoivent une page
+  intermediaire de ~850 octets. Utiliser un navigateur (ou un outil rendant le
+  JS) pour verifier le site, pas un simple `curl`.
+
+### 1.4 ter Provisionnement des comptes vendeur (base de production)
+
+`provision_vendeurs_admin.php` est un ecran temporaire, protege par un jeton
+secret dans l'URL (`?token=...`), qui cree/realigne sur le serveur les comptes
+listes dans `readme1.txt` (vendeurs connectables + comptes admin/superviseurs).
+Il sert aussi a remettre les mots de passe en conformite avec la politique de
+securite (12 caracteres minimum).
+
+Procedure : televerser le fichier par FTP, ouvrir son URL avec le jeton dans le
+navigateur, soumettre le formulaire, verifier le rapport, **puis SUPPRIMER le
+fichier du serveur**. Il ne doit pas rester en ligne.
 
 ### 1.5 Sauvegarder et restaurer les donnees
 
@@ -188,7 +211,7 @@ bloquer l'action principale.
 
 ## 3. Installation locale avec XAMPP
 
-1. Copiez le projet dans `C:\xampp\htdocs\gestion-dossiers`.
+1. Copiez le projet dans `C:\xampp\htdocs\gestion-dossiers-new`.
 2. Demarrez Apache et MySQL.
 3. Ouvrez `http://localhost/phpmyadmin`.
 4. Executez `database/install.sql` depuis l'onglet **SQL**.
@@ -197,14 +220,14 @@ bloquer l'action principale.
 
 ```php
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'gestion_dossiers');
+define('DB_NAME', 'gestion_dossiers-new');
 define('DB_USER', 'gestion_app');
 define('DB_PASS', 'ChangeMoi_2026!');
-define('APP_URL', 'http://localhost/gestion-dossiers');
+define('APP_URL', 'http://localhost/gestion-dossiers-new');
 define('APP_ENV', 'development');
 ```
 
-6. Ouvrez `http://localhost/gestion-dossiers/`.
+6. Ouvrez `http://localhost/gestion-dossiers-new/`.
 
 ## 4. Securite avant la mise en production
 
@@ -215,11 +238,44 @@ define('APP_ENV', 'development');
 - Gardez HTTPS active et verifiez que `.htaccess` est pris en charge.
 - Faites une sauvegarde avant toute migration.
 
-## 5. Fichiers SQL
+## 5. Fichiers de base de donnees
+
+Le dossier `database/` ne contient plus que deux fichiers utiles (plus son
+`.htaccess` de protection). Tous les anciens fichiers separes
+(`install_hosting.sql`, `chat_tables.sql`, sauvegardes `*.sql`, scripts de
+reparation) ont ete fusionnes.
 
 | Fichier | Usage |
 |---|---|
-| `database/install.sql` | Tables, roles, Corbeille et donnees de demonstration |
+| `database/install.sql` | **Installation complete** : creation des 26 tables + donnees initiales (origines, parametres, comptes). Non destructif et idempotent. |
+| `database/repair_schema.php` | **Reparation** d'une base existante : restaure les `PRIMARY KEY` / `AUTO_INCREMENT` perdus et ajoute les cles `UNIQUE` manquantes (`settings`, `rate_limits`, `chat_presence`, `salary_records`, ...). Aucune ligne metier n'est supprimee. |
+| `repair_schema_admin.php` | **Meme reparation, en un clic depuis le navigateur** (menu admin → « Réparation BDD »). Reserve aux administrateurs (session + CSRF). Indispensable sur un hebergement sans SSH comme InfinityFree. Contient aussi une carte **« Nettoyage du chat (urgence) »** : bouton pour supprimer les conversations (`chat_messages` / `chat_presence`) quand la table du chat est corrompue ou sature l'espace de l'hebergement — voir `chat_cleanup_all()` dans `includes/chat.php`. |
 
-Pour une base deja en production, n'importez pas `install.sql` sans sauvegarde
-et sans verifier les `CREATE TABLE` et `INSERT` presents dans le fichier.
+Pour reparer une base existante, executez le script en ligne de commande :
+
+```bat
+php database/repair_schema.php
+```
+
+Sous XAMPP, depuis la racine du projet :
+
+```bat
+C:\xampp\php\php.exe database\repair_schema.php
+```
+
+Le dossier `database/` est protege par un `.htaccess` (`Require all denied`) :
+ces outils ne sont donc accessibles que par la ligne de commande, jamais par
+le navigateur. Le script est idempotent : il peut etre relance autant de fois
+que necessaire.
+
+Symptomes typiques d'un schema a reparer : chat qui affiche « Erreur d'envoi »
+ou « non envoye - reessayez », « Demande invalide. » a l'approbation d'une
+session superviseur, parametres de securite dupliques, echec d'import de
+dossiers, piece jointe non enregistree.
+
+Si le schema est repeare mais que le chat reste bloque (ou que l'espace
+d'hebergement sature), l'ecran `repair_schema_admin.php` propose aussi le
+nettoyage d'urgence du chat : il supprime les conversations (definitivement),
+purge la presence « en ligne » (auto-regeneree) et rend l'espace disque a
+l'hebergeur via `OPTIMIZE TABLE`. Une table chat videe repart avec un
+`AUTO_INCREMENT` neuf : cela corrige aussi « Erreur d'envoi ».

@@ -124,6 +124,39 @@ require __DIR__ . '/includes/header.php';
   .filter-card select option {
     padding: 6px 8px;
   }
+
+  /* --- Filtres responsive (mobile) -----------------------------------
+     Le formulaire utilise « justify-content-end » et des colonnes
+     « col-auto » (flex: 0 0 auto) : sur un écran étroit, les contrôles
+     se tassaient à droite sur trois rangées décalées, avec le bouton
+     « Afficher » détaché sous les sélecteurs (x=107 au lieu de x=23)
+     et le select « Salarié » (min-width:260px en ligne) plus large que
+     l'espace disponible.
+     En dessous de 640px, on empile chaque champ en pleine largeur,
+     aligné à gauche avec le padding de la carte. Au-dessus (tablette),
+     les contrôles tiennent sur une seule rangée et rien ne change. */
+  @media (max-width: 640px) {
+    .filter-card .row {
+      justify-content: flex-start;   /* annule justify-content-end */
+      align-items: stretch;          /* le bouton prend sa propre rangée */
+    }
+    .filter-card .col-auto {
+      flex: 1 1 100%;                /* une colonne par ligne */
+      width: 100%;
+      min-width: 0;                  /* autorise le rétrécissement */
+    }
+    /* Important : le select « Salarié » porte un style en ligne
+       min-width:260px (plus large que l'écran) — on le neutralise. */
+    .filter-card .form-select,
+    .filter-card button,
+    .filter-card .btn {
+      width: 100%;
+      min-width: 0;
+    }
+    .filter-card .btn {
+      justify-content: center;
+    }
+  }
 </style>
 
 <div class="content-card">

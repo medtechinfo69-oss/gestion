@@ -6,6 +6,8 @@ config/config.hosting.php
 
 # Fichiers contenant des hash de mots de passe (sensible)
 database/reset_passwords*.sql
+# Identifiants en clair générés pour l'équipe (jamais versionner)
+readme*.txt
 
 # Scripts de debug / diagnostics (potentiellement dangereux)
 set_password.php

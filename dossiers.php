@@ -7,6 +7,8 @@ $user = current_user();
 $isAdmin = is_admin();
 $canAccessAll = can_access_dossiers();
 $hideSupervisorColumns = is_superviseur();
+$userName  = (string) ($user['nom_complet'] ?? $user['username'] ?? '');
+$userEmail = (string) ($user['email'] ?? '');
 
 sec_log('view', 'dossier', null, 'Access dossiers list');
 
@@ -20,10 +22,14 @@ $vendeurFilter = filter_var($_GET['vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0;
 $compagnieFilter = trim($_GET['compagnie'] ?? '');
 $dateFrom = parse_date_fr($_GET['date_from'] ?? '') ?: '';
 $dateTo   = parse_date_fr($_GET['date_to'] ?? '') ?: '';
+$dateFromInjection = parse_date_fr($_GET['date_from_injection'] ?? '') ?: '';
+
+$etatContratSelected = is_array($etatContratFilter) ? $etatContratFilter : ($etatContratFilter !== '' ? [$etatContratFilter] : []);
 
 $sortableColumns = [
   'date_vente' => 'd.date_vente', 'nom' => 'd.nom', 'ca_mois' => 'd.ca_mois', 'ca_annuel' => 'd.ca_annuel',
     'etat_dossier' => 'd.etat_dossier', 'compagnie' => 'd.compagnie', 'created_at' => 'd.created_at',
+    'date_injection' => 'd.date_injection',
 ];
 $sort = $_GET['sort'] ?? 'date_vente';
 $sort = array_key_exists($sort, $sortableColumns) ? $sort : 'date_vente';
@@ -50,7 +56,7 @@ if ($search !== '') {
         'd.date_naissance_assure', 'd.age_assure_principal', 'd.adresse', 'd.cp', 'd.ville',
         'd.type_signature', 'd.produit', 'd.compagnie', 'd.ta_origine', 'd.p_prod',
         'd.etat_dossier', 'd.etat_contrat', 'd.controle_qualite', 'd.commentaire',
-        'd.motif_annulation',
+        'd.motif_annulation', 'd.date_injection',
         'CAST(d.ca_mois AS CHAR)', 'CAST(d.ca_annuel AS CHAR)', 'CAST(d.nombre_personnes AS CHAR)',
         'CAST(d.date_vente AS CHAR)', 'CAST(d.date_effet AS CHAR)', 'CAST(d.date_courrier_supervision AS CHAR)',
         'CAST(d.date_etat_contrat_supervision AS CHAR)', 'CAST(d.date_controle_qualite_supervision AS CHAR)',
@@ -70,9 +76,28 @@ if (in_array($etatFilter, etats_dossier_valides(), true)) {
     $params['etat'] = $etatFilter;
 }
 
-if (in_array($etatContratFilter, etats_contrat_valides(), true)) {
-  $conditions[] = 'd.etat_contrat = :etat_contrat';
-  $params['etat_contrat'] = $etatContratFilter;
+$etatContratValues = [];
+if ($etatContratFilter !== '') {
+    $rawValues = is_array($etatContratFilter) ? $etatContratFilter : explode(',', $etatContratFilter);
+    $allowed = etats_contrat_valides(true);
+    foreach ($rawValues as $v) {
+        $v = trim((string) $v);
+        if ($v !== '' && in_array($v, $allowed, true)) {
+            $etatContratValues[] = $v;
+        }
+    }
+    $etatContratValues = array_values(array_unique($etatContratValues));
+    if (!empty($etatContratValues)) {
+        // Placeholders nommés : le reste du script lie les paramètres par nom
+        // (bindValue(':' . $k)), donc des « ? » anonymes provoqueraient
+        // « SQLSTATE[HY093]: Invalid parameter number ».
+        $placeholders = [];
+        foreach ($etatContratValues as $i => $val) {
+            $placeholders[] = ':ec' . $i;
+            $params['ec' . $i] = $val;
+        }
+        $conditions[] = 'd.etat_contrat IN (' . implode(',', $placeholders) . ')';
+    }
 }
 
 if ($canAccessAll && $vendeurFilter) {
@@ -92,6 +117,10 @@ if ($dateFrom) {
 if ($dateTo) {
     $conditions[] = 'd.date_vente <= :date_to';
     $params['date_to'] = $dateTo;
+}
+if ($dateFromInjection) {
+    $conditions[] = 'd.date_injection = :date_from_injection';
+    $params['date_from_injection'] = $dateFromInjection;
 }
 
 $whereSql = $conditions ? ('WHERE ' . implode(' AND ', $conditions)) : '';
@@ -159,38 +188,36 @@ if ($canAccessAll) {
     . '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
 }
 if ($isAdmin) {
-  $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_secure_export.php" class="email-export-form" style="display:inline-block;vertical-align:top;margin:0;">' . csrf_field() . '
+  $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_secure_export.php" class="" style="display:inline-block;vertical-align:top;margin:0;">' . csrf_field() . '
     <input type="hidden" name="q" value="' . e($search) . '">
     <input type="hidden" name="etat" value="' . e($etatFilter) . '">
-    <input type="hidden" name="etat_contrat" value="' . e($etatContratFilter) . '">
+    <input type="hidden" name="etat_contrat" value="' . (is_array($etatContratFilter) ? implode(',', array_map('e', $etatContratFilter)) : e($etatContratFilter)) . '">
     <input type="hidden" name="vendeur" value="' . (int) $vendeurFilter . '">
     <input type="hidden" name="compagnie" value="' . e($compagnieFilter) . '">
     <input type="hidden" name="date_from" value="' . e($dateFrom) . '">
     <input type="hidden" name="date_to" value="' . e($dateTo) . '">
-    <button type="submit" class="btn btn-primary">Envoyer Excel par e-mail</button>
+    <input type="hidden" name="send_email" value="1">
+<button type="submit" class="btn btn-primary">Envoyer Excel par e-mail</button>
   </form>';
 }
 require __DIR__ . '/includes/header.php';
 ?>
 
 <style>
-  /* Les colonnes "Etat du dossier" et "Etat du contrat" doivent afficher
-     le texte intégral (sans "…"). Règles déclarées après la feuille de
-     style globale : elles l'emportent sur la troncature à 20ch. */
+  /* Colonnes "Etat du dossier" et "Etat du contrat" : le badge reste sur
+     une seule ligne compacte, largeur limitée à 50 caractères, afin que
+     le tableau reste aligné (pas de lignes étirées en hauteur). */
   table.data-table--wide thead th.col-etat,
   table.data-table--wide tbody td.col-etat {
-    max-width: none;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: break-word;
-    word-break: normal;
+    max-width: 320px;
+    white-space: nowrap;
   }
   table.data-table--wide tbody td.col-etat .badge {
-    max-width: none;
-    white-space: normal;
-    overflow-wrap: break-word;
-    word-break: normal;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
   }
 
   /* Filtres : même traitement que la zone de filtres de l'historique RH
@@ -233,12 +260,11 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="form-group">
       <label for="etat_contrat">État du contrat</label>
-      <select id="etat_contrat" name="etat_contrat">
-        <option value="">Tous</option>
-        <?php foreach (etats_contrat_valides() as $etatContrat): ?>
-          <option value="<?= e($etatContrat) ?>" <?= $etatContratFilter === $etatContrat ? 'selected' : '' ?>><?= e($etatContrat) ?></option>
-        <?php endforeach; ?>
-      </select>
+      <div class="multiselect-dropdown" data-multiselect id="etat_contrat"
+           data-name="etat_contrat[]"
+           data-selected='<?= json_encode($etatContratSelected) ?>'
+           data-options='<?= json_encode(array_map(function ($e) { return ['value' => $e, 'label' => $e]; }, etats_contrat_valides())) ?>'>
+      </div>
     </div>
     <?php if ($canAccessAll): ?>
     <div class="form-group">
@@ -268,10 +294,16 @@ require __DIR__ . '/includes/header.php';
       <label for="date_to">au</label>
       <input type="date" id="date_to" name="date_to" value="<?= e($dateTo) ?>">
     </div>
-    <div class="form-group toolbar-action">
-      <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+    <div class="form-group" style="border-left:1px solid var(--color-line);">
+      <label for="date_from_injection">Date injection</label>
+      <input type="date" id="date_from_injection" name="date_from_injection" value="<?= e($dateFromInjection) ?>">
     </div>
-    <?php if ($search || $etatFilter || $etatContratFilter || $vendeurFilter || $compagnieFilter || $dateFrom || $dateTo): ?>
+    <div class="form-group toolbar-action">
+      <button type="submit" class="btn btn-primary btn-sm" title="Appliquer les filtres">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+      </button>
+    </div>
+    <?php if ($search || $etatFilter || $etatContratFilter || $vendeurFilter || $compagnieFilter || $dateFrom || $dateTo || $dateFromInjection): ?>
     <div class="form-group toolbar-action">
       <a href="<?= e(APP_URL) ?>/dossiers.php" class="btn btn-outline btn-sm">Réinitialiser</a>
     </div>
@@ -293,7 +325,7 @@ require __DIR__ . '/includes/header.php';
           <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th>Civilité</th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
           <th>Date d'effet</th>
           <?php if (!$hideSupervisorColumns): ?><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
-          <th class="col-etat">Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th class="col-etat">Etat du contrat</th><th>Contrôle qualité</th>
+          <th class="col-etat">Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th class="col-etat">Etat du contrat</th><th>Contrôle qualité</th><th>Date d'injection</th>
           <th></th>
         </tr>
       </thead>
@@ -301,17 +333,31 @@ require __DIR__ . '/includes/header.php';
         <?php foreach ($dossiers as $d): ?>
         <tr class="<?= row_class_etat($d['etat_dossier']) ?>">
           <?php if ($isAdmin): ?><td class="selection-cell"><input type="checkbox" name="dossier_ids[]" value="<?= (int) $d['id'] ?>" data-dossier-select aria-label="Sélectionner le dossier <?= (int) $d['id'] ?>"></td><?php endif; ?>
-          <td><?= e($d['vendeur_nom']) ?></td><td><?= e($d['ta_origine']) ?></td><td><?= e($d['p_prod']) ?></td>
-          <td class="nowrap"><?= format_date($d['date_vente']) ?></td><td><?= e($d['civilite']) ?></td>
-          <td><a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>"><?= e($d['nom']) ?></a></td><td><?= e($d['prenom']) ?></td>
+          <td title="<?= e($d['vendeur_nom']) ?>"><?= e(truncate_chars($d['vendeur_nom'])) ?: '<span class="muted">—</span>' ?></td>
+          <td title="<?= e($d['ta_origine']) ?>"><?= e(truncate_chars($d['ta_origine'])) ?: '<span class="muted">—</span>' ?></td>
+          <td title="<?= e($d['p_prod']) ?>"><?= e(truncate_chars($d['p_prod'])) ?: '<span class="muted">—</span>' ?></td>
+          <td class="nowrap"><?= format_date($d['date_vente']) ?></td>
+          <td><?= e(truncate_chars($d['civilite'])) ?></td>
+          <td><a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" title="<?= e($d['nom']) ?>"><?= e(truncate_chars($d['nom'])) ?></a></td>
+          <td title="<?= e($d['prenom']) ?>"><?= e(truncate_chars($d['prenom'])) ?></td>
           <td><?= format_date($d['date_effet']) ?></td>
-          <?php if (!$hideSupervisorColumns): ?><td><?= e($d['produit']) ?></td><td><?= e($d['compagnie']) ?></td><?php endif; ?>
-          <td class="col-etat"><?= badge_etat($d['etat_dossier']) ?></td><td><?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?: '<span class="muted">—</span>' ?></td><td><?= e($d['commentaire']) ?: '<span class="muted">—</span>' ?></td><td class="col-etat"><?= badge_etat_contrat($d['etat_contrat']) ?></td><td><?= e($d['controle_qualite'] ?? '') ?: '<span class="muted">—</span>' ?></td>
+          <?php if (!$hideSupervisorColumns): ?>
+          <td title="<?= e($d['produit']) ?>"><?= e(truncate_chars($d['produit'])) ?: '<span class="muted">—</span>' ?></td>
+          <td title="<?= e($d['compagnie']) ?>"><?= e(truncate_chars($d['compagnie'])) ?: '<span class="muted">—</span>' ?></td>
+          <?php endif; ?>
+          <td class="col-etat"><?= badge_etat(truncate_chars($d['etat_dossier'])) ?></td>
+          <td title="<?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?>"><?= e(truncate_chars(implode(', ', courrier_values($d['courrier'] ?? '')))) ?: '<span class="muted">—</span>' ?></td>
+          <td title="<?= e($d['commentaire']) ?>"><?= e(truncate_chars($d['commentaire'])) ?: '<span class="muted">—</span>' ?></td>
+          <td class="col-etat"><?= badge_etat_contrat(truncate_chars($d['etat_contrat'])) ?></td>
+          <td title="<?= e($d['controle_qualite'] ?? '') ?>"><?= e(truncate_chars($d['controle_qualite'] ?? '')) ?: '<span class="muted">—</span>' ?></td>
+          <td class="nowrap"><?= format_date(($d['date_injection'] ?? null)) ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap">
-            <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm">Voir</a>
+            <span class="row-actions">
+            <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Voir" aria-label="Voir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></a>
             <?php if ($isAdmin): ?>
-              <a href="<?= e(APP_URL) ?>/dossier_form.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm">Modifier</a>
+            <a href="<?= e(APP_URL) ?>/dossier_form.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></a>
             <?php endif; ?>
+            </span>
           </td>
         </tr>
         <?php endforeach; ?>
@@ -355,6 +401,34 @@ require __DIR__ . '/includes/header.php';
   <?php endif; ?>
 </div>
 
+<script>
+(function() {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-multiselect]').forEach(function (el) {
+      var optionsRaw = el.getAttribute('data-options');
+      var selectedRaw = el.getAttribute('data-selected');
+      new MultiSelectDropdown(el, {
+        options: optionsRaw ? JSON.parse(optionsRaw) : [],
+        selected: selectedRaw ? JSON.parse(selectedRaw) : [],
+        name: el.getAttribute('data-name') || 'etat_contrat[]',
+        onchange: function (values) {
+          var select = el.querySelector('select');
+          if (select) {
+            select.querySelectorAll('option').forEach(function (opt) { opt.remove(); });
+            values.forEach(function (v) {
+              var opt = document.createElement('option');
+              opt.value = v;
+              opt.selected = true;
+              select.appendChild(opt);
+            });
+          }
+        }
+      });
+    });
+  });
+})();
+</script>
+
 <?php require __DIR__ . '/includes/footer.php'; ?>
 
 <?php if ($isAdmin): ?>
@@ -363,16 +437,12 @@ require __DIR__ . '/includes/header.php';
   var userName = <?= json_encode($userName) ?>;
   var userEmail = <?= json_encode($userEmail) ?>;
   var pageUrl = window.location.href;
-  var startTime = Date.now();
-
-  var style = document.createElement('style');
-  style.textContent = 'body { user-select: none !important; } *:not(input):not(textarea) { user-select: none !important; -webkit-user-select: none !important; }';
-  document.head.appendChild(style);
+  var csrfToken = <?= json_encode(csrf_token()) ?>;
 
   function reportSecurityEvent(type, description, details) {
     fetch('actions/security_alert.php', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify({
         type: type,
         description: description,
@@ -385,6 +455,10 @@ require __DIR__ . '/includes/header.php';
     }).catch(function() {});
   }
 
+  // La protection anti-copie (user-select:none, blocage copier/couper, clic droit,
+  // sélection, glisser-déposer) a été supprimée : l'administrateur peut copier.
+  // Seule la protection impression/source/F12 est conservée.
+
   document.addEventListener('keydown', function(e) {
     if (e.key === 'PrintScreen') {
       reportSecurityEvent('print_screen', 'PrintScreen key pressed');
@@ -394,16 +468,6 @@ require __DIR__ . '/includes/header.php';
         case 'p':
           e.preventDefault();
           reportSecurityEvent('print_attempt', 'Ctrl+P (Print) blocked');
-          break;
-        case 's':
-          e.preventDefault();
-          reportSecurityEvent('save_attempt', 'Ctrl+S (Save) blocked');
-          break;
-        case 'c':
-          if (e.shiftKey) {
-            e.preventDefault();
-            reportSecurityEvent('copy_html_attempt', 'Ctrl+Shift+C blocked');
-          }
           break;
         case 'u':
           e.preventDefault();
@@ -416,45 +480,6 @@ require __DIR__ . '/includes/header.php';
       reportSecurityEvent('dev_tools_attempt', 'F12 (Dev Tools) blocked');
     }
   });
-
-  document.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-    reportSecurityEvent('right_click', 'Right-click blocked');
-  });
-
-  document.addEventListener('dragstart', function(e) {
-    e.preventDefault();
-    reportSecurityEvent('drag_attempt', 'Drag start blocked');
-    return false;
-  });
-
-  document.addEventListener('selectstart', function(e) {
-    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-      e.preventDefault();
-      return false;
-    }
-  });
-
-  document.addEventListener('copy', function(e) {
-    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-      e.preventDefault();
-      reportSecurityEvent('copy_attempt', 'Copy blocked');
-    }
-  });
-
-  document.addEventListener('cut', function(e) {
-    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-      e.preventDefault();
-      reportSecurityEvent('cut_attempt', 'Cut blocked');
-    }
-  });
-
-  document.addEventListener('paste', function(e) {
-    // Allow paste in inputs
-  });
-
-
-
 })();
 </script>
 <?php endif; ?>

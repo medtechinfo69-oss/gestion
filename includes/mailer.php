@@ -6,10 +6,16 @@ if (!defined('APP_INIT')) {
 
 function app_mail_configured(): bool
 {
-    return defined('MAIL_HOST') && MAIL_HOST !== ''
-        && defined('MAIL_USERNAME') && MAIL_USERNAME !== ''
-        && defined('MAIL_PASSWORD') && MAIL_PASSWORD !== ''
-        && defined('MAIL_FROM') && filter_var(MAIL_FROM, FILTER_VALIDATE_EMAIL);
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $host = (string) (defined('MAIL_HOST') ? MAIL_HOST : (getenv('MAIL_HOST') ?: ''));
+    $user = (string) (defined('MAIL_USERNAME') ? MAIL_USERNAME : (getenv('MAIL_USERNAME') ?: ''));
+    $pass = (string) (defined('MAIL_PASSWORD') ? MAIL_PASSWORD : (getenv('MAIL_PASSWORD') ?: ''));
+    $from = (string) (defined('MAIL_FROM') ? MAIL_FROM : (getenv('MAIL_FROM') ?: ''));
+    $cached = (bool) ($host !== '' && $user !== '' && $pass !== '' && filter_var($from, FILTER_VALIDATE_EMAIL));
+    return $cached;
 }
 
 function smtp_expect($socket, array $codes): void
@@ -33,26 +39,28 @@ function smtp_command($socket, string $command, array $codes): void
     smtp_expect($socket, $codes);
 }
 
-function send_app_email(string $to, string $subject, string $body, ?string $attachmentPath = null, ?string $attachmentName = null): bool
+/**
+ * Envoi unique (sans réessai). Voir send_app_email() pour l'enveloppe
+ * publique qui réessaie les erreurs SMTP transitoires.
+ */
+function send_app_email_once(string $to, string $subject, string $body, ?string $attachmentPath = null, ?string $attachmentName = null): bool
 {
-    if (!app_mail_configured() || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        error_log('Email skipped: SMTP is not configured or recipient is invalid.');
-        return false;
-    }
+    $host = (string) (defined('MAIL_HOST') ? MAIL_HOST : (getenv('MAIL_HOST') ?: ''));
+    $port = (int) (defined('MAIL_PORT') ? MAIL_PORT : (getenv('MAIL_PORT') ?: 587));
+    $user = (string) (defined('MAIL_USERNAME') ? MAIL_USERNAME : (getenv('MAIL_USERNAME') ?: ''));
+    $pass = (string) (defined('MAIL_PASSWORD') ? MAIL_PASSWORD : (getenv('MAIL_PASSWORD') ?: ''));
+    $from = (string) (defined('MAIL_FROM') ? MAIL_FROM : (getenv('MAIL_FROM') ?: ''));
+    $encryption = strtolower((string) (defined('MAIL_ENCRYPTION') ? MAIL_ENCRYPTION : (getenv('MAIL_ENCRYPTION') ?: 'tls')));
+    $timeout = (int) (defined('MAIL_TIMEOUT') ? MAIL_TIMEOUT : (getenv('MAIL_TIMEOUT') ?: 15));
 
-    $host = (string) MAIL_HOST;
-    $port = (int) (defined('MAIL_PORT') ? MAIL_PORT : 2525);
-    $timeout = 15;
     $socket = @fsockopen($host, $port, $errno, $error, $timeout);
     if (!$socket) {
-        error_log('SMTP connection failed: ' . $error . ' (' . $errno . ')');
-        return false;
+        throw new RuntimeException('connection failed: ' . $error . ' (' . $errno . ')');
     }
-
     try {
         smtp_expect($socket, [220]);
         smtp_command($socket, 'EHLO ' . (string) (defined('MAIL_HELO') ? MAIL_HELO : 'localhost'), [250]);
-        if (defined('MAIL_ENCRYPTION') && strtolower((string) MAIL_ENCRYPTION) === 'tls') {
+        if ($encryption === 'starttls' || $encryption === 'tls') {
             smtp_command($socket, 'STARTTLS', [220]);
             if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
                 throw new RuntimeException('SMTP TLS negotiation failed.');
@@ -60,14 +68,14 @@ function send_app_email(string $to, string $subject, string $body, ?string $atta
             smtp_command($socket, 'EHLO ' . (string) (defined('MAIL_HELO') ? MAIL_HELO : 'localhost'), [250]);
         }
         smtp_command($socket, 'AUTH LOGIN', [334]);
-        smtp_command($socket, base64_encode((string) MAIL_USERNAME), [334]);
-        smtp_command($socket, base64_encode((string) MAIL_PASSWORD), [235]);
-        smtp_command($socket, 'MAIL FROM:<' . MAIL_FROM . '>', [250]);
+        smtp_command($socket, base64_encode($user), [334]);
+        smtp_command($socket, base64_encode($pass), [235]);
+        smtp_command($socket, 'MAIL FROM:<' . $from . '>', [250]);
         smtp_command($socket, 'RCPT TO:<' . $to . '>', [250, 251]);
 
         $boundary = '=_app_' . bin2hex(random_bytes(12));
         $headers = [
-            'From: Gestion des Dossiers <' . MAIL_FROM . '>',
+            'From: Gestion des Dossiers <' . $from . '>',
             'To: <' . $to . '>',
             'Subject: ' . mb_encode_mimeheader($subject, 'UTF-8'),
             'MIME-Version: 1.0',
@@ -79,7 +87,7 @@ function send_app_email(string $to, string $subject, string $body, ?string $atta
 
         if ($attachmentPath !== null && is_file($attachmentPath)) {
             $name = $attachmentName ?: basename($attachmentPath);
-            $content = chunk_split(base64_encode((string) file_get_contents($attachmentPath)));
+            $content = chunk_split(base64_encode(file_get_contents($attachmentPath)));
             $message .= '--' . $boundary . "\r\n";
             $message .= 'Content-Type: application/octet-stream; name="' . addcslashes($name, "\\\"") . '"' . "\r\n";
             $message .= 'Content-Disposition: attachment; filename="' . addcslashes($name, "\\\"") . '"' . "\r\n";
@@ -96,25 +104,60 @@ function send_app_email(string $to, string $subject, string $body, ?string $atta
     } catch (Throwable $e) {
         fclose($socket);
         error_log('SMTP error: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Envoie un e-mail via SMTP, avec réessais automatiques sur les erreurs
+ * transitoires (421 « Server busy », connexion impossible). Gmail renvoie
+ * fréquemment un 421 quand plusieurs envois rapprochés ont lieu ; un court
+ * délai permet de repasser. Le dernier échec renvoie false.
+ */
+function send_app_email(string $to, string $subject, string $body, ?string $attachmentPath = null, ?string $attachmentName = null): bool
+{
+    if (!app_mail_configured()) {
+        error_log('Email skipped: SMTP is not configured.');
         return false;
     }
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        error_log('Email skipped: recipient is invalid.');
+        return false;
+    }
+
+    $maxAttempts = (int) (defined('MAIL_MAX_ATTEMPTS') ? MAIL_MAX_ATTEMPTS : 3);
+    $maxAttempts = max(1, min(5, $maxAttempts));
+
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        try {
+            return send_app_email_once($to, $subject, $body, $attachmentPath, $attachmentName);
+        } catch (Throwable $e) {
+            $message = $e->getMessage();
+            $transient = (strpos($message, '421') !== false)
+                || stripos($message, 'server busy') !== false
+                || stripos($message, 'try again later') !== false
+                || stripos($message, 'connection failed') !== false
+                || stripos($message, 'timed out') !== false;
+
+            if (!$transient || $attempt >= $maxAttempts) {
+                error_log('SMTP send failed after ' . $attempt . ' attempt(s): ' . $message);
+                return false;
+            }
+            // Attente croissante : 2s, 4s, ...
+            sleep(2 * $attempt);
+        }
+    }
+    return false;
 }
 
 function notify_admins(PDO $db, string $subject, string $body, ?string $attachmentPath = null, ?string $attachmentName = null): bool
 {
-    try {
-        $stmt = $db->query("SELECT email FROM users WHERE role = 'admin' AND is_active = 1 AND email IS NOT NULL AND email <> ''");
-        $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        if (defined('MAIL_ALERT_TO') && filter_var(MAIL_ALERT_TO, FILTER_VALIDATE_EMAIL)) {
-            $recipients[] = MAIL_ALERT_TO;
-        }
-        $sent = false;
-        foreach (array_unique($recipients) as $recipient) {
-            $sent = send_app_email((string) $recipient, $subject, $body, $attachmentPath, $attachmentName) || $sent;
-        }
-        return $sent;
-    } catch (Throwable $e) {
-        error_log('Admin notification failed: ' . $e->getMessage());
-        return false;
-    }
+    // Désactivé : aucun envoi d'e-mail n'est demandé.
+    // Retourne false immédiatement pour que tous les appels
+    // (dossier_save, attachment_upload, secure_export, RH, etc.)
+    // soient sans effet.
+    $msg = 'notify_admins disabled: no email sent for subject "'
+        . $subject . '"';
+    error_log($msg);
+    return false;
 }

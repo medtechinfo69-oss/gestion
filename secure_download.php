@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $downloadInfo && !$locked) {
             sec_log('permission_denied', 'attachment', $token, 'Invalid download code attempt', false, 'Wrong code');
             
             if ($newAttempts >= $downloadInfo['max_attempts']) {
-                $error = 'Code incorrect. Trop de tentatives - le lien est maintenant bloquÃ©.';
+                $error = 'Code incorrect. Trop de tentatives - le lien est maintenant bloqué.';
                 $locked = true;
             } else {
                 $remainingAttempts = $downloadInfo['max_attempts'] - $newAttempts;

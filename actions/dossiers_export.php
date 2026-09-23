@@ -35,6 +35,10 @@ $vendeurFilter = filter_var($_GET['vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0;
 $compagnieFilter = trim($_GET['compagnie'] ?? '');
 $dateFrom = parse_date_fr($_GET['date_from'] ?? '') ?: '';
 $dateTo = parse_date_fr($_GET['date_to'] ?? '') ?: '';
+$dateFromInjection = parse_date_fr($_GET['date_from_injection'] ?? '') ?: '';
+$dateToInjection = parse_date_fr($_GET['date_to_injection'] ?? '') ?: '';
+$dateFromInjection = parse_date_fr($_GET['date_from_injection'] ?? '') ?: '';
+$dateToInjection = parse_date_fr($_GET['date_to_injection'] ?? '') ?: '';
 
 $conditions = [];
 $params = [];
@@ -53,9 +57,27 @@ if (in_array($etatFilter, etats_dossier_valides(), true)) {
     $conditions[] = 'd.etat_dossier = :etat';
     $params['etat'] = $etatFilter;
 }
-if (in_array($etatContratFilter, etats_contrat_valides(), true)) {
-    $conditions[] = 'd.etat_contrat = :etat_contrat';
-    $params['etat_contrat'] = $etatContratFilter;
+if (is_array($etatContratFilter) && !empty($etatContratFilter)) {
+    $filtered = array_filter($etatContratFilter, function ($v) { return in_array($v, etats_contrat_valides(), true); });
+    if (!empty($filtered)) {
+        $in = '';
+        foreach ($filtered as $i => $val) {
+            $in .= ($i > 0 ? ',' : '') . ':ec' . $i;
+            $params['ec' . $i] = $val;
+        }
+        $conditions[] = "d.etat_contrat IN ($in)";
+    }
+} elseif ($etatContratFilter !== '') {
+    $values = explode(',', $etatContratFilter);
+    $filtered = array_filter($values, function ($v) { return in_array(trim($v), etats_contrat_valides(), true); });
+    if (!empty($filtered)) {
+        $in = '';
+        foreach ($filtered as $i => $val) {
+            $in .= ($i > 0 ? ',' : '') . ':ec' . $i;
+            $params['ec' . $i] = trim($val);
+        }
+        $conditions[] = "d.etat_contrat IN ($in)";
+    }
 }
 if ($canAccessAll && $vendeurFilter) {
     $conditions[] = 'd.vendeur_id = :vendeur_id';
@@ -73,6 +95,14 @@ if ($dateTo) {
     $conditions[] = 'd.date_vente <= :date_to';
     $params['date_to'] = $dateTo;
 }
+if ($dateFromInjection) {
+    $conditions[] = 'd.date_injection >= :date_from_injection';
+    $params['date_from_injection'] = $dateFromInjection;
+}
+if ($dateToInjection) {
+    $conditions[] = 'd.date_injection <= :date_to_injection';
+    $params['date_to_injection'] = $dateToInjection;
+}
 
 $whereSql = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 $sort = $_GET['sort'] ?? 'date_vente';
@@ -80,6 +110,7 @@ $sortableColumns = [
     'date_vente' => 'd.date_vente', 'nom' => 'd.nom', 'ca_mois' => 'd.ca_mois',
     'ca_annuel' => 'd.ca_annuel', 'etat_dossier' => 'd.etat_dossier',
     'compagnie' => 'd.compagnie', 'created_at' => 'd.created_at',
+    'date_injection' => 'd.date_injection',
 ];
 $sortSql = $sortableColumns[$sort] ?? $sortableColumns['date_vente'];
 $dirSql = strtolower($_GET['dir'] ?? '') === 'asc' ? 'ASC' : 'DESC';
@@ -87,17 +118,42 @@ $stmt = $db->prepare("SELECT d.*, u.nom_complet AS vendeur_nom FROM dossiers d J
 $stmt->execute($params);
 $dossiers = $stmt->fetchAll();
 
+// Colonnes exportées / importées : ordre EXACT demandé par l'utilisateur.
 $columns = [
-    'vendeur_nom' => 'Vendeur', 'ta_origine' => 'Origine', 'p_prod' => 'Prod', 'date_vente' => 'Date vente',
-    'civilite' => 'Civilité', 'nom' => 'Nom', 'prenom' => 'Prénom', 'mail' => 'Mail', 'telfix' => 'Téléphone 1',
-    'portable' => 'Téléphone 2', 'nombre_personnes' => "NB d'assurés", 'date_naissance_assure' => 'Date naissance assuré',
-    'age_assure_principal' => 'Age assuré principal', 'adresse' => 'Adresse', 'cp' => 'CP', 'ville' => 'Ville',
-    'type_signature' => 'Type de signature', 'ca_mois' => 'CA-mois', 'ca_annuel' => 'CA-annuel', 'date_effet' => "Date d'effet",
-    'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'Etat du dossier', 'date_dossier_complet' => 'Date validation', 'courrier' => 'Courrier',
-    'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'Etat du contrat', 'controle_qualite' => 'Contrôle qualité', 'date_contrat_non_actif' => "Date d'annulation",
+    'vendeur_nom'          => 'Vendeur',
+    'ta_origine'           => 'Origine',
+    'p_prod'               => 'Prod',
+    'date_vente'           => 'Date vente',
+    'civilite'             => 'Civilité',
+    'nom'                  => 'Nom',
+    'prenom'               => 'Prénom',
+    'mail'                 => 'Mail',
+    'telfix'               => 'Téléphone 1',
+    'portable'             => 'Téléphone 2',
+    'nombre_personnes'     => "NB d'assurés",
+    'date_naissance_assure' => 'Date naissance assuré',
+    'age_assure_principal' => 'Age assuré principal',
+    'adresse'              => 'Adresse',
+    'cp'                   => 'CP',
+    'ville'                => 'Ville',
+    'type_signature'       => 'Type de signature',
+    'ca_mois'              => 'CA-mois',
+    'ca_annuel'            => 'CA-annuel',
+    'date_effet'           => "Date d'effet",
+    'produit'              => 'Produit',
+    'compagnie'            => 'Compagnie',
+    'etat_dossier'         => 'Etat du dossier',
+    'date_dossier_complet' => 'Date validation',
+    'courrier'             => 'Courrier',
+    'commentaire'          => 'Commentaire dossier',
+    'etat_contrat'         => 'Etat du contrat',
+    'date_contrat_non_actif' => "Date d'annulation",
+    'motif_annulation'     => "Motif d'annulation",
+    'controle_qualite'     => 'Contrôle Qualité',
+    'date_injection'       => "Date d'injection",
 ];
 if ($hideSupervisorColumns) {
-    foreach (['mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {
+    foreach (['produit', 'compagnie', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {
         unset($columns[$hiddenColumn]);
     }
 }
@@ -113,7 +169,7 @@ foreach ($dossiers as $rowNumber => $dossier) {
     $cells = '';
     foreach (array_keys($columns) as $index => $key) {
         $value = $dossier[$key] ?? '';
-        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif'], true)) {
+        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif', 'date_injection'], true)) {
             $value = format_date((string) $value);
         } elseif ($key === 'courrier') {
             $value = implode(', ', courrier_values((string) $value));
@@ -140,11 +196,14 @@ if (!class_exists('ZipArchive')) {
     http_response_code(500);
     exit('Export .xlsx impossible : activez extension=zip dans C:\\xampp\\php\\php.ini puis redémarrez Apache.');
 }
-$temporaryFile = tempnam(sys_get_temp_dir(), 'dossiers_export_');
+// Fichier temporaire : app_temp_file() évite /home/tmp (hors open_basedir sur
+// les hébergements mutualisés) et privilégie uploads/tmp du projet.
+$temporaryFile = app_temp_file('dossiers_export_');
 $zip = new ZipArchive();
-if (!$temporaryFile || $zip->open($temporaryFile, ZipArchive::OVERWRITE) !== true) {
-    http_response_code(500);
-    exit('Export Excel impossible.');
+if ($temporaryFile === '' || $zip->open($temporaryFile, ZipArchive::OVERWRITE) !== true) {
+    set_flash('error', "Export Excel impossible : aucun dossier temporaire accessible sur le serveur.");
+    header('Location: ' . APP_URL . '/dossiers.php');
+    exit;
 }
 $zip->addFromString('[Content_Types].xml', $contentTypes);
 $zip->addFromString('_rels/.rels', $rootRels);

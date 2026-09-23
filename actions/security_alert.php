@@ -9,31 +9,55 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
-
-if (!$input || !isset($input['type'])) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid request']);
+// SECURITE : endpoint réservé aux utilisateurs connectés (l'alerte est
+// rattachée à leur compte) et protégé par jeton CSRF. Sans ces contrôles,
+// n'importe qui pouvait insérer des alertes arbitraires (pollution des
+// journaux, usurpation d'identité dans les traces de sécurité).
+if (!is_logged_in()) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Authentication required']);
     exit;
 }
 
-$db = $GLOBALS['db'];
-$user = current_user();
-
-$type = trim($input['type'] ?? '');
-$description = trim($input['description'] ?? '');
-$details = trim($input['details'] ?? '');
-$userName = trim($input['user'] ?? '');
-$userEmail = trim($input['email'] ?? '');
-$page = trim($input['page'] ?? '');
-$timestamp = trim($input['timestamp'] ?? '');
-
 $allowedTypes = [
-    'print_screen', 'right_click', 'drag_attempt', 'screenshot_attempt', 
+    'print_screen', 'right_click', 'drag_attempt', 'screenshot_attempt',
     'selection_attempt', 'copy_attempt', 'cut_attempt', 'paste_attempt',
     'print_attempt', 'save_attempt', 'view_source_attempt', 'dev_tools_attempt',
     'dev_tools', 'tab_hidden', 'tab_visible', 'idle_warning', 'copy_html_attempt'
 ];
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = [];
+}
+
+$sentToken = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($input['csrf_token'] ?? ''));
+$storedToken = (string) ($_SESSION['csrf_token'] ?? '');
+if ($sentToken === '' || $storedToken === '' || !hash_equals($storedToken, $sentToken)) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Invalid CSRF token']);
+    exit;
+}
+
+$type = trim((string) ($input['type'] ?? ''));
+if (!in_array($type, $allowedTypes, true)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Unknown alert type']);
+    exit;
+}
+
+$db = $GLOBALS['db'];
+
+// Identité : toujours celle de la session (jamais celle fournie par le client,
+// qui permettrait d'usurper un autre utilisateur). Longueurs bornées pour
+// éviter le remplissage massif des journaux de sécurité.
+$user = current_user();
+$userName = mb_substr((string) ($user['nom_complet'] ?? $user['username'] ?? ''), 0, 150);
+$userEmail = mb_substr((string) ($user['email'] ?? ''), 0, 190);
+$description = mb_substr(trim((string) ($input['description'] ?? '')), 0, 500);
+$details = mb_substr(trim((string) ($input['details'] ?? '')), 0, 500);
+$page = mb_substr(trim((string) ($input['page'] ?? '')), 0, 500);
+$timestamp = mb_substr(trim((string) ($input['timestamp'] ?? '')), 0, 40);
 
 $fullDescription = $description;
 if ($details) {
@@ -92,24 +116,8 @@ $body .= "Genere: " . date('d/m/Y H:i:s') . "\n";
     
     $recipients = [];
     
-    if (defined('MAIL_ALERT_TO') && MAIL_ALERT_TO && filter_var(MAIL_ALERT_TO, FILTER_VALIDATE_EMAIL)) {
-        $recipients[] = MAIL_ALERT_TO;
-    }
-    
-    $admins = $db->query("SELECT email FROM users WHERE role = 'admin' AND is_active = 1 AND email IS NOT NULL AND email <> ''")->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($admins as $adminEmail) {
-        if ($adminEmail && filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
-            $recipients[] = $adminEmail;
-        }
-    }
-    
-    $recipients = array_unique($recipients);
+    // Aucun envoi d'e-mail n'est demandé : seule la trace DB est conservée.
     $emailSent = false;
-    
-    foreach ($recipients as $recipient) {
-        $sent = send_app_email($recipient, $subject, $body);
-        if ($sent) $emailSent = true;
-    }
     
     echo json_encode(['success' => true, 'logged' => true, 'alert_id' => $alertId, 'email_sent' => $emailSent, 'recipients' => $recipients]);
     

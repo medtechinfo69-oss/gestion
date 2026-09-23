@@ -2,11 +2,22 @@
 require_once __DIR__ . '/includes/init.php';
 require_dossier_access();
 
+// Seuls l'admin et le rôle « superviseur » strict peuvent MODIFIER un dossier.
+// Les vendeurs (même avec can_supervise = 1) restent en lecture seule :
+// - pas de bouton « Modifier » (voir dossiers.php + dossier_view.php) ;
+// - l'accès direct à dossier_form.php?id=… est refusé ici ;
+// - la sauvegarde d'une modification est refusée dans actions/dossier_save.php.
+if (!empty($_GET['id']) && !is_admin() && !is_role_superviseur()) {
+    http_response_code(403);
+    set_flash('error', 'Modification réservée aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
+
 $id = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
 $dossier = null;
 $isEdit = false;
 $isAdmin = is_admin();
-$isSuperviseur = is_superviseur();
+$isSuperviseur = is_role_superviseur();
 
 if ($id) {
     $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');
@@ -31,7 +42,13 @@ $dossierCompletLocked = $isEdit && (($dossier['date_dossier_complet'] ?? null) !
 $courrierLocked = $isEdit
   && ($dossierCompletLocked || ($dossier['date_courrier_supervision'] ?? null) !== null)
   && $courrierComplete;
-$etatContratLocked = $isEdit && (($dossier['date_etat_contrat_supervision'] ?? null) !== null || ($isSuperviseur && ($dossier['etat_contrat'] ?? 'Actif') !== 'Actif'));
+// L'état du contrat reste modifiable tant qu'il vaut « Actif », même si la
+// section a déjà été enregistrée (date_etat_contrat_supervision renseignée) :
+// sinon le superviseur ne pouvait plus jamais annuler un contrat validé. Le
+// verrou n'apparaît qu'une fois le contrat réellement sorti de l'état
+// « Actif » ; l'administrateur peut alors le débloquer via « Réactiver
+// supervision » (voir actions/dossier_reactivate.php).
+$etatContratLocked = $isEdit && (($dossier['etat_contrat'] ?? 'Actif') !== 'Actif');
 
 // Ré-affichage après erreur de validation (données conservées en session)
 $formData = $_SESSION['form_data'] ?? null;
@@ -49,6 +66,28 @@ $v = function (string $key, $default = '') use ($formData, $dossier) {
 };
 
 $vendeurs = $db->query("SELECT id, nom_complet FROM users WHERE role = 'vendeur' ORDER BY nom_complet")->fetchAll();
+
+// Vendeur connecté : la saisie se fait toujours pour elle-même. Le champ
+// « Vendeur » n'est donc plus une liste déroulante mais un champ figé (lecture
+// seule) recopié dans un champ caché : elle ne peut plus choisir ni
+// sélectionner un autre vendeur. Sur une fiche existante, la valeur figée est
+// celle portée par le dossier (elle n'est jamais réattribuée à la volée au
+// vendeur connecté). Les administrateurs et superviseurs conservent la liste
+// complète et restent libres de choisir n'importe quel vendeur.
+$currentUserId = (int) (current_user()['id'] ?? 0);
+$lockedVendeur = is_vendeur_user();
+$lockedVendeurId = $lockedVendeur ? ($isEdit ? (int) $dossier['vendeur_id'] : $currentUserId) : 0;
+$lockedVendeurNom = '';
+if ($lockedVendeur) {
+    $stmtVendeurNom = $db->prepare('SELECT nom_complet FROM users WHERE id = :id');
+    $stmtVendeurNom->execute(['id' => $lockedVendeurId]);
+    $lockedVendeurNom = (string) ($stmtVendeurNom->fetchColumn() ?: '');
+    if ($lockedVendeurNom === '') {
+        // Compte introuvable (supprimé) : on retombe sur le nom de session.
+        $lockedVendeurNom = (string) (current_user()['nom_complet'] ?? current_user()['username'] ?? '');
+    }
+}
+$selectedVendeurId = (string) $v('vendeur_id', $lockedVendeurId ? (string) $lockedVendeurId : '');
 
 $pageTitle = $isEdit ? 'Modifier le dossier' : 'Nouveau dossier';
 $pageSubtitle = $isEdit ? ('Dossier de ' . $dossier['nom'] . ' ' . $dossier['prenom']) : 'Créer un nouveau dossier';
@@ -131,6 +170,24 @@ require __DIR__ . '/includes/header.php';
     cb.addEventListener('change', updateCourrierState);
   });
 
+  // Verrouille l'état du contrat dès qu'il quitte « Actif » : la valeur est
+  // recopiée dans le champ caché « etat_contrat_locked » pour être enregistrée
+  // (un <select disabled> n'est pas soumis par le navigateur). Tant que l'état
+  // vaut « Actif », le champ reste actif et aucune valeur cachée n'est posée.
+  function lockEtatContrat(valeur) {
+    var lockedContract = document.getElementById('etat_contrat_locked');
+    if (lockedContract) { lockedContract.value = valeur; }
+    etatContrat.disabled = true;
+  }
+
+  if (etatContrat) {
+    etatContrat.addEventListener('change', function() {
+      if (etatContrat.value !== 'Actif') {
+        lockEtatContrat(etatContrat.value);
+      }
+    });
+  }
+
   form.addEventListener('submit', function(event) {
     var section = event.submitter ? event.submitter.value : '';
     if (section === 'courrier') {
@@ -149,9 +206,7 @@ require __DIR__ . '/includes/header.php';
       }
     }
     if (section === 'etat_contrat' && etatContrat) {
-      var lockedContract = document.getElementById('etat_contrat_locked');
-      if (lockedContract) { lockedContract.value = etatContrat.value; }
-      etatContrat.disabled = true;
+      lockEtatContrat(etatContrat.value);
     }
     if (section === 'controle_qualite' && controleQualite) {
       var lockedQuality = document.getElementById('controle_qualite_locked');
@@ -175,21 +230,28 @@ require __DIR__ . '/includes/header.php';
       <h3>Vendeur</h3>
       <div class="form-grid mb-16">
         <div class="form-group">
-          <label for="vendeur_id">Vendeur <span class="req">*</span></label>
-          <select id="vendeur_id" name="vendeur_id" class="<?= isset($formErrors['vendeur_id']) ? 'input-error' : '' ?>">
-            <option value="">— Sélectionner —</option>
-            <?php foreach ($vendeurs as $vd): ?>
-              <option value="<?= (int) $vd['id'] ?>" <?= (string) $v('vendeur_id') === (string) $vd['id'] ? 'selected' : '' ?>><?= e($vd['nom_complet']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <?php if (isset($formErrors['vendeur_id'])): ?><div class="field-error"><?= e($formErrors['vendeur_id']) ?></div><?php endif; ?>
-          <div class="help-text">
-            Vendeur absent de la liste ? <a href="<?= e(APP_URL) ?>/vendeurs.php" id="new-vendeur-link">Ajouter un vendeur</a>.
-          </div>
+          <label for="<?= $lockedVendeur ? 'vendeur_id_display' : 'vendeur_id' ?>">Vendeur <span class="req">*</span></label>
+          <?php if ($lockedVendeur): ?>
+            <?php // Vendeur connecté : champ figé, aucune sélection possible. ?>
+            <input type="text" id="vendeur_id_display" class="form-readonly" value="<?= e($lockedVendeurNom) ?>" readonly aria-readonly="true" tabindex="-1">
+            <input type="hidden" name="vendeur_id" value="<?= (int) $lockedVendeurId ?>">
+            <div class="help-text">Le dossier est automatiquement enregistré à votre nom.</div>
+          <?php else: ?>
+            <select id="vendeur_id" name="vendeur_id" class="<?= isset($formErrors['vendeur_id']) ? 'input-error' : '' ?>">
+              <option value="">— Sélectionner —</option>
+              <?php foreach ($vendeurs as $vd): ?>
+                <option value="<?= (int) $vd['id'] ?>" <?= $selectedVendeurId === (string) $vd['id'] ? 'selected' : '' ?>><?= e($vd['nom_complet']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <?php if (isset($formErrors['vendeur_id'])): ?><div class="field-error"><?= e($formErrors['vendeur_id']) ?></div><?php endif; ?>
+            <div class="help-text">
+              Vendeur absent de la liste ? <a href="<?= e(APP_URL) ?>/vendeurs.php" id="new-vendeur-link">Ajouter un vendeur</a>.
+            </div>
+          <?php endif; ?>
         </div>
         <div class="form-group">
           <label for="ta_origine">Origine</label>
-          <select id="ta_origine" name="ta_origine" class="<?= isset($formErrors['ta_origine']) ? 'input-error' : '' ?>">
+          <select id="ta_origine" name="ta_origine" class="<?= isset($formErrors['ta_origine']) ? 'input-error' : '' ?>"<?= $lockedVendeur ? ' autofocus' : '' ?>>
             <option value="">— Sélectionner —</option>
             <?php
               $currentOrigine = (string) $v('ta_origine', '');
@@ -210,7 +272,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="form-group">
           <label for="date_vente">Date de vente <span class="req">*</span></label>
-          <input type="date" id="date_vente" name="date_vente" value="<?= e($v('date_vente')) ?>" class="<?= isset($formErrors['date_vente']) ? 'input-error' : '' ?>">
+          <input type="date" id="date_vente" name="date_vente" value="<?= e($v('date_vente', $isEdit ? '' : date('Y-m-d'))) ?>" class="<?= isset($formErrors['date_vente']) ? 'input-error' : '' ?>">
           <?php if (isset($formErrors['date_vente'])): ?><div class="field-error"><?= e($formErrors['date_vente']) ?></div><?php endif; ?>
         </div>
       </div>
@@ -305,8 +367,13 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="form-group">
           <label for="date_effet">Date d'effet <span class="req">*</span></label>
-          <input type="date" id="date_effet" name="date_effet" value="<?= e($v('date_effet')) ?>" class="<?= isset($formErrors['date_effet']) ? 'input-error' : '' ?>">
+          <input type="date" id="date_effet" name="date_effet" value="<?= e($v('date_effet', $isEdit ? '' : date('Y-m-d'))) ?>" class="<?= isset($formErrors['date_effet']) ? 'input-error' : '' ?>">
           <?php if (isset($formErrors['date_effet'])): ?><div class="field-error"><?= e($formErrors['date_effet']) ?></div><?php endif; ?>
+        </div>
+        <div class="form-group">
+          <label for="date_injection">Date d'injection</label>
+          <input type="date" id="date_injection" name="date_injection" value="<?= e($v('date_injection')) ?>" class="<?= isset($formErrors['date_injection']) ? 'input-error' : '' ?>">
+          <?php if (isset($formErrors['date_injection'])): ?><div class="field-error"><?= e($formErrors['date_injection']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
           <label for="produit">Produit <span class="req">*</span></label>
@@ -347,10 +414,12 @@ require __DIR__ . '/includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-        </div>
-        <div class="form-group" id="motif-annulation-group" style="display:none;">
+        <?php $motifVisible = (string) $v('etat_contrat', 'Actif') !== 'Actif'; ?>
+        <div class="form-group span-full" id="motif-annulation-group" style="<?= $motifVisible ? '' : 'display:none;' ?>">
           <label for="motif_annulation">Motif d'annulation</label>
           <input type="text" id="motif_annulation" name="motif_annulation" value="<?= e($v('motif_annulation')) ?>" maxlength="255" placeholder="ex : Radiation pour non paiement">
+          <div class="help-text">Renseigné automatiquement dès que l'état du contrat n'est plus « Actif ».</div>
+        </div>
         </div>
         <div class="form-group span-full">
           <label for="commentaire">Commentaire dossier</label>
@@ -359,20 +428,28 @@ require __DIR__ . '/includes/header.php';
       </div>
 
       <div class="form-actions dossier-form-actions">
+        <?php // Le bouton « Réactiver supervision » se trouve sur la fiche du dossier
+              // (dossier_view.php). Ici il était imbriqué dans le <form> principal
+              // (HTML interdit : form dans form) et n'était jamais fonctionnel. ?>
         <button type="submit" class="btn btn-primary"><?= $isEdit ? 'Enregistrer les modifications' : 'Créer le dossier' ?></button>
-        <?php if ($isAdmin && $isRestricted): ?>
-          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver la supervision pour ce dossier ?">
-            <?= csrf_field() ?>
-            <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
-            <button type="submit" class="btn btn-outline">Réactiver supervision</button>
-          </form>
-        <?php endif; ?>
         <a href="<?= e(APP_URL) ?>/dossiers.php" class="btn btn-outline">Annuler</a>
       </div>
-    </form>
-  </div>
-</div>
-<?php endif; ?>
+        </form>
+     </div>
+    </div>
+    <script>
+    (function(){
+      var etatContrat = document.getElementById('etat_contrat');
+      var motifGroup = document.getElementById('motif-annulation-group');
+      if (!etatContrat || !motifGroup) return;
+      function toggleMotif() {
+        motifGroup.style.display = etatContrat.value !== 'Actif' ? '' : 'none';
+      }
+      etatContrat.addEventListener('change', toggleMotif);
+      toggleMotif();
+    })();
+    </script>
+    <?php endif; ?>
 
-<?php $footerInContent = true; ?>
-<?php require __DIR__ . '/includes/footer.php'; ?>
+    <?php $footerInContent = true; ?>
+    <?php require __DIR__ . '/includes/footer.php'; ?>

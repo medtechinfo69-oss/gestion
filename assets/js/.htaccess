@@ -1,0 +1,17 @@
+# =====================================================================
+# Gestion des Dossiers — assets/js/
+# =====================================================================
+# JavaScript uniquement. Aucun script serveur, aucun autre type de
+# fichier n'est servi depuis ce dossier (voir aussi assets/.htaccess).
+
+Options -Indexes -MultiViews
+
+# Aucune execution de script cote serveur.
+<FilesMatch "\.(php|phar|phtml|php[0-9]|pht|shtml|pl|py|rb|cgi|sh|bash|bat|cmd|exe|asp|aspx|jsp|jspx)$">
+    Require all denied
+</FilesMatch>
+
+# Seules les extensions .js, .mjs et .map sont autorisees.
+<FilesMatch "^(?!.*\.(js|mjs|map)$).+$">
+    Require all denied
+</FilesMatch>

@@ -2,11 +2,44 @@
 # Gestion des Dossiers — .htaccess racine
 # =====================================================================
 
-# Désactive l'affichage du contenu des dossiers
-Options -Indexes
+# Désactive l'affichage du contenu des dossiers et la négociation de
+# contenu (protège contre le « double-extension trick » : image.php.jpg)
+Options -Indexes -MultiViews
 
-# Empêche l'accès direct aux fichiers sensibles
-<FilesMatch "\.(sql|md|log|env)$">
+# ---------------------------------------------------------------------
+# Blocage des fichiers et dossiers sensibles
+# ---------------------------------------------------------------------
+# 1. Extensions refusées à la racine (dump, documentation, journaux,
+#    sauvegardes, fichiers de configuration ou de travail d'éditeur).
+<FilesMatch "\.(sql|sqlite|db|md|log|env|bak|backup|old|orig|save|swp|swo|tmp|temp|dist|example|lock|json|yml|yaml|ini|conf|cnf|xml|sh|bash|bat|cmd|ps1|py|rb|pl|cgi|inc)$">
+    Require all denied
+</FilesMatch>
+
+# 1b. Fichiers d'identifiants readme.txt / readmeN.txt (toutes variantes
+#     de casse) : bloqués sans impacter robots.txt qui reste accessible.
+<FilesMatch "(?i)^readme[0-9]*\.txt$">
+    Require all denied
+</FilesMatch>
+
+# 2. Tous les fichiers cachés (commençant par un point) sont refusés :
+#    .gitignore, .env, .editorconfig, .htaccess, ... Seul
+#    /.well-known/ est laissé libre (validation de certificat SSL).
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# 3. Dossiers et fichiers sensibles bloqués par leur chemin d'accès.
+#    .git/ est le plus critique : son historique peut contenir des
+#    identifiants (mots de passe FTP, clés d'API) en clair.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule (^|/)\.(?!well-known) - [F,L]
+    RewriteRule ^(storage|vendor|node_modules|backup|backups|sauvegardes?)/ - [F,L]
+</IfModule>
+
+# 4. Interdit l'accès aux fichiers de sauvegarde d'éditeur et aux
+#    exports temporaires, où qu'ils soient placés.
+<FilesMatch "^(.*~|~\$.*|.*\.(bak|old|orig|save|swp|swo|tmp|temp|copy|backup))$">
     Require all denied
 </FilesMatch>
 
@@ -14,7 +47,7 @@ Options -Indexes
 # fichiers statiques sont servis directement par Apache)
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
-    Header set X-Frame-Options "DENY"
+    Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set X-XSS-Protection "1; mode=block"
     Header set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
@@ -34,9 +67,13 @@ ServerSignature Off
 # ---------------------------------------------------------------------
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+    AddOutputFilterByType DEFLATE text/javascript
     AddOutputFilterByType DEFLATE application/javascript application/x-javascript
-    AddOutputFilterByType DEFLATE application/json application/xml application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/json application/ld+json application/xml application/xhtml+xml
     AddOutputFilterByType DEFLATE image/svg+xml application/rss+xml
+    AddOutputFilterByType DEFLATE application/manifest+json
+    # Ne jamais recompresser ce qui est déjà compressé (gaspille du CPU)
+    SetEnvIfNoCase Request_URI \.(?:gif|jpe?g|png|webp|avif|ico|woff2?|ttf|eot|otf|mp4|webm|zip|gz|br)$ no-gzip dont-vary
 </IfModule>
 
 # ---------------------------------------------------------------------
@@ -65,5 +102,53 @@ ServerSignature Off
 # OPTIMISATION — KeepAlive utile en local / hébergement Apache 2.4
 # ---------------------------------------------------------------------
 <IfModule mod_brotli.c>
-    AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript image/svg+xml
+    AddOutputFilterByType BROTLI_COMPRESS text/html text/css text/plain
+    AddOutputFilterByType BROTLI_COMPRESS text/javascript application/javascript application/x-javascript
+    AddOutputFilterByType BROTLI_COMPRESS application/json application/ld+json application/xml
+    AddOutputFilterByType BROTLI_COMPRESS image/svg+xml application/manifest+json
+</IfModule>
+
+# ---------------------------------------------------------------------
+# RÉFÉRENCEMENT (SEO) — Application privée
+# ---------------------------------------------------------------------
+# robots.txt interdit déjà l'exploration, mais un robots.txt n'est PAS une
+# garantie : un moteur peut indexer une URL découverte par un lien externe
+# sans jamais lire ce fichier (« indexation sans exploration »). L'en-tête
+# X-Robots-Tag est, lui, lu sur la réponse HTTP elle-même : c'est la seule
+# méthode fiable d'exclure réellement les pages des résultats de recherche.
+<IfModule mod_headers.c>
+    # noindex  : ne jamais afficher la page dans les résultats
+    # nofollow : ne pas suivre les liens sortants de la page
+    # noarchive: ne pas conserver de copie en cache (données RH confidentielles)
+    # nosnippet: ne pas afficher d'extrait de texte
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+</IfModule>
+
+# Exploitation : aucun plan de site n'est exposé (site privé).
+# On renvoie un 410 Gone pour /sitemap.xml, ce qui indique aux moteurs que la
+# ressource n'existe pas et qu'ils ne doivent plus la redemander — plus propre
+# qu'un 404 classique qui peut déclencher des tentatives répétées.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^sitemap\.xml$ - [R=410,L]
+</IfModule>
+
+# ---------------------------------------------------------------------
+# OPTIMISATION — Types MIME explicites (évite les requêtes de détection)
+# et en-tête Vary correct pour les proxys / CDN
+# ---------------------------------------------------------------------
+<IfModule mod_mime.c>
+    AddType font/woff2 .woff2
+    AddType image/webp .webp
+    AddType image/avif .avif
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Le contenu varie selon le type de compression accepté : les caches
+    # intermédiaires doivent en tenir compte, sinon ils servent une réponse
+    # gzip à un client qui ne la supporte pas (page illisible).
+    <FilesMatch "\.(css|js|json|xml|svg|html)$">
+        Header append Vary Accept-Encoding
+    </FilesMatch>
 </IfModule>

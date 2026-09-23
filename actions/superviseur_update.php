@@ -6,7 +6,7 @@ csrf_require();
 $id = filter_var($_POST['id'] ?? '', FILTER_VALIDATE_INT);
 $nomComplet = clean_str($_POST['nom_complet'] ?? '');
 $username = clean_str($_POST['username'] ?? '');
-$email = clean_str($_POST['email'] ?? '');
+$email = clean_email_input($_POST['email'] ?? '');
 $isActive = (int) ($_POST['is_active'] ?? 1);
 $password = trim((string) ($_POST['password'] ?? ''));
 
@@ -20,13 +20,16 @@ if ($nomComplet === '' || $username === '' || mb_strlen($nomComplet) > 150 || mb
     redirect('superviseurs.php');
 }
 
-if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    set_flash('error', 'L\'e-mail doit être valide si vous le renseignez.');
-    redirect('superviseurs.php');
+// E-mail : ne bloque PLUS la mise à jour (cf. superviseur_save.php).
+// Adresse plausible/valide -> enregistrée ; sinon -> ignorée avec un avertissement.
+$emailIgnore = false;
+if ($email !== '' && !email_plausible($email)) {
+    $email = '';
+    $emailIgnore = true;
 }
 
 if ($password !== '' && !password_is_strong($password)) {
-    set_flash('error', 'Le mot de passe doit contenir au moins 10 caractères, une majuscule, une minuscule et un chiffre.');
+    set_flash('error', 'Le mot de passe doit contenir au moins 12 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.');
     redirect('superviseurs.php');
 }
 
@@ -50,11 +53,12 @@ try {
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
 
-    notify_admins($db, 'Modification d’un superviseur', 'Le superviseur ' . $username . ' a été modifié par ' . (string) (current_user()['nom_complet'] ?? 'un administrateur') . '.');
 
-    set_flash('success', $password !== ''
+
+    set_flash('success', ($password !== ''
         ? 'Superviseur mis à jour avec succès. Le mot de passe a été modifié.'
-        : 'Superviseur mis à jour avec succès.');
+        : 'Superviseur mis à jour avec succès.')
+        . ($emailIgnore ? ' Attention : l\'adresse e-mail saisie a été ignorée (format non reconnu).' : ''));
 } catch (Throwable $e) {
     error_log('superviseur_update error: ' . $e->getMessage());
     set_flash('error', 'Impossible de mettre à jour ce superviseur. L\'identifiant existe peut-être déjà.');

@@ -42,14 +42,16 @@ require __DIR__ . '/includes/header.php';
       <div class="settings-card-heading"><span class="settings-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><div><span class="mini-title">Protection</span><h3>Changer le mot de passe</h3></div></div>
       <form action="<?= e(APP_URL) ?>/actions/profile_update.php" method="post" novalidate>
         <?= csrf_field() ?>
-        <div class="form-group mb-16"><label for="current_password">Mot de passe actuel <span class="req">*</span></label><input type="password" id="current_password" name="current_password" autocomplete="current-password" required></div>
-        <div class="form-group mb-16"><label for="new_password">Nouveau mot de passe <span class="req">*</span></label><input type="password" id="new_password" name="new_password" autocomplete="new-password" required minlength="12"><div class="help-text">12 caractères minimum, avec majuscule, minuscule, chiffre et caractère spécial.</div></div>
-        <div class="form-group"><label for="confirm_password">Confirmer le nouveau mot de passe <span class="req">*</span></label><input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="12"></div>
+        <div class="settings-grid">
+          <div class="form-group"><label for="current_password">Mot de passe actuel <span class="req">*</span></label><input type="password" id="current_password" name="current_password" autocomplete="current-password" required></div>
+          <div class="form-group"><label for="new_password">Nouveau mot de passe <span class="req">*</span></label><input type="password" id="new_password" name="new_password" autocomplete="new-password" required minlength="12"><div class="help-text"></div></div>
+          <div class="form-group"><label for="confirm_password">Confirmer le nouveau mot de passe <span class="req">*</span></label><input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="12"></div>
+        </div>
         <div class="form-actions compact-actions"><button type="submit" class="btn btn-primary">Mettre à jour</button></div>
       </form>
     </section>
 
-    <section class="settings-card">
+    <section class="settings-card settings-card-performance">
       <div class="settings-card-heading"><span class="settings-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg></span><div><span class="mini-title">Performance</span><h3>Préférences de navigation</h3></div></div>
       <form action="<?= e(APP_URL) ?>/actions/profile_update.php" method="post" novalidate>
         <?= csrf_field() ?><input type="hidden" name="save_preferences" value="1">
@@ -58,10 +60,6 @@ require __DIR__ . '/includes/header.php';
       </form>
     </section>
 
-    <section class="settings-card settings-card-security">
-      <div class="settings-card-heading"><span class="settings-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span><div><span class="mini-title">Sécurité</span><h3>Sécurité active</h3></div><span class="security-badge">Protégé</span></div>
-      <div class="security-list"><div class="security-item"><span>Requêtes SQL préparées</span><strong>Activé</strong></div><div class="security-item"><span>Protection CSRF</span><strong>Activé</strong></div><div class="security-item"><span>Sessions HttpOnly / SameSite</span><strong>Activé</strong></div><div class="security-item"><span>Expiration automatique</span><strong><?= (int) (get_session_lifetime() / 60) ?> minutes</strong></div><div class="security-item"><span>Contrôle d'accès par rôle</span><strong>Activé</strong></div></div>
-    </section>
   </div>
 </main>
 

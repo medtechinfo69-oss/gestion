@@ -14,6 +14,12 @@ class SecurityDashboard
     private PDO $db;
     private ?array $currentUser;
 
+    /**
+     * Cache des paramètres de sécurité (par requête).
+     * Invalide par clearSettingsCache() après chaque mise à jour.
+     */
+    private static ?array $settingsCache = null;
+
     public function __construct(PDO $db, ?array $currentUser = null)
     {
         $this->db = $db;
@@ -380,29 +386,11 @@ class SecurityDashboard
      */
     public function getSetting(string $key, $default = null)
     {
-        static $settingsCache = null;
-        
-        if ($settingsCache === null) {
-            $stmt = $this->db->query('SELECT setting_key, setting_value, setting_type FROM security_settings');
-            $settingsCache = [];
-            while ($row = $stmt->fetch()) {
-                $value = $row['setting_value'];
-                switch ($row['setting_type']) {
-                    case 'boolean':
-                        $value = in_array(strtolower($value), ['1', 'true', 'yes', 'on'], true);
-                        break;
-                    case 'integer':
-                        $value = (int) $value;
-                        break;
-                    case 'json':
-                        $value = json_decode($value, true);
-                        break;
-                }
-                $settingsCache[$row['setting_key']] = $value;
-            }
+        if (self::$settingsCache === null) {
+            $this->loadSettingsCache();
         }
 
-        return $settingsCache[$key] ?? $default;
+        return self::$settingsCache[$key] ?? $default;
     }
 
     /**
@@ -410,29 +398,44 @@ class SecurityDashboard
      */
     public function getSettings(): array
     {
-        static $settingsCache = null;
-        
-        if ($settingsCache === null) {
-            $stmt = $this->db->query('SELECT setting_key, setting_value, setting_type FROM security_settings');
-            $settingsCache = [];
-            while ($row = $stmt->fetch()) {
-                $value = $row['setting_value'];
-                switch ($row['setting_type']) {
-                    case 'boolean':
-                        $value = in_array(strtolower($value), ['1', 'true', 'yes', 'on'], true);
-                        break;
-                    case 'integer':
-                        $value = (int) $value;
-                        break;
-                    case 'json':
-                        $value = json_decode($value, true);
-                        break;
-                }
-                $settingsCache[$row['setting_key']] = $value;
-            }
+        if (self::$settingsCache === null) {
+            $this->loadSettingsCache();
         }
 
-        return $settingsCache;
+        return self::$settingsCache;
+    }
+
+    /**
+     * Charge tous les paramètres depuis la base et décode leurs valeurs
+     * selon le type déclaré (boolean, integer, json, string).
+     */
+    private function loadSettingsCache(): void
+    {
+        self::$settingsCache = [];
+        $stmt = $this->db->query('SELECT setting_key, setting_value, setting_type FROM security_settings');
+        while ($row = $stmt->fetch()) {
+            $value = $row['setting_value'];
+            switch ($row['setting_type']) {
+                case 'boolean':
+                    $value = in_array(strtolower($value), ['1', 'true', 'yes', 'on'], true);
+                    break;
+                case 'integer':
+                    $value = (int) $value;
+                    break;
+                case 'json':
+                    $value = json_decode($value, true);
+                    break;
+            }
+            self::$settingsCache[$row['setting_key']] = $value;
+        }
+    }
+
+    /**
+     * Invalide le cache des paramètres (appelé après chaque mise à jour).
+     */
+    public function clearSettingsCache(): void
+    {
+        self::$settingsCache = null;
     }
 
     /**
@@ -453,7 +456,14 @@ class SecurityDashboard
         }
 
         $stmt = $this->db->prepare('INSERT INTO security_settings (setting_key, setting_value, setting_type, updated_by) VALUES (:key, :value, :type, :uid) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_type = VALUES(setting_type), updated_by = VALUES(updated_by)');
-        return $stmt->execute(['key' => $key, 'value' => $value, 'type' => $type, 'uid' => $updatedBy]);
+        $ok = $stmt->execute(['key' => $key, 'value' => $value, 'type' => $type, 'uid' => $updatedBy]);
+
+        // Invalide le cache pour que les lectures suivantes voient la nouvelle valeur
+        if ($ok) {
+            $this->clearSettingsCache();
+        }
+
+        return $ok;
     }
 
     // ==================== DATA MASKING ====================

@@ -1,0 +1,21 @@
+# =====================================================================
+# Gestion des Dossiers — assets/img/
+# =====================================================================
+# Images uniquement (logo, favicon, icones). Aucun script, aucun autre
+# type de fichier n'est servi depuis ce dossier (voir aussi
+# assets/.htaccess).
+
+Options -Indexes -MultiViews
+
+# Aucune execution de script.
+<FilesMatch "\.(php|phar|phtml|php[0-9]|pht|shtml|pl|py|rb|cgi|sh|bash|bat|cmd|exe|asp|aspx|jsp|jspx)$">
+    Require all denied
+</FilesMatch>
+
+# Seules les extensions d'image et de police sont autorisees.
+# (?i) rend la comparaison INSENSIBLE A LA CASSE : sans cela, un fichier
+# en majuscules (ex. logo.JPG) ne correspond pas a "jpg" et est refuse
+# avec un HTTP 403 (bug constate sur l'hebergement Apache).
+<FilesMatch "(?i)^(?!.*\.(jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|tif|tiff|woff|woff2|ttf|otf|eot)$).+$">
+    Require all denied
+</FilesMatch>

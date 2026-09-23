@@ -30,7 +30,7 @@
 -- COMPTES CREES (mot de passe a changer a la premiere connexion)
 --   admin / Admin@2026                        (administrateur)
 --   emma, rabia                               (superviseurs)
---   christine, helene, justine, laurence, nina (vendeurs, inactifs)
+--   christine, helene, justine, laurence, nina (vendeurs, connectables)
 --
 -- SOMMAIRE
 --   SECTION 1 : Coeur metier (utilisateurs + dossiers)
@@ -647,7 +647,7 @@ INSERT IGNORE INTO `security_settings` (`setting_key`, `setting_value`, `setting
 --   admin                     / Admin@2026        (administrateur)
 --   emma, rabia               / Superviseur@2026  (superviseurs)
 --   christine, helene, justine, laurence, nina
---                             / Superviseur@2026  (vendeurs, INACTIFS)
+--                             / Superviseur@2026  (vendeurs, connectables)
 -- Tous les comptes doivent changer de mot de passe a la 1re connexion.
 -- ---------------------------------------------------------------------
 INSERT IGNORE INTO `users`
@@ -660,11 +660,11 @@ INSERT IGNORE INTO `users`
 VALUES
     ('emma',      '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'superviseur', 'Emma',      NULL, 1, 0),
     ('rabia',     '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'superviseur', 'Rabia',     NULL, 1, 0),
-    ('christine', '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Christine', NULL, 0, 0),
-    ('helene',    '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Hélène',    NULL, 0, 0),
-    ('justine',   '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Justine',   NULL, 0, 0),
-    ('laurence',  '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Laurence',  NULL, 0, 0),
-    ('nina',      '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Nina',      NULL, 0, 0);
+    ('christine', '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Christine', NULL, 1, 1),
+    ('helene',    '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Hélène',    NULL, 1, 1),
+    ('justine',   '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Justine',   NULL, 1, 1),
+    ('laurence',  '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Laurence',  NULL, 1, 1),
+    ('nina',      '$2y$10$xx4/00jinAg5ZEa30M1R5us7.cfp0SxM/O4YQzmRzy2zvQ9pgC8GG', 'vendeur', 'Nina',      NULL, 1, 1);
 
 -- Force le changement de mot de passe a la premiere connexion :
 -- tous les comptes sont marques "expires" (il y a plus de 90 jours).

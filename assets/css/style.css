@@ -54,7 +54,7 @@
   --shadow-md: 0 6px 20px rgba(22, 39, 61, 0.10);
   --shadow-lg: 0 16px 40px rgba(22, 39, 61, 0.16);
 
-  --sidebar-width: 248px;
+  --sidebar-width: 278px;
 
   /* Aliases used by the RH dashboard components. */
   --primary: #012B5E;
@@ -135,7 +135,7 @@ p { margin: 0 0 1em; }
 }
 
 .sidebar {
-  width: 250px;
+  width: 280px;
   flex-shrink: 0;
   background: linear-gradient(180deg, #012B5E 0%, #001D42 100%);
   color: #E8EDF5;
@@ -195,7 +195,7 @@ p { margin: 0 0 1em; }
 }
 
 .sidebar-brand {
-  padding: 18px 16px 16px;
+  padding: 16px 16px 14px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
@@ -231,15 +231,31 @@ p { margin: 0 0 1em; }
 }
 
 .sidebar-brand-title {
-  font-size: 0.96rem;
+  display: flex;
+  align-items: center; /* texte et icône alignés verticalement */
+  font-size: 18px;
   font-weight: 700;
   color: #fff;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
+/* Icône inline (favicon-512x512.png) affichée avant le titre « Gestion Prod & RH ».
+   Fond blanc obligatoire : le logo est bleu marine et serait invisible sur le sidebar. */
+.sidebar-title-icon {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  padding: 3px;
+  margin-right: 7px;
+  flex-shrink: 0; /* en flex : l'icône ne se comprime jamais */
+}
+
 .sidebar-brand-subtitle {
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: rgba(255,255,255,0.7);
   margin-top: 2px;
   letter-spacing: 0.08em;
@@ -272,9 +288,9 @@ p { margin: 0 0 1em; }
 }
 
 .sidebar-user {
-  padding: 14px 18px 8px;
+  padding: 14px 18px 10px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .sidebar-user-label {
@@ -289,11 +305,11 @@ p { margin: 0 0 1em; }
 .sidebar-user .name { color: #fff; font-weight: 600; }
 .sidebar-user .role {
   display: inline-block;
-  margin-top: 6px;
-  font-size: 0.68rem;
+  margin-top: 7px;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 20px;
   background: rgba(255,255,255,0.08);
   color: #cfe0ff;
@@ -330,24 +346,24 @@ p { margin: 0 0 1em; }
 }
 
 .nav-label {
-  font-size: 0.62rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: rgba(148, 163, 184, 0.9);
-  padding: 14px 10px 8px;
+  padding: 13px 12px 7px;
   font-weight: 700;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 11px 13px;
   border-radius: 8px;
   color: rgba(232,237,245,0.9);
-  font-size: 0.88rem;
+  font-size: 1rem;
   position: relative;
-  margin: 2px 0;
+  margin: 3px 0;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 .nav-item:hover {
@@ -364,8 +380,8 @@ p { margin: 0 0 1em; }
   box-shadow: inset 3px 0 0 #f59e0b;
 }
 .nav-item .ico {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -374,8 +390,8 @@ p { margin: 0 0 1em; }
 }
 
 .nav-item .ico svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
@@ -385,17 +401,17 @@ p { margin: 0 0 1em; }
 
 .nav-item.active .ico { color: #f59e0b; }
 .nav-submenu {
-  margin: 0 0 8px 18px;
-  padding-left: 10px;
+  margin: 0 0 9px 20px;
+  padding-left: 12px;
   border-left: 1px solid rgba(148, 163, 184, 0.28);
 }
 .nav-subitem {
-  padding: 8px 10px;
-  font-size: 0.82rem;
+  padding: 9px 12px;
+  font-size: 0.94rem;
 }
 .nav-item .ico-vendeur {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   position: relative;
   flex-shrink: 0;
 }
@@ -404,32 +420,132 @@ p { margin: 0 0 1em; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 5px 5px, currentColor 0 3px, transparent 3.5px),
-    radial-gradient(circle at 13px 5px, currentColor 0 3px, transparent 3.5px);
+    radial-gradient(circle at 6px 6px, currentColor 0 3px, transparent 3.5px),
+    radial-gradient(circle at 14px 6px, currentColor 0 3px, transparent 3.5px);
 }
 .ico-vendeur::after {
   content: '';
   position: absolute;
-  inset: 8px 0 0;
+  inset: 9px 0 0;
   background:
-    radial-gradient(ellipse at 5px 9px, currentColor 0 6px, transparent 6.5px),
-    radial-gradient(ellipse at 13px 9px, currentColor 0 6px, transparent 6.5px);
+    radial-gradient(ellipse at 6px 10px, currentColor 0 6px, transparent 6.5px),
+    radial-gradient(ellipse at 14px 10px, currentColor 0 6px, transparent 6.5px);
 }
 
 .sidebar-footer {
-  padding: 18px 12px 18px;
+  padding: 16px 14px;
   border-top: 1px solid rgba(255,255,255,0.10);
 }
 .sidebar-footer form { margin: 0; }
+.btn-logout-ico {
+  display: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.sidebar.collapsed .btn-logout-ico {
+  stroke: #fff;
+}
+
+/* Bouton de réduction du menu (icônes seules) */
+.sidebar-collapse {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c3d2e5;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.sidebar-collapse svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sidebar-collapse:hover {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fff;
+}
+
+/* --- Mode réduit : icônes seules -------------------------------------- */
+.sidebar.collapsed {
+  width: 68px;
+}
+.sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.sidebar.collapsed .sidebar-brand-text {
+  display: none;
+}
+.sidebar.collapsed .sidebar-collapse {
+  margin-left: 0;
+  transform: rotate(180deg);
+}
+.sidebar.collapsed .sidebar-user {
+  display: none;
+}
+.sidebar.collapsed .nav-label {
+  display: none;
+}
+.sidebar.collapsed .nav-item {
+  font-size: 0;
+  line-height: 0;
+  gap: 0;
+  justify-content: center;
+  padding: 10px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sidebar.collapsed .nav-item:hover {
+  transform: none;
+}
+.sidebar.collapsed .nav-submenu {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
+.sidebar.collapsed .btn-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+.sidebar.collapsed .btn-logout-ico {
+  display: inline-flex;
+}
+.sidebar.collapsed .btn-logout-text {
+  display: none;
+}
+.sidebar.collapsed .sidebar-footer {
+  padding-left: 10px;
+  padding-right: 10px;
+}
 .btn-logout {
   width: 100%;
   background: #e11d48;
   color: #fff;
   border: none;
-  padding: 10px 12px;
+  padding: 13px 14px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 1rem;
   text-align: center;
   font-weight: 700;
   box-shadow: 0 8px 18px rgba(225, 29, 72, 0.22);
@@ -455,8 +571,14 @@ p { margin: 0 0 1em; }
     top: 0;
   }
   .main {
-    margin-left: 250px;
+    margin-left: 280px;
     min-height: 100vh;
+    min-height: 100dvh;
+    transition: margin-left 0.2s ease;
+  }
+  /* Menu réduit : le contenu reprend l'espace libéré */
+  .sidebar.collapsed ~ .main {
+    margin-left: 68px;
   }
 }
 
@@ -479,6 +601,213 @@ p { margin: 0 0 1em; }
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.notif-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.notif-bell {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  color: var(--color-cabinet);
+  line-height: 1;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.notif-bell:hover { background: var(--color-line); text-decoration: none; }
+
+.notif-bell svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: currentColor;
+  stroke: none;
+  flex-shrink: 0;
+}
+
+.notif-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-surface);
+  line-height: 1;
+}
+
+.notif-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 300px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+}
+/* Pont invisible : garde le menu ouvert quand la souris passe de la cloche à la liste */
+.notif-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+}
+
+@media (max-width: 560px) {
+  /* Mobile : la cloche reste bien visible (taille + contraste), la pastille
+     ne chevauche plus l'icône et le menu ne déborde plus de l'écran. */
+  .notif-wrap { flex-shrink: 0; }
+  .notif-bell {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--color-cabinet);
+    border-color: var(--color-cabinet);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+  }
+  .notif-bell:hover { background: var(--color-cabinet-dark); }
+  .notif-bell svg { width: 22px; height: 22px; }
+  .notif-count {
+    top: -7px;
+    right: -7px;
+    border-color: var(--color-bg);
+  }
+  .notif-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: auto;
+    right: 0;
+    margin-top: 0;
+    min-width: 0;
+    width: min(320px, calc(100vw - 24px));
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .notif-dropdown::before { display: none; }
+}
+
+.notif-wrap:hover .notif-dropdown,
+.notif-dropdown.open {
+  display: block;
+}
+
+.notif-dropdown-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.notif-dropdown-head strong {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.notif-empty {
+  padding: 16px 14px;
+  text-align: center;
+  color: var(--color-ink-faint);
+  font-size: 0.85rem;
+}
+
+.notif-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f5f5f5;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.notif-item:hover {
+  background: var(--color-surface-alt);
+}
+
+.notif-item.notif-unread {
+  background: rgba(1, 43, 94, 0.04);
+  font-weight: 500;
+}
+
+.notif-ico {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  font-size: 0.9rem;
+}
+
+.notif-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-title {
+  display: block;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+}
+
+.notif-all {
+  display: block;
+  padding: 8px 14px;
+  text-align: center;
+  color: var(--color-accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-top: 1px solid var(--color-line);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.notif-all:hover {
+  background: var(--color-surface-alt);
 }
 
 .topbar h1 { margin: 0; font-size: 1.3rem; }
@@ -722,6 +1051,31 @@ span.btn-primary { color: #fff !important; }
 .confirm-actions { display: flex; justify-content: center; gap: 10px; }
 .confirm-actions .btn { min-width: 110px; justify-content: center; }
 
+/* Popup superviseur : un seul bloc, boutons alignés à droite sous le formulaire */
+.superviseur-dialog {
+  width: min(100%, 560px);
+  text-align: left;
+}
+.superviseur-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.superviseur-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+.superviseur-actions .btn {
+  min-width: 120px;
+  justify-content: center;
+}
+@media (max-width: 640px) {
+  .superviseur-actions { flex-direction: column-reverse; }
+  .superviseur-actions .btn { width: 100%; }
+}
+
 /* ---------------------------------------------------------------------
    Formulaires
    --------------------------------------------------------------------- */
@@ -845,25 +1199,13 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .settings-general-panel { margin-bottom: 18px; }
 .security-panel { margin-bottom: 0; }
-.security-list { display: grid; gap: 0; }
-.security-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--color-line);
-  color: var(--color-ink-soft);
-  font-size: 0.86rem;
-}
-.security-item:last-child { border-bottom: none; }
-.security-item strong { color: #16805c; font-size: 0.8rem; font-weight: 500; }
 
 /* ---------------------------------------------------------------------
    Tableaux
    --------------------------------------------------------------------- */
 .table-wrap {
   max-height: calc(100vh - 210px);
+  max-height: calc(100dvh - 210px);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   width: 100%;
@@ -1418,7 +1760,9 @@ table.data-table {
 .profile-hero-copy p { margin: 0; color: rgba(255,255,255,0.72); font-size: 0.86rem; }
 .profile-status { margin-left: auto; color: rgba(255,255,255,0.82); font-size: 0.78rem; white-space: nowrap; }
 .profile-status i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #55d49b; }
-.settings-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+/* Cartes empilées sur une seule colonne : Protection, puis Performance juste
+   en dessous (une carte par ligne, comme la configuration générale). */
+.settings-card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .settings-card {
   min-width: 0;
   padding: 24px;
@@ -1430,21 +1774,27 @@ table.data-table {
 .settings-card-wide { grid-column: 1 / -1; }
 .settings-card-warm { background: linear-gradient(135deg, #fffaf0, var(--color-surface)); border-color: #f1dfb5; }
 .settings-card-password { background: linear-gradient(145deg, #fff, #f7faff); }
-.settings-card-security { grid-column: 1 / -1; }
+/* Les cartes occupent toute la ligne : on limite la largeur du formulaire pour
+    que les champs restent alignés et confortables. Protection : 3 colonnes
+    équilibrées (min 280px), Performance : 2 champs côte à côte. */
+.settings-card-password .settings-grid {
+  max-width: 1000px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+.settings-card-password .form-group input { width: 100%; }
+.settings-card-password .help-text { margin-top: 6px; }
+.settings-card-performance .settings-grid { max-width: 720px; }
 .settings-card-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
 .settings-card-heading h3 { margin: 2px 0 0; font-size: 1.08rem; font-weight: 500; }
 .settings-card-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 9px; background: #edf3f8; color: var(--color-cabinet); }
 .settings-card-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-card-warm .settings-card-icon { background: #fff0c7; color: #ae741d; }
-.settings-card-security .settings-card-icon { background: #e4f7ee; color: #16805c; }
 .settings-form-row { display: flex; align-items: flex-start; gap: 18px; }
 .settings-form-row .form-group { flex: 1; max-width: 420px; }
 .settings-form-row .btn { flex-shrink: 0; height: 40px; margin-top: 24px; }
-.security-badge { margin-left: auto; padding: 5px 9px; border-radius: 999px; background: #e4f7ee; color: #16805c; font-size: 0.72rem; font-weight: 500; }
-
 @media (max-width: 720px) {
-  .settings-card-grid { grid-template-columns: 1fr; }
-  .settings-card-wide, .settings-card-security { grid-column: auto; }
+  .settings-card-wide { grid-column: auto; }
   .settings-form-row { align-items: stretch; flex-direction: column; }
   .settings-form-row .form-group { max-width: none; }
   .settings-form-row .btn { margin-top: 0; }
@@ -1499,6 +1849,219 @@ table.data-table {
 .pagination a, .pagination span {
   padding: 6px 11px;
   border-radius: var(--radius-sm);
+}
+
+/* Dossiers — filtre « État du contrat » : liste de cases à cocher.
+   Restituée inline dans le formulaire toolbar ; chaque case est sur sa
+   propre ligne avec son label, centré verticalement, taille cohérente
+   avec le reste des contrôles du formulaire (42px de hauteur de ligne). */
+.checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 2px 0;
+}
+.checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary, #0d6efd);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.checkbox-item input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-primary, #0d6efd);
+  outline-offset: 2px;
+}
+.checkbox-label {
+  line-height: 1.3;
+}
+.select-all-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-accent-dark);
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+.select-all-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------
+   Multi-select dropdown component
+   Accessible custom <select multiple> with checkboxes, search,
+   keyboard navigation, and tag display.
+   --------------------------------------------------------------------- */
+.multiselect-dropdown {
+  position: relative;
+  min-width: 200px;
+  max-width: 300px;
+}
+.multiselect-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  color: var(--color-ink);
+  cursor: pointer;
+  box-sizing: border-box;
+  text-align: left;
+}
+.multiselect-trigger:hover {
+  border-color: var(--color-cabinet-light);
+}
+.multiselect-trigger:focus-visible {
+  outline: none;
+  border-color: var(--color-cabinet-light);
+  box-shadow: 0 0 0 3px rgba(50, 81, 125, 0.15);
+}
+.multiselect-dropdown.is-open .multiselect-trigger {
+  border-color: var(--color-cabinet-light);
+  box-shadow: 0 0 0 3px rgba(50, 81, 125, 0.15);
+}
+.multiselect-dropdown.has-selection .multiselect-trigger {
+  border-color: var(--color-accent);
+}
+.multiselect-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: var(--color-ink-soft);
+}
+.multiselect-dropdown.has-selection .multiselect-label {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+.multiselect-arrow {
+  font-size: 0.65rem;
+  color: var(--color-ink-faint);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.multiselect-dropdown.is-open .multiselect-arrow {
+  transform: rotate(180deg);
+}
+.multiselect-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.multiselect-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-line);
+}
+.multiselect-search-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+.multiselect-search-input:focus {
+  outline: none;
+  border-color: var(--color-cabinet-light);
+  box-shadow: 0 0 0 3px rgba(50, 81, 125, 0.15);
+}
+.multiselect-options {
+  max-height: var(--ms-max-height, 200px);
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  box-sizing: border-box;
+}
+.multiselect-option:hover,
+.multiselect-option.is-focused {
+  background: var(--color-surface-alt);
+}
+.multiselect-option.is-selected {
+  background: var(--color-accent-bg);
+}
+.multiselect-option.is-select-all {
+  font-weight: 600;
+  color: var(--color-accent-dark);
+  border-bottom: 1px solid var(--color-line);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+.multiselect-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+.multiselect-option-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.multiselect-empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--color-ink-faint);
+}
+.multiselect-dropdown[hidden] .multiselect-panel,
+.multiselect-panel[hidden] {
+  display: none;
+}
+
+.pagination a {
   border: 1px solid var(--color-line-strong);
   font-size: 0.82rem;
   color: var(--color-ink);
@@ -1532,6 +2095,7 @@ table.data-table {
 .alert-close:hover { opacity: 1; }
 .alert-success { background: var(--color-complet-bg); border-color: var(--color-complet-line); color: var(--color-complet); }
 .alert-error { background: var(--color-annule-bg); border-color: var(--color-annule-line); color: var(--color-annule); }
+.alert-warning { background: #FFF7E0; border-color: #F0E2B0; color: #8A6D1A; }
 .alert-info { background: #E5EDF8; border-color: #C6D6EE; color: var(--color-cabinet); }
 
 /* ---------------------------------------------------------------------
@@ -1600,6 +2164,7 @@ body.login {
 
 .login-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1683,6 +2248,52 @@ body.login {
 .login-box input {
   margin-top: 6px;
   min-height: 44px;
+}
+
+.password-field {
+  position: relative;
+  display: block;
+  margin-top: 6px;
+}
+
+.password-field input {
+  margin-top: 0;
+  width: 100%;
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-faint);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--color-ink-soft);
+}
+
+.password-toggle .icon-eye-off {
+  display: none;
+}
+
+.password-toggle.is-visible .icon-eye {
+  display: none;
+}
+
+.password-toggle.is-visible .icon-eye-off {
+  display: block;
 }
 
 .login-box .btn {
@@ -1790,16 +2401,95 @@ body.login {
   table.data-table { min-width: 640px; }
 }
 
+/* =====================================================================
+   MENU LATÉRAL — adaptation à la HAUTEUR d'écran
+   POLICE TOUJOURS GRANDE (confort de lecture prioritaire) : ces paliers ne
+   réduisent JAMAIS les tailles de texte, ils ajustent uniquement les
+   espacements sur les écrans peu hauts (portables). Le menu peut alors
+   défiler légèrement plutôt que de rétrécir le texte.
+   ===================================================================== */
+@media (max-height: 1050px) {
+  .sidebar-brand { padding: 13px 15px 11px; }
+  .sidebar-user { padding: 11px 17px 8px; }
+  .sidebar-user .role { margin-top: 5px; }
+  .sidebar-footer { padding: 12px; }
+  .btn-logout { padding: 11px 13px; }
+  .nav-group { padding: 8px 9px 10px; }
+  .nav-label { padding: 11px 11px 5px; }
+  .nav-item { padding: 9px 12px; margin: 2px 0; }
+  .nav-submenu { margin: 0 0 7px 18px; }
+  .nav-subitem { padding: 8px 11px; }
+}
+
+@media (max-height: 900px) {
+  .sidebar-brand { padding: 11px 14px 9px; }
+  .sidebar-user { padding: 9px 16px 7px; }
+  .sidebar-user-label { margin-bottom: 3px; }
+  .sidebar-footer { padding: 9px 10px 10px; }
+  .btn-logout { padding: 10px 12px; }
+  .nav-group { padding: 6px 8px 8px; }
+  .nav-label { padding: 9px 10px 4px; }
+  .nav-item { padding: 8px 11px; margin: 1px 0; }
+  .nav-submenu { margin: 0 0 6px 17px; }
+  .nav-subitem { padding: 7px 10px; }
+}
+
+@media (max-height: 780px) {
+  .sidebar-user { padding: 8px 14px 6px; }
+  .sidebar-user .role { margin-top: 4px; }
+  .sidebar-footer { padding: 8px 10px 9px; }
+  .btn-logout { padding: 9px 11px; }
+  .nav-group { padding: 5px 7px 7px; }
+  .nav-label { padding: 8px 9px 3px; }
+  .nav-item { padding: 7px 11px; }
+  .nav-subitem { padding: 6px 10px; }
+}
+/* Écrans très courts (ex. 1366×768 avec barre des tâches) : seuls les
+   espacements sont ajustés — la taille du texte reste GRANDE. */
+@media (max-height: 720px) {
+  .sidebar-brand { padding: 9px 13px 7px; }
+  .sidebar-brand .mark, .sidebar-brand .mark img { width: 34px; height: 34px; }
+  .sidebar-brand .sub { margin-top: 2px; }
+  .sidebar-user { padding: 7px 13px 5px; }
+  .sidebar-user-label { margin-bottom: 2px; }
+  .sidebar-user .role { margin-top: 3px; padding: 2px 8px; }
+  .sidebar-footer { padding: 7px 10px 8px; }
+  .btn-logout { padding: 8px 10px; }
+  .nav-group { padding: 4px 7px 6px; }
+  .nav-label { padding: 7px 8px 2px; }
+  .nav-item { padding: 6px 10px; margin: 1px 0; }
+  .nav-submenu { margin: 0 0 5px 15px; }
+  .nav-subitem { padding: 5px 9px; }
+}
+
+.topbar-title { min-width: 0; flex: 1 1 auto; }
+
+.topbar-title { min-width: 0; flex: 1 1 auto; }
+.topbar-title > div:last-child { min-width: 0; }
+
+/* Pas de bouton dans la barre : le conteneur ne prend aucune place (desktop + mobile). */
+#topbar-actions:empty { display: none !important; }
+
 @media (max-width: 560px) {
   body { font-size: 14px; }
   .content { padding: 14px 12px 36px; }
+  /* Mobile : ligne 1 = titre à gauche + cloche à droite sur la même ligne,
+     ligne 2 = boutons d'action éventuels en pleine largeur. */
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title notif"
+      "actions actions";
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 12px;
     padding: 12px;
   }
-  .topbar > .flex { width: 100%; }
+  .topbar-title { grid-area: title; width: auto; }
+  .topbar-title h1 { overflow: hidden; text-overflow: ellipsis; }
+  .topbar > .notif-wrap { grid-area: notif; justify-self: end; }
+  #topbar-actions { grid-area: actions; }
   .topbar h1 { font-size: 1.15rem; }
   .topbar .subtitle { font-size: 0.78rem; }
   #topbar-actions { width: 100%; justify-content: flex-start; }
@@ -1832,6 +2522,24 @@ body.login {
   .login-shell { align-items: flex-start; padding: 12px; }
   .login-card { margin: auto 0; }
   .login-card .top, .login-card .body { padding-left: 20px; padding-right: 20px; }
+}
+
+/* --- Correctifs responsive v4 : grilles qui ne s'effondraient pas --- */
+@media (max-width: 720px) {
+  /* Dossier : grille contrat à 3 colonnes -> 2 puis 1 */
+  .detail-grid--contract { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  /* Sécurité : 3 cartes de stats -> 2 colonnes */
+  .security-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  /* Dossier : grille contrat -> 1 colonne */
+  .detail-grid--contract { grid-template-columns: 1fr; }
+  /* Paramètres compte : 2 panneaux -> 1 colonne */
+  .settings-layout { grid-template-columns: 1fr; }
+  /* Sécurité : stats -> 1 colonne */
+  .security-stats-grid { grid-template-columns: 1fr; }
+  /* Sécurité : formulaire à 2 colonnes -> 1 colonne */
+  .security-form-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2474,6 +3182,19 @@ html { overflow-x: clip; }
   gap: 18px;
 }
 
+/* NOTE : les points de rupture responsive de cette grille doivent être
+   déclarés APRÈS la règle de base « .security-stats-grid » située plus haut
+   (grid-template-columns: repeat(3, 1fr)). À spécificité égale, c'est la
+   dernière déclaration qui gagne : des @media placés AVANT la base sont
+   écrasés, et la grille restait à 3 colonnes même sur téléphone
+   (cartes compressées à ~119px). */
+@media (max-width: 720px) {
+  .security-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .security-stats-grid { grid-template-columns: 1fr; }
+}
+
 .security-alert-card {
   border-left: 4px solid #dc3545;
 }
@@ -2532,6 +3253,72 @@ html { overflow-x: clip; }
   gap: 18px 24px;
   padding: 28px;
 }
+/* Page Paramètres de sécurité : séparation visuelle entre les sections */
+.settings-page .security-section-title { margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--color-line); }
+.settings-page .actions-row { padding: 0 28px 26px; }
+
+/* ---------------------------------------------------------------------
+   Page « Réparation du schéma » (repair_schema_admin.php)
+   Carte plus etroite pour la lecture, corps bien aere, rapport dans un
+   panneau « terminal » et zone d'action separee par un filet.
+   --------------------------------------------------------------------- */
+.repair-page .content-card { max-width: 880px; }
+.repair-page .content-card + .content-card { margin-top: 22px; }
+.repair-page .repair-actions .form-control { width: auto; min-width: 220px; }
+.repair-page .card-body { padding: 26px 30px 28px; }
+.repair-page .card-body p { margin: 0 0 15px; line-height: 1.65; }
+.repair-page .card-body p.text-muted { margin-bottom: 20px; font-size: 0.9rem; }
+.repair-page .card-body ul { margin: 0 0 4px; padding-left: 20px; }
+.repair-page .card-body li { margin-bottom: 8px; line-height: 1.6; }
+.repair-page .card-body code {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+}
+.repair-page .repair-section-title { margin: 24px 0 12px; font-size: 0.98rem; }
+/* Premier titre de section d'une carte (ex. « 1. Sauvegarder ») : pas de
+   marge haute injustifiee puisqu'il suit directement le haut du corps. */
+.repair-page .card-body > .repair-section-title:first-child { margin-top: 0; }
+/* Bloc d'action colle a son titre de section : pas de filet ni de grand
+   ecart au-dessus, pour que titre et bouton forment un seul ensemble. */
+.repair-page .repair-section-title + .repair-actions {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+/* Les blocs d'action qui suivent un texte separent par un filet. */
+.repair-page .card-body > p + .repair-actions {
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.repair-log {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  color: #e2e8f0;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  max-height: 440px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.repair-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-line);
+}
+.repair-actions .text-muted { font-size: 0.85rem; color: var(--color-ink-soft); }
+@media (max-width: 960px) {
+  .repair-page .card-body { padding: 20px 18px 22px; }
+  .repair-actions { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
 .security-form-grid .form-control {
   height: 42px;
   font-size: 0.95rem;
@@ -2586,6 +3373,171 @@ html { overflow-x: clip; }
   margin-top: 8px;
   background: var(--color-surface-alt);
   border-radius: 0 0 12px 12px;
+}
+
+/* ---------------------------------------------------------------------
+   Page « Paramètres de sécurité » (security_settings.php)
+   Chaque groupe de réglages est présenté comme une carte autonome : en-tête
+   avec icône + titre + description, puis un corps aéré. Les blocs sont
+   espacés régulièrement et la barre d'action s'aligne sur les bords.
+   --------------------------------------------------------------------- */
+.security-settings-page .content-card {
+  overflow: hidden;
+}
+
+/* Colonne de cartes de réglages. */
+.security-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 28px 22px;
+}
+
+/* --- Carte de section --- */
+.security-block {
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* En-tête de section : icône + titre + description. */
+.security-block-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-line);
+}
+.security-block-head h3 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--color-cabinet-dark);
+  letter-spacing: 0;
+}
+.security-block-head p {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-ink-soft);
+  line-height: 1.45;
+}
+.security-block-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--color-accent-bg);
+  color: var(--color-accent-dark);
+}
+.security-block-ico svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Corps de section : grille de champs régulière. */
+.security-block-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  padding: 20px;
+}
+/* Une seule colonne quand une section ne contient qu'un champ. */
+.security-block-body:has(> label:only-child) {
+  grid-template-columns: 1fr;
+  max-width: 420px;
+}
+.security-block-body > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+.security-block-body > label .form-control {
+  height: 42px;
+  font-size: 0.95rem;
+}
+
+/* Cases à cocher : une par ligne, bien séparées. */
+.security-block-body--checks {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.security-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--color-surface-alt);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--color-ink);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.security-check:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: 0 2px 8px rgba(1, 43, 94, 0.05);
+}
+.security-check input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.security-check span {
+  line-height: 1.45;
+}
+
+/* Barre d'action : alignée sur les bords de la carte, sans marge parasite. */
+.security-settings-page .actions-row {
+  margin-top: 0;
+  padding: 18px 28px;
+  border-radius: 0;
+}
+
+/* --- Responsive --- */
+@media (max-width: 720px) {
+  .security-sections {
+    padding: 18px;
+    gap: 14px;
+  }
+  .security-block-body {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .security-block-body:has(> label:only-child) {
+    max-width: none;
+  }
+  .security-block-head {
+    padding: 14px 16px;
+  }
+  .security-settings-page .actions-row {
+    padding: 16px 18px;
+  }
+  .security-settings-page .actions-row .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .security-logs-page {
@@ -2972,18 +3924,319 @@ table.data-table.data-table--wide tbody td {
 }
 
 /* =====================================================================
-   Troncature des colonnes : chaque cellule (en-tête incluse) est limitée
-   à ~20 caractères ; au-delà le texte est coupé et suivi d'une ellipse « … ».
-   S'applique à TOUS les tableaux (data-table, RH, journal, prime, …).
-   La dernière colonne (souvent les actions) est exclue pour ne pas
-   masquer les boutons.
+   Largeur naturelle des colonnes : le texte peut s'afficher en entier
+   sans troncature. Le défilement horizontal dans .table-wrap permet
+   d'avoir accès à toutes les colonnes.
    ===================================================================== */
 table.data-table thead th,
 table.data-table tbody td:not(:last-child),
 .table-wrap table thead th,
 .table-wrap table tbody td:not(:last-child) {
-  max-width: 20ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+/* =====================================================================
+   Notifications de supervision — espacement & présentation
+   ===================================================================== */
+.notif-page .filter-bar { margin-bottom: 18px; gap: 14px; flex-wrap: wrap; }
+.notif-page { padding: 24px 26px 26px; }
+.notif-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-line); }
+.notif-page-head h2 { margin: 0 0 6px; }
+.notif-page-head .muted { font-size: 0.85rem; line-height: 1.5; }
+.notif-page-head > .muted { white-space: nowrap; padding-top: 4px; }
+.notif-page .filter-bar {
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  background: rgba(246, 248, 251, 0.9);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  align-items: flex-end;
+}
+.notif-page .filter-field label { margin-bottom: 6px; }
+.notif-page .filter-field .form-control { min-width: 200px; }
+.notif-page .filter-field--action label { margin-top: 10px; }
+.notif-page .filter-actions { display: flex; gap: 10px; margin-top: 10px; }
+.notif-page .table-card { overflow: hidden; box-shadow: var(--shadow-sm, 0 1px 2px rgba(11,29,45,.08)); }
+@media (max-width: 720px) {
+  .notif-page { padding: 16px; }
+  .notif-page .filter-bar { flex-direction: column; align-items: stretch; }
+  .notif-page .filter-field .form-control { min-width: 0; width: 100%; }
+  .notif-page .filter-actions { margin-top: 14px; }
+  .notif-page .filter-actions .btn { flex: 1; }
+}
+
+.notif-page table.data-table thead th,
+.notif-page table.data-table tbody td {
+  padding: 12px 16px;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.notif-row-unread {
+  background: #eef4fc;
+  box-shadow: inset 3px 0 0 var(--color-cabinet, #1a73e8);
+}
+
+.notif-detail { margin-top: 6px; }
+.detail-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.detail-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eaf1fb;
+  border: 1px solid #d6e2f6;
+  color: var(--color-cabinet, #1a73e8);
+  font-size: 0.72rem;
+  font-weight: 600;
   white-space: nowrap;
+}
+/* La cellule « État » (« Marquer comme lue ») reste sur une seule ligne :
+   c'est la colonne qui prend la largeur nécessaire, jamais le libellé qui se
+   coupe lettre par lettre. */
+.notif-page table.data-table td:nth-child(6),
+.notif-page table.data-table td:nth-child(6) .btn { white-space: nowrap; }
+
+/* Contenus longs : l'adresse IP et le libellé d'action restent sur une seule
+   ligne (une IP coupée en deux ou un libellé « MODIFICA/TION » sont
+   illisibles), tandis que la date et les pastilles de détail peuvent se
+   replier proprement : le tableau ne part jamais hors de l'écran. */
+.notif-page .action-pill { white-space: nowrap; }
+.notif-page table.data-table td.mono { white-space: nowrap; }
+.notif-page table.data-table td.nowrap { white-space: normal; }
+.notif-page table.data-table .detail-chip { white-space: normal; }
+
+/* Colonne Action : boutons Voir + Supprimer, icônes only.
+   Les deux boutons vivent dans un conteneur inline-flex (et non dans la
+   cellule elle-même) : ils restent côte à côte, l'écart est constant et la
+   cellule garde son comportement de cellule de tableau, ce qui permet de
+   centrer verticalement l'ensemble avec « Marquer comme lue ». */
+.notif-action-cell { white-space: nowrap; }
+.notif-actions { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+.notif-actions > * { flex: 0 0 auto; }
+.notif-actions form { display: inline-flex; margin: 0; }
+.notif-icon-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 30px; height: 30px; padding: 0; margin: 0; }
+.notif-icon-btn svg { display: block; }
+
+/* Colonnes « État » et « Action » : même axe vertical. Le bouton « Marquer
+   comme lue » et les icônes sont centrés l'un par rapport à l'autre au lieu
+   d'être collés en haut de la cellule. */
+.notif-page table.data-table tbody td:nth-child(6),
+.notif-page table.data-table tbody td:nth-child(7) { vertical-align: middle; }
+.notif-page table.data-table tbody td:nth-child(6) .btn,
+.notif-page table.data-table tbody td:nth-child(6) .badge { vertical-align: middle; min-height: 30px; }
+.notif-page table.data-table tbody td:nth-child(6) .badge { display: inline-flex; align-items: center; }
+.notif-page table.data-table tbody td:nth-child(6) form.notif-read-form { display: inline-flex; margin: 0; vertical-align: middle; }
+
+/* Portable / grand écran intermédiaire (1181–1440 px) : la barre latérale et
+   les marges laissent moins de place qu'en très grand écran. On resserre
+   légèrement les marges internes pour que les 7 colonnes — « Marquer comme
+   lue » incluse — tiennent sans défilement horizontal. */
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .notif-page { padding: 18px 18px 22px; }
+  .notif-page table.data-table { min-width: 0; }
+  .notif-page table.data-table thead th,
+  .notif-page table.data-table tbody td { padding: 12px 10px; }
+}
+
+/* =====================================================================
+   Notifications — vue « cartes » dès que la table 7 colonnes ne peut plus
+   s'afficher confortablement (≤ 1180 px, barre latérale comprise)
+   La table devient une pile de cartes lisibles : le titre du dossier passe
+   en tête, les informations suivent sur des colonnes régulières et le pied
+   de carte regroupe les boutons avec un espacement confortable :
+   [ Marquer comme lue ]                [ voir ] [ supprimer ]
+   ===================================================================== */
+@media (max-width: 1180px) {
+  /* En-tête de page : le compteur passe sous le titre au lieu de le serrer. */
+  .notif-page-head { flex-direction: column; gap: 6px; }
+  .notif-page-head > .muted { white-space: normal; padding-top: 0; }
+
+  /* Table → liste de cartes. */
+  .notif-page .table-wrap { overflow-x: visible; }
+  .notif-page table.data-table { min-width: 0; display: block; }
+  .notif-page table.data-table thead { display: none; }
+  .notif-page table.data-table tbody { display: block; }
+  .notif-page table.data-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 14px;
+    align-items: start;
+    margin: 0 0 12px;
+    padding: 13px 14px 13px;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+  }
+  .notif-page table.data-table tbody tr:last-child { margin-bottom: 0; }
+  .notif-page table.data-table tbody tr td:only-child { grid-column: 1 / -1; }
+  .notif-page table.data-table tbody td { display: block; padding: 0; border: 0; }
+
+  /* Petite étiquette au-dessus de la valeur (cellules qui en ont besoin). */
+  .notif-page table.data-table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* Titre + champs modifiés : pleine largeur, en tête de carte. */
+  .notif-page table.data-table tbody td:nth-child(4) {
+    grid-column: 1 / -1;
+    order: -1;
+    line-height: 1.5;
+  }
+  .notif-page table.data-table tbody td:nth-child(4) > div:first-child { font-weight: 600; }
+
+  /* Les dates/IP longues peuvent se replier proprement sur écran étroit. */
+  .notif-page table.data-table tbody td.nowrap,
+  .notif-page table.data-table tbody td.mono { white-space: normal; overflow-wrap: anywhere; }
+
+  /* Pied de carte : bouton d'état à gauche, icônes Voir/Supprimer à droite,
+     cibles tactiles confortables et bien espacées. Les deux cellules
+     s'étirent sur la hauteur de la ligne (align-self: stretch) pour que le
+     bouton et les icônes partagent le même axe vertical. */
+  .notif-page table.data-table tbody td:nth-child(6),
+  .notif-page table.data-table tbody td:nth-child(7) {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    margin-top: 6px;
+  }
+  .notif-page table.data-table tbody td:nth-child(6)::before,
+  .notif-page table.data-table tbody td:nth-child(7)::before { content: none; }
+  .notif-page table.data-table tbody td:nth-child(7) {
+    justify-content: flex-end;
+    gap: 14px;
+  }
+  .notif-page table.data-table tbody td:nth-child(7) form { display: inline-flex; margin: 0; }
+  .notif-page table.data-table tbody td:nth-child(7) .notif-actions { gap: 14px; }
+  .notif-page .notif-icon-btn { width: 38px; height: 38px; margin: 0; }
+
+  /* Filet d'accent des lignes non lues, adapté aux coins arrondis. */
+  .notif-page tbody tr.notif-row-unread {
+    border-left: 3px solid var(--color-cabinet);
+    box-shadow: none;
+  }
+}
+
+/* Tablette / petit portable en vue « cartes » (721–1180 px) : trois colonnes
+   régulières pour les informations, le pied de carte restant à gauche
+   (« Marquer comme lue ») et à droite (Voir / Supprimer). */
+@media (min-width: 721px) and (max-width: 1180px) {
+  .notif-page table.data-table tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .notif-page table.data-table tbody td:nth-child(6) { grid-column: 1 / 3; }
+  .notif-page table.data-table tbody td:nth-child(7) { grid-column: 3; }
+}
+
+/* Très petits écrans : le pied de carte passe sur 2 lignes pleines largeur
+   pour que « Marquer comme lue » et les icônes ne soient jamais comprimés. */
+@media (max-width: 400px) {
+  .notif-page table.data-table tbody td:nth-child(6),
+  .notif-page table.data-table tbody td:nth-child(7) { grid-column: 1 / -1; }
+  .notif-page table.data-table tbody td:nth-child(6) .btn {
+    width: 100%;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+/* =====================================================================
+   Boutons d'action « Modifier / Supprimer » en icônes (desktop + mobile)
+   ===================================================================== */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.row-actions form { display: inline-flex; margin: 0; }
+.btn-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  line-height: 1;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.btn-icon-action svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex-shrink: 0;
+}
+@media (max-width: 560px) {
+  /* Mobile : cibles tactiles confortables + espacement aéré entre les 2 icônes. */
+  .row-actions { gap: 12px; }
+  .row-actions .btn-icon-action,
+  .btn-icon-action {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+  }
+  .row-actions .btn-icon-action svg,
+  .btn-icon-action svg { width: 18px; height: 18px; }
+  /* Les boutons icônes ne s'étirent jamais en pleine largeur sur mobile
+     (topbar, card-header, bulk bar) : ils gardent leur taille carrée. */
+  #topbar-actions .btn.btn-icon-action,
+  .card-header .btn.btn-icon-action,
+  .bulk-actions .btn.btn-icon-action {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Popup de détail d'une notification */
+.notif-detail-dialog {
+  width: min(100%, 560px);
+  text-align: left;
+  padding: 0;
+  overflow: hidden;
+}
+.notif-detail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-line);
+}
+.notif-detail-head h2 { margin: 0; font-size: 1.2rem; }
+.notif-detail-close {
+  background: none; border: none; cursor: pointer; font-size: 1.6rem; line-height: 1;
+  color: var(--color-ink-soft, #6b7785); padding: 0 4px; border-radius: 6px;
+}
+.notif-detail-close:hover { background: rgba(0,0,0,0.06); color: var(--color-ink, #16273d); }
+.notif-detail-body { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+.notif-detail-row { display: flex; align-items: flex-start; gap: 16px; }
+.notif-detail-label {
+  flex: 0 0 110px; font-size: 0.78rem; font-weight: 600; color: var(--color-ink-soft, #6b7785);
+  text-transform: uppercase; letter-spacing: 0.02em; padding-top: 2px;
+}
+.notif-detail-value {
+  flex: 1 1 auto; min-width: 0; font-size: 0.92rem; line-height: 1.5; word-break: break-word;
+}
+.notif-detail-row--detail { align-items: flex-start; }
+.notif-detail-text {
+  background: #f6f8fb; border: 1px solid var(--color-line); border-radius: 10px;
+  padding: 12px 14px; white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6;
+}
+.notif-detail-text:empty::before { content: '—'; color: var(--color-ink-faint, #9aa7b5); }
+.notif-detail-dialog .confirm-actions { padding: 12px 24px 20px; justify-content: flex-end; }
+@media (max-width: 560px) {
+  .notif-detail-row { flex-direction: column; gap: 4px; }
+  .notif-detail-label { flex: none; }
+  .notif-detail-body { padding: 14px 16px; }
+  .notif-detail-head { padding: 16px 16px 12px; }
 }
