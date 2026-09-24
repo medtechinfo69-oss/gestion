@@ -1,6 +1,12 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
 require_admin_or_superviseur();
+// L'import est réservé à l'admin et au superviseur strict : un vendeur
+// (même can_supervise = 1) n'a pas accès à cette page.
+if (!is_admin() && !is_role_superviseur()) {
+    set_flash('error', 'Import réservé aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
 
 $pageTitle = 'Importer des dossiers';
 $pageSubtitle = 'Importer un fichier Excel avec les mêmes colonnes que le tableau Dossiers';

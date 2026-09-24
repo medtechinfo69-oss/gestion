@@ -135,7 +135,16 @@ $lines[] = ' Fichier  : readme.txt (confidentiel - accès web bloqué par .htacc
 $lines[] = '                         ignoré par git via .gitignore)';
 $lines[] = ' Généré le : ' . date('d/m/Y H:i');
 $lines[] = ' URL locale : http://localhost/gestion-dossiers-new/login.php';
-$lines[] = ' URL prod   : https://gestionassur.rf.gd/login.php';
+$lines[] = ' URL prod   : https://assurialis-app.byethost22.com/login.php';
+$lines[] = '---------------------------------------------------------------------';
+$lines[] = ' HEBERGEMENT PRODUCTION - ByetHost (compte b22_42998523)';
+$lines[] = '---------------------------------------------------------------------';
+$lines[] = ' FTP   : ftpupload.net:21 - utilisateur b22_42998523 (/htdocs/)';
+$lines[] = ' MySQL : sql206.byethost22.com:3306';
+$lines[] = ' Base  : b22_42998523_assurialis - utilisateur b22_42998523';
+$lines[] = ' Identifiants : .vscode/sftp.json (FTP), config/config.hosting.php (MySQL)';
+$lines[] = ' Deploiement  : php scripts/deploy_ftp.php upload';
+$lines[] = ' Import SQL   : scripts/db_setup.php?token=...&confirm=oui (serveur)';
 $lines[] = '---------------------------------------------------------------------';
 $lines[] = ' ADMINISTRATEUR / SUPERVISEURS';
 $lines[] = '---------------------------------------------------------------------';
@@ -170,7 +179,6 @@ $lines[] = ' POLITIQUE DE MOT DE PASSE';
 $lines[] = '---------------------------------------------------------------------';
 $lines[] = ' 12 caractères minimum, majuscule, minuscule, chiffre, caractère';
 $lines[] = ' spécial ASCII, mot de passe non courant. Changement via Profil.';
-$lines[] = ' Expiration : 90 jours (PASSWORD_MAX_AGE_DAYS).';
 $lines[] = '=====================================================================';
 
 $readmePath = dirname(__DIR__) . '/readme.txt';

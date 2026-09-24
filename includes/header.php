@@ -54,7 +54,13 @@ $user = current_user();
         <div class="sidebar-user">
           <div class="name">Bienvenue,</div>
           <span class="role badge-role-<?= e($user['role']) ?>" style="background:none;padding:0;">
-            <?= $user['role'] === 'admin' ? 'Administrateur' : ($user['role'] === 'superviseur' ? 'Superviseur' : 'Vendeur') ?>
+            <?php if (is_vendeur_user()): ?>
+              <?php // Vendeur connecté : on affiche son nom (ex. « Laurence ferrari »)
+                    // au lieu du libellé générique « Vendeur ». ?>
+              <?= e((string) ($user['nom_complet'] ?? $user['username'] ?? 'Vendeur')) ?>
+            <?php else: ?>
+              <?= $user['role'] === 'admin' ? 'Administrateur' : 'Superviseur' ?>
+            <?php endif; ?>
           </span>
         </div>
       <?php endif; ?>
@@ -76,7 +82,9 @@ $user = current_user();
             </svg></span> Dossiers
         </a>
         <div class="nav-submenu">
-          <?php if (is_admin() || is_superviseur()): ?>
+          <?php // « Nouveau dossier » : réservé à l'admin et au superviseur strict.
+                // Un vendeur (même can_supervise = 1) ne voit que sa propre liste. ?>
+          <?php if (is_admin() || is_role_superviseur()): ?>
             <a href="<?= e(APP_URL) ?>/dossier_form.php"
               class="nav-item nav-subitem <?= $activePage === 'dossier_form' ? 'active' : '' ?>">
               <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">

@@ -17,6 +17,16 @@ if ($isEdit && !is_admin() && !is_role_superviseur()) {
     redirect('dossiers.php');
 }
 
+// Un vendeur ne peut pas non plus CRÉER un dossier (même avec can_supervise = 1) :
+// il consulte uniquement sa propre liste. Cela bloque un POST direct forgé sur
+// ce script sans identifiant, alors que le formulaire/le menu lui sont masqués.
+if (!$isEdit && !is_admin() && !is_role_superviseur()) {
+    sec_log('permission_denied', 'dossier', null, 'Vendeur attempted to create dossier', false, 'Creation reserved to admin/superviseur');
+    http_response_code(403);
+    set_flash('error', 'Création de dossier réservée aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
+
 $existing = null;
 if ($isEdit) {
     $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');

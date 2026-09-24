@@ -13,6 +13,15 @@ if (!empty($_GET['id']) && !is_admin() && !is_role_superviseur()) {
     redirect('dossiers.php');
 }
 
+// Un vendeur (même can_supervise = 1) n'a ni « Nouveau dossier » ni « Importer » :
+// il ne peut consulter que sa propre liste. L'accès direct à la page de création
+// (sans id) lui est donc refusé ici, en complément du menu et de la liste.
+if (empty($_GET['id']) && !is_admin() && !is_role_superviseur()) {
+    http_response_code(403);
+    set_flash('error', 'Création de dossier réservée aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
+
 $id = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
 $dossier = null;
 $isEdit = false;

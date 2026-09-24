@@ -8,7 +8,7 @@ if (!defined('APP_INIT')) {
 $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
 $host = preg_replace('/:\d+$/', '', $host); // retire le port éventuel
 // Accès local : localhost, 127.0.0.1, ::1 ou toute IP privée/réservée du réseau LAN
-// (un nom de domaine comme gestionassur.rf.gd n'est PAS une IP => filter_var renvoie false => non local)
+// (un nom de domaine comme assurialis-app.byethost22.com n'est PAS une IP => filter_var renvoie false => non local)
 $isLocal = $host === '' || $host === 'localhost' || $host === '127.0.0.1'
     || strpos($host, '::1') === 0
     || (filter_var($host, FILTER_VALIDATE_IP) !== false

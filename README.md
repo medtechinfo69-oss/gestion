@@ -4,50 +4,67 @@ Application PHP/MySQL de gestion des dossiers d'assurance.
 
 Stack : PHP natif, PDO MySQL, HTML/CSS/JavaScript natif et Apache.
 
-## 1. Deployer sur InfinityFree
+## 1. Deployer sur ByetHost (assurialis-app.byethost22.com)
 
-### 1.1 Creer la base de donnees
+### 1.1 Compte, FTP et base de donnees
 
-Dans le panneau InfinityFree :
+Dans le panneau ByetHost (vPanel) :
 
 1. Ouvrez **MySQL Databases**.
-2. Creez une base de donnees.
-3. Notez le nom de la base, l'utilisateur, le mot de passe, le hostname MySQL
-   et le port indique par l'hebergeur (habituellement `3306`).
-4. N'utilisez pas `localhost` sauf si InfinityFree l'indique explicitement.
+2. Creez une base de donnees : son nom est prefixe par le compte.
+3. Notez le nom de la base, l'utilisateur, le mot de passe et le hostname MySQL.
+4. N'utilisez pas `localhost` : chez cet hebergeur MySQL n'ecoute que sur son
+   reseau interne (voir 1.4 bis).
 
-Valeurs fournies pour ce site :
+Valeurs de ce site :
 
 ```text
-Site : https://gestionassur.rf.gd/
-Utilisateur : if0_42713899
-Hostname : sql301.infinityfree.com
+Site : https://assurialis-app.byethost22.com/
+FTP : ftpupload.net (racine web : /htdocs/)
+Compte / utilisateur MySQL : b22_42998523
+Base : b22_42998523_assurialis
+Hostname MySQL : sql206.byethost22.com
 Port : 3306
-Base : if0_42713899_gestion_dossiers
-Mot de passe : a saisir uniquement dans config/config.php
+Mot de passe : uniquement dans .vscode/sftp.json (FTP) et
+               config/config.hosting.php (MySQL) — jamais dans GitHub
 ```
 
-Le mot de passe MySQL ne doit jamais etre committe dans GitHub, dans ce
-README, ni dans une capture d'ecran. Comme il a ete partage dans un fichier,
-changez-le dans InfinityFree avant la mise en production si possible. Les
-champs du fichier fourni semblaient inverses : `sql301.infinityfree.com` est
-utilise comme hostname et l'autre valeur comme mot de passe. Confirmez ces
-valeurs dans le panneau InfinityFree avant de televerser la configuration.
+Le mot de passe ne doit jamais etre committe dans GitHub, dans ce README ni
+dans une capture d'ecran : les deux fichiers ci-dessus sont ignores par git.
 
-### 1.2 Importer la base avec phpMyAdmin
+### 1.2 Importer la base
 
-InfinityFree ne permet generalement pas a un script SQL de creer une base ou
-un utilisateur. `database/install.sql` ne contient donc aucune commande
+ByetHost ne permet generalement pas a un script SQL de creer une base ou un
+utilisateur. `database/install.sql` ne contient donc aucune commande
 `CREATE DATABASE`, `CREATE USER`, `GRANT` ou `USE` : selectionnez d'abord la
-base dans phpMyAdmin, puis importez le fichier.
+base, puis importez le fichier.
 
-Dans phpMyAdmin InfinityFree :
+**Methode A — phpMyAdmin (recommandee) :**
 
-1. Selectionnez `if0_42713899_gestion_dossiers` dans la colonne de gauche.
-2. Ouvrez l'onglet **Importer**.
-3. Importez `database/install.sql`.
+1. vPanel -> **MySQL Databases** -> lancez **phpMyAdmin**.
+2. Selectionnez `b22_42998523_assurialis` dans la colonne de gauche.
+3. Ouvrez l'onglet **Importer**, choisissez `database/install.sql`, validez.
 4. Verifiez la presence des tables `users`, `dossiers`,
    `dossier_historique`, `dossier_attachments` et `login_log`.
+
+**Methode B — `scripts/db_setup.php` (depuis le serveur) :** indispensable
+quand phpMyAdmin n'est pas joignable. Televersez ce fichier a la racine du
+site (`/htdocs/db_setup.php`), puis ouvrez :
+
+```text
+https://assurialis-app.byethost22.com/db_setup.php?token=LE_JETON&check=1
+```
+
+pour un diagnostic sans ecriture (PHP, extensions, droits d'ecriture sur
+`uploads/` et `logs/`, tables presentes, comptes), et :
+
+```text
+https://assurialis-app.byethost22.com/db_setup.php?token=LE_JETON&confirm=oui
+```
+
+pour appliquer `database/install.sql`. **Supprimez le fichier du serveur
+immediatement apres** : le dossier `scripts/` est de toute facon protege par
+`Require all denied`.
 
 `install.sql` installe le compte administrateur de demonstration. Connectez-
 vous avec `admin` et `Admin@2026`, puis changez immediatement ce mot de passe.
@@ -65,81 +82,120 @@ voir la section 5.
 Le projet utilise deux fichiers locaux, non publies dans GitHub :
 
 - `config/config.local.php` pour XAMPP ;
-- `config/config.hosting.php` pour InfinityFree ou un autre hebergeur.
+- `config/config.hosting.php` pour l'hebergement (ByetHost).
 
 Le depot contient `config/config.hosting.example.php` comme modele. Copiez-le
 sur le serveur sous le nom `config.hosting.php`, puis renseignez vos valeurs
 MySQL. Ce fichier de production est volontairement ignore par GitHub.
 
 Le fichier `config/config.php` choisit automatiquement le bon fichier selon
-l'adresse utilisee. Sur le serveur, ouvrez `config/config.hosting.php` et
-renseignez les valeurs InfinityFree :
+l'adresse utilisee (IP locale/LAN => `config.local.php`, nom de domaine =>
+`config.hosting.php`). Valeurs de production de ce site :
 
 ```php
-define('DB_HOST', 'HOSTNAME_MYSQL');
-define('DB_NAME', 'if0_42713899_gestion_dossiers');
-define('DB_USER', 'if0_42713899');
+define('DB_HOST', 'sql206.byethost22.com');
+define('DB_NAME', 'b22_42998523_assurialis');
+define('DB_USER', 'b22_42998523');
 define('DB_PASS', 'VOTRE_MOT_DE_PASSE_MYSQL');
 define('DB_CHARSET', 'utf8mb4');
-define('APP_URL', 'https://gestionassur.rf.gd');
+define('APP_URL', 'https://assurialis-app.byethost22.com');
 define('APP_ENV', 'production');
+define('CACHE_VERSION', '20260924'); // a incrementer a chaque deploiement
 ```
 
 Points importants :
 
-- Utilisez le hostname MySQL affiche dans le panneau InfinityFree, meme s'il
-  semble inhabituel.
+- Utilisez le hostname MySQL affiche dans le vPanel, meme s'il semble
+  inhabituel (`sql206.byethost22.com`) : il n'est resolvable que depuis le
+  reseau de l'hebergeur.
+- `APP_URL` doit correspondre exactement au domaine public : tous les
+  formulaires, redirections et liens `canonical` sont construits avec lui.
 - N'ajoutez pas de slash final a `APP_URL`.
 - Ne remplacez pas `DB_HOST` par `localhost` sans confirmation de l'hebergeur.
-- Ne televersez jamais `config/config.php` dans un depot public.
+- Ne televersez jamais `config/config.php` (ni `config.hosting.php`) dans un
+  depot public.
 - Si un mot de passe a deja ete committe, changez-le et retirez le secret de
   l'historique Git.
 
 ### 1.4 Televerser les fichiers
 
-Avec le gestionnaire de fichiers InfinityFree ou un client FTP :
+**Deploiement automatise (recommande)** — `scripts/deploy_ftp.php` lit les
+identifiants FTP dans `.vscode/sftp.json` (fichier local, ignore par git) :
 
-1. Televersez le contenu du projet dans le dossier web, souvent `htdocs/`.
+```powershell
+php scripts/deploy_ftp.php check             # teste la connexion FTP
+php scripts/deploy_ftp.php list /htdocs/     # liste le dossier web
+php scripts/deploy_ftp.php upload --dry-run  # simulation, rien n'est envoye
+php scripts/deploy_ftp.php upload            # televerse tout le projet
+php scripts/deploy_ftp.php upload --only=config/ --force   # un seul dossier
+```
+
+Le script cree les dossiers manquants, ignore les fichiers deja a jour
+(comparaison de taille), verifie la taille apres envoi et affiche un rapport
+(envoyes / deja a jour / echecs). Il exclut volontairement `.git/`, `.vscode/`,
+`logs/*.log`, le contenu de `uploads/dossiers/` (donnees locales) et
+`readme*.txt` (identifiants en clair).
+
+**Avec un client FTP (FileZilla, extension VS Code SFTP) :**
+
+1. Televersez le contenu du projet dans `/htdocs/` — jamais a la racine du
+   compte FTP, ou l'hebergeur place un fichier `DO NOT UPLOAD FILES HERE`.
 2. Placez `index.php` directement dans ce dossier, sauf installation dans un
    sous-dossier.
 3. Televersez `config/config.php` et le fichier local `config/config.hosting.php`
    configure pour la production. Ne televersez pas seulement le contenu du
    depot : le fichier hosting contenant les identifiants est ignore par Git.
-4. Conservez `assets/`, `actions/`, `includes/`, `uploads/` et `logs/`.
-5. Verifiez que `uploads/dossiers/` et `logs/` sont accessibles en ecriture
-   par PHP, selon les permissions autorisees par l'hebergeur.
+4. Conservez `assets/`, `actions/`, `includes/`, `uploads/`, `logs/`,
+   `scripts/` et `database/` (ces dossiers sont proteges par `.htaccess`).
+5. Verifiez que `uploads/dossiers/`, `uploads/tmp/` et `logs/` sont accessibles
+   en ecriture par PHP (voir 1.2, methode B, mode `&check=1`).
 
-### 1.4 bis Deploiement par FTP (procedure utilisee)
+### 1.4 bis Particularites de l'hebergement ByetHost
 
-Le site est deploye par FTP sur `ftpupload.net` (racine web : `htdocs/`).
-Identifiants FTP : utilisateur `if0_42713899`, mot de passe identique a celui de
-la base (`config/config.hosting.php`). Ne jamais committer ce mot de passe.
-
-Particularites rencontrees sur cet hebergement :
-
-- **La base MySQL n'est PAS joignable depuis l'exterieur** (le hostname
-  `sql301.infinityfree.com` ne resout que depuis leur reseau). Impossible de
-  modifier les donnees en local : toute modification de donnees passe par un
-  script PHP execute SUR le serveur (navigateur), pas par une connexion distante.
+- **La base MySQL n'est PAS joignable depuis l'exterieur** : `sql206.byethost22.com`
+  ne resout que depuis le reseau de l'hebergeur (verifie : nom absent du DNS
+  public). Impossible d'importer la base ou de modifier les donnees depuis un
+  poste local : importez `database/install.sql` avec phpMyAdmin ou
+  `scripts/db_setup.php` (voir 1.2), et executez les outils de maintenance
+  (`database/repair_schema.php`, `scripts/provision_vendeurs.php`) via leurs
+  ecrans navigateur equivalents.
+- **PHP 8.4 / MariaDB 11.4.** Les extensions `pdo_mysql`, `mbstring`,
+  `fileinfo`, `zip`, `openssl`, `curl` et `gd` sont actives, mais plusieurs
+  fonctions sont interdites par l'hebergeur : `exec`, `system`, `shell_exec`,
+  `sleep`, `set_time_limit`, `getallheaders`, `curl_multi_exec`,
+  `ini_get_all`, `pfsockopen`, les fonctions `socket_*`. Le code actuel ne les
+  utilise pas : ne les introduisez pas dans un nouveau module.
+- **Optimisation automatique des images** : lors de l'envoi d'un `.jpg` ou
+  `.png` par FTP, le serveur re-encode l'image (la taille au repos differe de
+  la taille locale, l'image reste valide). Les autres fichiers (PHP, CSS, JS,
+  `.htaccess`) sont transferes octet pour octet : une difference de taille
+  constatee sur une image n'est donc pas une erreur de deploiement.
+- **Defi JavaScript anti-bot** (iFastNet) : une requete HTTP simple recoit une
+  page intermediaire d'environ 850 octets qui pose un cookie `__test` en
+  JavaScript. Utilisez un navigateur (ou un client qui resout le defi) pour
+  verifier le site, pas un simple `curl`.
 - **Les fichiers `.htaccess` sont sensibles a la casse** : un motif
   `FilesMatch "\.(jpg|png|...)$"` refuse `logo.JPG` (majuscules) avec un
   HTTP 403. Les listes d'extensions utilisent desormais le drapeau `(?i)`
   (voir `assets/.htaccess` et `assets/img/.htaccess`).
-- **Defi JavaScript anti-bot** : les requetes HTTP simples recoivent une page
-  intermediaire de ~850 octets. Utiliser un navigateur (ou un outil rendant le
-  JS) pour verifier le site, pas un simple `curl`.
 
 ### 1.4 ter Provisionnement des comptes vendeur (base de production)
 
 `provision_vendeurs_admin.php` est un ecran temporaire, protege par un jeton
 secret dans l'URL (`?token=...`), qui cree/realigne sur le serveur les comptes
-listes dans `readme1.txt` (vendeurs connectables + comptes admin/superviseurs).
+listes dans `readme.txt` (vendeurs connectables + comptes admin/superviseurs).
 Il sert aussi a remettre les mots de passe en conformite avec la politique de
 securite (12 caracteres minimum).
 
+`database/install.sql` ne cree que 8 comptes (admin, emma, rabia, christine,
+helene, justine, laurence, nina). Apres une installation neuve, utilisez cet
+ecran pour creer les vendeurs documentes dans `readme.txt` (alice, sonia,
+emilie, eva, rosa, ...).
+
 Procedure : televerser le fichier par FTP, ouvrir son URL avec le jeton dans le
 navigateur, soumettre le formulaire, verifier le rapport, **puis SUPPRIMER le
-fichier du serveur**. Il ne doit pas rester en ligne.
+fichier du serveur**. Il ne doit pas rester en ligne. Le jeton de ce fichier est
+un secret : s'il a circule, remplacez-le avant usage.
 
 ### 1.5 Sauvegarder et restaurer les donnees
 
@@ -158,30 +214,61 @@ supprimez-le apres transfert.
 Si le site est installe dans un sous-dossier, adaptez par exemple :
 
 ```php
-define('APP_URL', 'https://gestionassur.rf.gd/gestion-dossiers');
+define('APP_URL', 'https://assurialis-app.byethost22.com/gestion-dossiers');
 ```
 
 ### 1.6 Verifier le site
 
-1. Ouvrez `https://gestionassur.rf.gd/`.
-2. Connectez-vous avec le compte administrateur initial.
-3. Changez son mot de passe.
-4. Testez la creation d'un dossier, une piece jointe et la deconnexion.
-5. Verifiez qu'un vendeur ne voit pas les boutons d'administration ou d'export.
+1. Ouvrez `https://assurialis-app.byethost22.com/` (redirection vers
+   `login.php`).
+2. Connectez-vous avec le compte administrateur initial (`admin` /
+   `Admin@2026`). Comme le mot de passe n'a pas ete change depuis plus de
+   90 jours, l'application impose sa modification : renseignez un mot de passe
+   conforme (12 caracteres, majuscule, minuscule, chiffre, caractere special).
+3. Testez la creation d'un dossier, une piece jointe et la deconnexion.
+4. Verifiez qu'un vendeur ne voit pas les boutons d'administration ou d'export.
+5. Ouvrez `scripts/db_setup.php?token=...&check=1` (voir 1.2) pour confirmer
+   que les 26 tables sont presentes et que `uploads/` et `logs/` sont
+   inscriptibles.
 
-En cas d'erreur MySQL, comparez dans cet ordre avec le panneau InfinityFree :
+En cas d'erreur MySQL, comparez dans cet ordre avec le vPanel ByetHost :
 hostname, nom complet de la base, nom complet de l'utilisateur, mot de passe,
 port et permissions. N'utilisez pas les valeurs XAMPP locales en production.
+
+### 1.7 Migration InfinityFree -> ByetHost (deploiement effectue)
+
+Recapitulatif de la migration vers `https://assurialis-app.byethost22.com`
+(compte `b22_42998523`, base `b22_42998523_assurialis`) :
+
+1. `.vscode/sftp.json` : hote `ftpupload.net`, utilisateur `b22_42998523`,
+   racine distante `/htdocs/`.
+2. `config/config.hosting.php` : `DB_HOST=sql206.byethost22.com`,
+   `DB_NAME=b22_42998523_assurialis`, `DB_USER=b22_42998523`, `APP_URL` sur le
+   nouveau domaine, `CACHE_VERSION` incremente.
+3. `php scripts/deploy_ftp.php upload` : 115 fichiers / 13 dossiers transferes
+   (hors `.git`, `.vscode`, journaux et donnees locales d'`uploads/dossiers`).
+4. `database/install.sql` applique sur la base neuve via
+   `scripts/db_setup.php?confirm=oui` : 36 instructions, 26 tables, 8 comptes,
+   aucune erreur.
+5. Verifications : page de connexion servie, connexion `admin` validee
+   (redirection vers le changement de mot de passe), `dossiers.php` rendu,
+   `config/`, `database/`, `scripts/` et `readme.txt` refuses en HTTP 403.
+
+Reste a faire cote exploitation : creer les vendeurs manquants avec
+`provision_vendeurs_admin.php` (voir 1.4 ter), puis **supprimer** ce fichier du
+serveur, et changer le mot de passe MySQL s'il a circule.
 
 ## 2. Deployer chez un autre hebergeur
 
 1. Creez une base MySQL et un utilisateur dans le panneau de l'hebergeur.
 2. Donnez a cet utilisateur les droits sur cette base.
-3. Selectionnez la base dans phpMyAdmin et importez `database/install.sql`.
+3. Selectionnez la base dans phpMyAdmin et importez `database/install.sql`
+   (ou utilisez `scripts/db_setup.php`, voir 1.2).
 4. Si necessaire, supprimez du SQL les commandes `CREATE DATABASE`,
    `CREATE USER`, `GRANT` et `USE`.
-5. Configurez `config/config.php` avec les valeurs de production.
-6. Televersez les fichiers dans le dossier web.
+5. Configurez `config/config.hosting.php` avec les valeurs de production
+   (`config/config.php` choisit automatiquement le fichier selon le domaine).
+6. Televersez les fichiers avec `php scripts/deploy_ftp.php upload`.
 7. Activez HTTPS et reglez `APP_URL` sur l'adresse publique exacte.
 
 Activez les extensions PHP `pdo_mysql`, `fileinfo` et `zip`, necessaires a la

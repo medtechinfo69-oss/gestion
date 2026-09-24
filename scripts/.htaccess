@@ -1,0 +1,7 @@
+# Scripts d'administration et de deploiement (ligne de commande uniquement).
+# Aucun acces navigateur : ni execution, ni telechargement.
+#   Deploiement : php scripts/deploy_ftp.php upload
+#   Provisionnement : php scripts/provision_vendeurs.php
+# database/.htaccess, config/.htaccess et includes/.htaccess suivent la meme
+# convention.
+Require all denied

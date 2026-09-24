@@ -1,7 +1,13 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
 require_admin_or_superviseur();
-csrf_require();
+// L'import est réservé à l'admin et au superviseur strict : un vendeur
+// (même can_supervise = 1) ne dispose pas de l'import, il consulte sa liste.
+if (!is_admin() && !is_role_superviseur()) {
+    csrf_require();
+    set_flash('error', 'Import réservé aux administrateurs et superviseurs.');
+    redirect('dossiers.php');
+}
 
 function import_normalize_header(string $value): string
 {

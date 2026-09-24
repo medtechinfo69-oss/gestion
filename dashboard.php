@@ -4,10 +4,14 @@ require_login();
 
 $user = current_user();
 $isAdmin = is_admin();
-$canAccessAll = can_access_dossiers();
-// Rôle strict « vendeur » (même si can_supervise=1) : ses tableaux de
+// Rôle strict « vendeur » (même si can_supervise = 1) : ses tableaux de
 // performance n'afficheront QUE sa propre ligne.
 $isVendeurSession = is_vendeur_user();
+// Un vendeur connecté ne voit QUE ses propres dossiers : les statistiques
+// (complets / incomplets / annulés / CA), le graphique et les filtres sont
+// automatiquement restreints à son identifiant. On force donc canAccessAll à
+// faux pour lui, exactement comme dans dossiers.php.
+$canAccessAll = can_access_dossiers() && !$isVendeurSession;
 $currentYear = (int) date('Y');
 
 // ---------------------------------------------------------------------

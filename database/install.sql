@@ -18,7 +18,7 @@
 -- IMPORT (phpMyAdmin)
 --   1. Colonne de gauche : cliquez sur votre base de donnees.
 --      Locale     : gestion_dossiers-new
---      Production : if0_42713899_gestion_dossiers
+--      Production : b22_42998523_assurialis (ByetHost, compte b22_42998523)
 --   2. Onglet "Importer" -> "Choisir un fichier" -> database/install.sql
 --   3. "Executer".
 --

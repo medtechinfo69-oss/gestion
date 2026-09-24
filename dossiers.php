@@ -5,8 +5,12 @@ require_login();
 
 $user = current_user();
 $isAdmin = is_admin();
-$canAccessAll = can_access_dossiers();
-$hideSupervisorColumns = is_superviseur();
+// Rôle strict « vendeur » (même si can_supervise = 1) : il n'a PAS accès à
+// l'ensemble des dossiers. Il consulte uniquement SA propre liste, et les
+// boutons « Nouveau dossier » / « Importer Excel » lui sont retirés.
+$isVendeurSession = is_vendeur_user();
+$canAccessAll = can_access_dossiers() && !$isVendeurSession;
+$hideSupervisorColumns = is_superviseur() || $isVendeurSession;
 $userName  = (string) ($user['nom_complet'] ?? $user['username'] ?? '');
 $userEmail = (string) ($user['email'] ?? '');
 
@@ -177,7 +181,7 @@ function sort_link(string $col, string $label, string $sort, string $dir): strin
 }
 
 $pageTitle = 'Dossiers';
-$pageSubtitle = $canAccessAll ? 'Ensemble des dossiers enregistrés' : 'Vos dossiers';
+$pageSubtitle = $isVendeurSession ? 'Vos dossiers' : ($canAccessAll ? 'Ensemble des dossiers enregistrés' : 'Vos dossiers');
 $activePage = 'dossiers';
 $exportQuery = $_GET;
 unset($exportQuery['page']);
