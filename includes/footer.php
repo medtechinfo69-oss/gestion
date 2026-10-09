@@ -28,8 +28,13 @@ document.addEventListener('DOMContentLoaded', function() {
 require_once __DIR__ . '/chat_widget.php';
 ?>
 <?php /* defer : le HTML n'est plus bloqué pendant le téléchargement et
-         l'exécution des scripts ; l'ordre d'exécution reste garanti. */ ?>
+         l'exécution des scripts ; l'ordre d'exécution reste garanti.
+         multiselect.js n'est chargé que sur les pages qui le declarent
+         ($loadMultiselect) : il ne sert que sur « dossiers.php » et weighs
+         4 Ko gzip sur toutes les autres pages. */ ?>
+<?php if (!empty($loadMultiselect)): ?>
 <script defer src="<?= e(APP_URL) ?>/assets/js/multiselect.js?v=<?= e(asset_version('js/multiselect.js')) ?>"></script>
+<?php endif; ?>
 <script defer src="<?= e(APP_URL) ?>/assets/js/app.js?v=<?= e(asset_version('js/app.js')) ?>"></script>
 </body>
 </html>

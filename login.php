@@ -20,14 +20,77 @@ unset($_SESSION['old_username']);
 <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <meta name="description" content="Accès sécurisé à <?= e(APP_NAME) ?> : gestion des dossiers, des employés et des salaires.">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#1f2937">
+<script>
+/* Thème clair/sombre — exécuté AVANT le premier rendu (aucun flash) :
+     choix mémorisé (localStorage « gd-theme »), sinon préférence système.
+     Même script que includes/header.php : la page de connexion ne charge
+     pas app.js, la bascule est donc déléguée au document. */
+(function () {
+  var root = document.documentElement;
+  var THEME_KEY = 'gd-theme';
+  var theme = null;
+  try { theme = localStorage.getItem(THEME_KEY); } catch (e) { }
+  if (theme !== 'light' && theme !== 'dark') {
+    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  var metaTheme = document.querySelector('meta[name="theme-color"]');
+  function paint(t) {
+    if (metaTheme) metaTheme.setAttribute('content', t === 'dark' ? '#0A1120' : '#F2F8FA');
+  }
+  root.setAttribute('data-theme', theme);
+  paint(theme);
+  function syncLabels() {
+    document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
+      var dark = root.getAttribute('data-theme') === 'dark';
+      btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+      btn.setAttribute('aria-label', dark ? 'Passer en mode clair' : 'Passer en mode sombre');
+      btn.setAttribute('title', dark ? 'Mode clair' : 'Mode sombre');
+    });
+  }
+  document.addEventListener('click', function (event) {
+    var btn = event.target && event.target.closest ? event.target.closest('[data-theme-toggle]') : null;
+    if (!btn) return;
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    var update = function () {
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
+      paint(next);
+      syncLabels();
+    };
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced && typeof document.startViewTransition === 'function') {
+      /* Révélation en onde : le nouveau thème se propage en cercle depuis
+         le bouton cliqué (positions stockées dans --theme-origin-*). */
+      var rect = btn.getBoundingClientRect();
+      root.style.setProperty('--theme-origin-x', Math.round(rect.left + rect.width / 2) + 'px');
+      root.style.setProperty('--theme-origin-y', Math.round(rect.top + rect.height / 2) + 'px');
+      document.startViewTransition(update);
+    } else {
+      update();
+    }
+  });
+  document.addEventListener('DOMContentLoaded', syncLabels);
+})();
+</script>
 <link rel="canonical" href="<?= e(APP_URL) ?>/login.php">
-<link rel="icon" type="image/png" sizes="512x512" href="<?= e(APP_URL) ?>/assets/img/favicon-512x512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="<?= e(APP_URL) ?>/assets/img/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="<?= e(APP_URL) ?>/assets/img/favicon-180.png">
 <link rel="preload" as="style" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= e(asset_version('css/style.css')) ?>">
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= e(asset_version('css/style.css')) ?>">
 </head>
 <body class="login">
+<button type="button" class="theme-toggle theme-toggle--floating" data-theme-toggle aria-pressed="false"
+  aria-label="Passer en mode sombre" title="Mode sombre">
+  <svg class="theme-ico theme-ico-sun" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M5.3 18.7l1.5-1.5M17.2 6.8l1.5-1.5" />
+  </svg>
+  <svg class="theme-ico theme-ico-moon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+</button>
 <div class="login-shell">
     <section class="login-brand">
       <img src="<?= e(APP_URL) ?>/assets/img/logo.JPG" alt="Logo — Gestion des dossiers">

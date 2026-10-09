@@ -8,6 +8,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     initSidebarToggle();
     initSidebarCollapse();
+    initSidebarFlyout();
     initCaAutoCalc();
     initConfirmActions();
     initNotifDetailModal();
@@ -15,20 +16,26 @@
     initFlashAutoHide();
     initNewVendeurToggle();
     initBulkSelection();
+    initRowSelectionCounters();
+    initNotificationBulkSelection();
     initVendeurSelection();
     initOrigineSelection();
     initOrigineEditModal();
     initVendeurEditModal();
     initSuperviseurModal();
     initSuperviseurPasswordUx();
+    initRhModal();
+    initRhPasswordUx();
     initVendeurPasswordUx();
     initTrashSelection();
     initSalaryCardToggle();
     initSalaryInlineEdit();
     initSalaryFileImport();
     initRhDashboardCharts();
+    initUploadSizeGuards();
     initPerformanceNoScroll();
     initPerformanceCaNoScroll();
+    initAttachmentPreview();
   });
 
   /**
@@ -95,6 +102,24 @@
     });
   }
 
+  /** Empêche un envoi multipart qui dépasserait la limite affichée par l'application. */
+  function initUploadSizeGuards() {
+    var forms = document.querySelectorAll('form[enctype="multipart/form-data"]');
+    Array.prototype.forEach.call(forms, function (form) {
+      var input = form.querySelector('input[type="file"]');
+      var maxBytes = parseInt(form.getAttribute('data-upload-max-bytes') || '0', 10);
+      if (!input || !maxBytes) return;
+      form.addEventListener('submit', function (event) {
+        var file = input.files && input.files[0];
+        if (file && file.size > maxBytes) {
+          event.preventDefault();
+          window.alert('Ce fichier dépasse la taille maximale autorisée (' + Math.floor(maxBytes / 1024 / 1024) + ' Mo).');
+        }
+      });
+    });
+  }
+
+
   /** Bascule le menu latéral en affichage mobile. */
   function initSidebarToggle() {
     var toggle = document.querySelector('[data-sidebar-toggle]');
@@ -145,6 +170,98 @@
   }
 
   /**
+   * Menu réduit (icônes seules) : au survol d'une icône, un TIROIR sort de
+   * derrière la barre et le libellé se découvre par un effet de rideau.
+   * Ni bulle flottante, ni pointeur : la capsule (position: fixed, z-index
+   * sous la barre) est masquée par la barre tant qu'elle est repliée, et
+   * s'ouvre vers la droite en révélant le texte.
+   *
+   * L'élément est unique, ajouté au <body> : une solution CSS pure serait
+   * coupée par l'overflow-x:hidden de .nav-group et ne peut pas connaître
+   * la verticale de la ligne survolée. Le libellé réel reste dans le DOM
+   * (masqué en visuel par font-size:0) : aria-hidden sur le tiroir
+   * uniquement, les lecteurs d'écran ne sont pas impactés.
+   */
+  function initSidebarFlyout() {
+    var sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    var fly = document.createElement('div');
+    fly.className = 'sidebar-flyout';
+    fly.setAttribute('aria-hidden', 'true');
+    var flyText = document.createElement('span');
+    flyText.className = 'sidebar-flyout-text';
+    fly.appendChild(flyText);
+    document.body.appendChild(fly);
+
+    var current = null;
+
+    /** Survol réel (souris/trackpad) sur grand écran uniquement. */
+    function canHover() {
+      return window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 961px)').matches;
+    }
+
+    function hide() {
+      if (current === null) return;
+      current = null;
+      fly.classList.remove('is-open');
+      fly.style.width = '68px'; // se referme : rentre sous la barre
+    }
+
+    /** Libellé = noeuds texte directs de l'élément (le SVG est ignoré). */
+    function labelFor(el) {
+      if (el.classList.contains('btn-logout')) {
+        var txt = el.querySelector('.btn-logout-text');
+        return txt ? txt.textContent.replace(/\s+/g, ' ').trim() : '';
+      }
+      var out = '';
+      for (var i = 0; i < el.childNodes.length; i++) {
+        var node = el.childNodes[i];
+        if (node.nodeType === 3) { out += node.nodeValue; }
+      }
+      return out.replace(/\s+/g, ' ').trim();
+    }
+
+    function showFor(el) {
+      if (current === el) return; // étiquette déjà affichée pour cette ligne
+      if (!sidebar.classList.contains('collapsed') || !canHover()) {
+        hide();
+        return;
+      }
+      var label = labelFor(el);
+      if (!label) { hide(); return; }
+      var rect = el.getBoundingClientRect();
+      flyText.textContent = label;
+      fly.style.top = Math.round(rect.top) + 'px';
+      fly.style.height = Math.round(rect.height) + 'px';
+      // Largeur cible : passage à gauche (76) + largeur du texte + marge (18).
+      fly.style.width = (76 + flyText.offsetWidth + 18) + 'px';
+      fly.classList.add('is-open');
+      current = el;
+    }
+
+    // Délégation sur tout le menu : entrées, sous-entrées, déconnexion,
+    // et aussi les zones vides (interlignes, en-têtes, pied de menu) où
+    // l'étiquette doit se refermer.
+    sidebar.addEventListener('mouseover', function (event) {
+      var el = event.target.closest('.nav-item, .btn-logout');
+      if (el) { showFor(el); } else { hide(); }
+    });
+
+    // Sortie complète du menu, défilement interne, dépliage ou redimensionnement.
+    sidebar.addEventListener('mouseleave', hide);
+    var navGroup = sidebar.querySelector('.nav-group');
+    if (navGroup) {
+      navGroup.addEventListener('scroll', hide, { passive: true });
+    }
+    var collapseBtn = document.querySelector('[data-sidebar-collapse]');
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', hide);
+    }
+    window.addEventListener('resize', hide, { passive: true });
+  }
+
+  /**
    * Recalcule automatiquement le CA annuel selon l'origine du dossier.
    */
   function initCaAutoCalc() {
@@ -159,7 +276,7 @@
         annuelInput.value = '';
         return;
       }
-      annuelInput.value = (Math.round(monthlyAmount * 12 * 0.846 * 100) / 100).toFixed(2);
+      annuelInput.value = (Math.round(monthlyAmount * 12 * 100) / 100).toFixed(2);
     }
 
     moisInput.addEventListener('input', function () {
@@ -218,8 +335,15 @@
       document.removeEventListener('keydown', onKeydown);
     }
     function onKeydown(e) {
-      if (e.key === 'Escape') close();
-      if (e.key === 'Enter') submit.click();
+      if (e.key === 'Escape') { close(); return; }
+      // La touche Entrée ne doit JAMAIS valider seule une action destructive
+      // (« Supprimer tous les bulletins de ce mois ») : elle ne fait que
+      // rejouer le bouton RÉELLEMENT focalisé dans la boîte de dialogue.
+      // Hors dialogue, Entrée retombe sur le comportement natif.
+      if (e.key === 'Enter' && overlay.contains(e.target)) {
+        e.preventDefault();
+        if (e.target === submit) { submit.click(); } else { close(); }
+      }
     }
     cancel.addEventListener('click', close);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
@@ -277,6 +401,26 @@
       return checkboxes.filter(function (checkbox) { return checkbox.checked; });
     }
 
+    /**
+     * Met en evidence la LIGNE ENTIERE d'un dossier selectionne (toutes ses
+     * cellules, y compris la cellule de la case a cocher). La classe est posee
+     * ou retiree par le JavaScript — et non par une regle CSS `:has()` —
+     * afin de rester compatible avec tous les navigateurs. Appelee par
+     * refresh(), elle couvre donc : le clic sur une case, « tout selectionner »,
+     * la deselection et le chargement initial de la page.
+     */
+    function syncRowHighlight() {
+      checkboxes.forEach(function (checkbox) {
+        var row = checkbox.closest ? checkbox.closest('tr') : null;
+        if (!row) return;
+        if (checkbox.checked) {
+          row.classList.add('row-selected');
+        } else {
+          row.classList.remove('row-selected');
+        }
+      });
+    }
+
     function refresh() {
       var selectedItems = selected();
       var total = selectedItems.length;
@@ -285,6 +429,7 @@
       selectAll.indeterminate = total > 0 && total < checkboxes.length;
       if (editButton) editButton.disabled = total !== 1;
       if (deleteButton) deleteButton.disabled = total === 0;
+      syncRowHighlight();
     }
 
     selectAll.addEventListener('change', function () {
@@ -319,6 +464,87 @@
         });
       });
     }
+    refresh();
+  }
+
+  /**
+   * Compteurs « lignes cochées / lignes affichées » pour le superviseur et le
+   * vendeur. Purement COSMETIQUE et CLIENT-SIDE : aucune requête, aucun
+   * formulaire, aucune modification en base — l'utilisateur peut uniquement
+   * cocher/decocher une case. Le nombre de lignes affichées est figé par le
+   * PHP (une seule page a la fois) ; seul le compteur de coches evolue.
+   */
+  function initRowSelectionCounters() {
+    var box = document.querySelector('[data-row-selection-counters]');
+    if (!box) return;
+
+    var selectAll = document.querySelector('[data-row-select-all]');
+    var checkboxes = Array.prototype.slice.call(document.querySelectorAll('[data-row-select]'));
+    var checkedCount = box.querySelector('[data-row-checked-count]');
+    var displayedCount = box.querySelector('[data-row-displayed-count]');
+    if (!checkedCount || !checkboxes.length) return;
+
+    // Le total affiche peut desyncrhoniser si le DOM evolue : on recalcule
+    // depuis le nombre de cases, qui est par definition le nombre de lignes.
+    if (displayedCount) {
+      displayedCount.textContent = String(checkboxes.length);
+    }
+
+    function refresh() {
+      var total = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+      checkedCount.textContent = String(total);
+      if (selectAll) {
+        selectAll.checked = total === checkboxes.length;
+        selectAll.indeterminate = total > 0 && total < checkboxes.length;
+      }
+      // Mise en evidence de la ligne entiere, coherente avec l'existant.
+      checkboxes.forEach(function (checkbox) {
+        var row = checkbox.closest ? checkbox.closest('tr') : null;
+        if (!row) return;
+        if (checkbox.checked) {
+          row.classList.add('row-selected');
+        } else {
+          row.classList.remove('row-selected');
+        }
+      });
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener('change', function () {
+        checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+        refresh();
+      });
+    }
+    checkboxes.forEach(function (checkbox) { checkbox.addEventListener('change', refresh); });
+    refresh();
+  }
+
+  /** Gere la selection multiple des notifications sur la page courante. */
+  function initNotificationBulkSelection() {
+    var selectAll = document.querySelector('[data-notif-select-all]');
+    var checkboxes = Array.prototype.slice.call(document.querySelectorAll('[data-notif-select]'));
+    var count = document.querySelector('[data-notif-selection-count]');
+    var deleteButton = document.querySelector('[data-notif-delete-selected]');
+    if (!selectAll || !checkboxes.length || !count) return;
+
+    function refresh() {
+      var selected = checkboxes.filter(function (checkbox) { return checkbox.checked; });
+      var total = selected.length;
+      count.textContent = total + (total === 1 ? ' notification sélectionnée' : ' notifications sélectionnées');
+      selectAll.checked = total === checkboxes.length;
+      selectAll.indeterminate = total > 0 && total < checkboxes.length;
+      if (deleteButton) deleteButton.disabled = total === 0;
+      checkboxes.forEach(function (checkbox) {
+        var row = checkbox.closest ? checkbox.closest('tr') : null;
+        if (row) row.classList.toggle('row-selected', checkbox.checked);
+      });
+    }
+
+    selectAll.addEventListener('change', function () {
+      checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+      refresh();
+    });
+    checkboxes.forEach(function (checkbox) { checkbox.addEventListener('change', refresh); });
     refresh();
   }
 
@@ -1011,61 +1237,76 @@
     }
   }
 
-  /** Initialise la popup de création/modification d'un superviseur. */
-  function initSuperviseurModal() {
-    var modal = document.getElementById('superviseur-modal');
-    var form = document.getElementById('superviseur-form');
-    var modalTitle = document.getElementById('modal-title');
-    var idInput = document.getElementById('modal-id');
-    var passwordIdInput = document.getElementById('password-id');
-    var nomInput = document.getElementById('modal-nom');
-    var usernameInput = document.getElementById('modal-username');
-    var emailInput = document.getElementById('modal-email');
-    var activeInput = document.getElementById('modal-active');
-    var passwordInput = document.getElementById('modal-password');
-    var submitButton = document.getElementById('modal-submit');
-    var btnNewSuperviseur = document.getElementById('btn-new-superviseur');
-    if (!modal || !form || !idInput || !nomInput || !usernameInput) return;
+  /**
+   * Fabrique de la popup « nouveau compte / modification » d'un rôle de compte.
+   *
+   * Utilisée telle quelle par les superviseurs ET par les comptes RH : les deux
+   * écrans partagent le même design, les mêmes champs et le même comportement.
+   * Tout est paramétré par le préfixe DOM (`pre`) : les IDs doivent valoir
+   * « {pre}-modal », « {pre}-form », « {pre}-modal-nom »…
+   */
+  function initAccountModal(cfg) {
+    var id = cfg.ids;
+    var modal = document.getElementById(id.modal);
+    var form = document.getElementById(id.form);
+    if (!modal || !form) return;
+    var modalTitle = document.getElementById(id.title);
+    var idInput = document.getElementById(id.idField);
+    var extraIdInput = id.extraIdField ? document.getElementById(id.extraIdField) : null;
+    var nomInput = document.getElementById(id.nom);
+    var usernameInput = document.getElementById(id.username);
+    var emailInput = document.getElementById(id.email);
+    var activeInput = document.getElementById(id.active);
+    var passwordInput = document.getElementById(id.password);
+    var submitButton = document.getElementById(id.submit);
+    var cancelButton = id.cancel ? document.getElementById(id.cancel) : null;
+    var helpText = document.getElementById(id.help);
+    var btnNew = document.getElementById(cfg.newButtonId);
+    if (!idInput || !nomInput || !usernameInput) return;
 
-    function openModal(id, nom, username, email, isActive) {
-      var isEdit = !!id;
-      idInput.value = String(id || '');
-      passwordIdInput.value = String(id || '');
+    var strength = document.getElementById(id.strength);
+    var bar = strength ? strength.querySelector('.password-strength-bar') : null;
+    var strengthLabel = strength ? strength.querySelector('.password-strength-label') : null;
+    var hintsWrap = document.getElementById(id.hintsWrap);
+
+    function resetStrength() {
+      if (bar) {
+        var segs = bar.querySelectorAll('.segment');
+        for (var i = 0; i < segs.length; i++) segs[i].className = 'segment animate-' + i;
+      }
+      if (strengthLabel) strengthLabel.textContent = 'Très faible';
+      if (hintsWrap) hintsWrap.style.display = 'none';
+    }
+
+    function openModal(mid, nom, username, email, isActive) {
+      var isEdit = !!mid;
+      idInput.value = String(mid || '');
+      if (extraIdInput) extraIdInput.value = String(mid || '');
       nomInput.value = String(nom || '');
       usernameInput.value = String(username || '');
-      emailInput.value = String(email || '');
-      activeInput.value = isActive ? '1' : '0';
-      if (passwordInput) passwordInput.value = '';
+      if (emailInput) emailInput.value = String(email || '');
+      if (activeInput) activeInput.value = isActive ? '1' : '0';
       if (passwordInput) {
+        passwordInput.value = '';
         passwordInput.type = 'password';
         passwordInput.required = !isEdit;
-        var toggle = document.getElementById('password-toggle');
+        var toggle = document.getElementById(id.toggle);
         if (toggle) {
           toggle.textContent = 'Afficher';
           toggle.setAttribute('aria-pressed', 'false');
         }
+        resetStrength();
       }
-
-      var passwordHelp = document.getElementById('password-help');
-      if (passwordHelp) {
-        passwordHelp.textContent = isEdit
+      if (helpText) {
+        helpText.textContent = isEdit
           ? '12 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial. Laisser vide pour conserver le mot de passe actuel.'
           : '12 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial.';
       }
-
-      if (modalTitle) {
-        modalTitle.textContent = isEdit ? 'Modifier le superviseur' : 'Nouveau superviseur';
-      }
-      if (submitButton) {
-        submitButton.textContent = isEdit ? 'Enregistrer' : 'Créer';
-      }
-      if (form) {
-        form.action = isEdit ? (form.getAttribute('data-edit-action') || '/actions/superviseur_update.php') : (form.getAttribute('data-create-action') || '/actions/superviseur_save.php');
-      }
-      if (passwordInput) {
-        var group = passwordInput.closest('.form-group');
-        if (group) group.style.display = '';
-      }
+      if (modalTitle) modalTitle.textContent = isEdit ? cfg.editTitle : cfg.createTitle;
+      if (submitButton) submitButton.textContent = isEdit ? 'Enregistrer' : 'Créer';
+      form.action = isEdit
+        ? (form.getAttribute('data-edit-action') || cfg.defaultEditAction)
+        : (form.getAttribute('data-create-action') || cfg.defaultCreateAction);
       modal.style.display = 'flex';
       modal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
@@ -1079,17 +1320,17 @@
       if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
     }
 
-    if (btnNewSuperviseur) {
-      btnNewSuperviseur.addEventListener('click', function () {
-        openModal('', '', '', '', true);
-      });
+    if (btnNew) {
+      btnNew.addEventListener('click', function () { openModal('', '', '', '', true); });
+    }
+    if (cancelButton) {
+      cancelButton.addEventListener('click', closeModal);
     }
 
     document.addEventListener('click', function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
-
-      var editButton = target.closest('[data-superviseur-edit]');
+      var editButton = target.closest(cfg.editAttr);
       if (editButton) {
         event.preventDefault();
         openModal(
@@ -1101,12 +1342,6 @@
         );
         return;
       }
-
-      if (target.closest('#modal-cancel') || target.closest('#password-cancel')) {
-        closeModal();
-        return;
-      }
-
       if (target === modal) closeModal();
     });
 
@@ -1115,16 +1350,64 @@
     });
   }
 
-  /** Améliore l'UX d'un champ mot de passe : bascule afficher/masquer + robustesse. */
-  function initPasswordUxFor(passwordId) {
+  /** Initialise la popup de création/modification d'un superviseur. */
+  function initSuperviseurModal() {
+    initAccountModal({
+      newButtonId: 'btn-new-superviseur',
+      createTitle: 'Nouveau superviseur', editTitle: 'Modifier le superviseur',
+      editAttr: '[data-superviseur-edit]',
+      defaultCreateAction: '/actions/superviseur_save.php',
+      defaultEditAction: '/actions/superviseur_update.php',
+      // IDs historiques de la popup superviseur (conservés à l'identique).
+      ids: {
+        modal: 'superviseur-modal', form: 'superviseur-form',
+        title: 'modal-title', idField: 'modal-id', extraIdField: 'password-id',
+        nom: 'modal-nom', username: 'modal-username', email: 'modal-email',
+        active: 'modal-active', password: 'modal-password',
+        submit: 'modal-submit', cancel: 'modal-cancel',
+        toggle: 'password-toggle', help: 'password-help',
+        strength: 'password-strength', hintsWrap: 'password-strength-hints'
+      }
+    });
+  }
+
+  /** Initialise la popup de création/modification d'un compte RH. */
+  function initRhModal() {
+    initAccountModal({
+      newButtonId: 'btn-new-rh',
+      createTitle: 'Nouveau compte RH', editTitle: 'Modifier le compte RH',
+      editAttr: '[data-rh-edit]',
+      defaultCreateAction: '/actions/rh_save.php',
+      defaultEditAction: '/actions/rh_update.php',
+      // Mêmes IDs que la popup superviseur, simplement préfixés par « rh- ».
+      ids: {
+        modal: 'rh-modal', form: 'rh-form',
+        title: 'rh-modal-title', idField: 'rh-modal-id',
+        nom: 'rh-modal-nom', username: 'rh-modal-username', email: 'rh-modal-email',
+        active: 'rh-modal-active', password: 'rh-modal-password',
+        submit: 'rh-modal-submit', cancel: 'rh-modal-cancel',
+        toggle: 'rh-password-toggle', help: 'rh-password-help',
+        strength: 'rh-password-strength', hintsWrap: 'rh-password-strength-hints'
+      }
+    });
+  }
+
+  /**
+   * Améliore l'UX d'un champ mot de passe : bascule afficher/masquer + robustesse.
+   * Le préfixe `pfx` permet de réutiliser exactement le même comportement dans
+   * plusieurs popups (superviseur, vendeur, RH) : chaque popup possède ses
+   * propres IDs préfixés (« modal-password » / « rh-modal-password »).
+   */
+  function initPasswordUxFor(passwordId, pfx) {
+    pfx = pfx || 'password';
     var pwd = document.getElementById(passwordId);
-    var toggle = document.getElementById('password-toggle');
+    var toggle = document.getElementById(pfx + '-toggle');
     if (!pwd || !toggle) return;
 
-    var strength = document.getElementById('password-strength');
+    var strength = document.getElementById(pfx + '-strength');
     if (!strength) {
       strength = document.createElement('div');
-      strength.id = 'password-strength';
+      strength.id = pfx + '-strength';
       strength.className = 'password-strength';
       strength.setAttribute('aria-live', 'polite');
       pwd.parentNode.parentNode.appendChild(strength);
@@ -1132,8 +1415,8 @@
 
     var barContainer = strength.querySelector('.password-strength-bar');
     var label = strength.querySelector('.password-strength-label');
-    var hintsWrapper = document.getElementById('password-strength-hints');
-    var hintsList = document.getElementById('password-hints-list');
+    var hintsWrapper = document.getElementById(pfx + '-strength-hints');
+    var hintsList = document.getElementById(pfx + '-hints-list');
     if (!barContainer) {
       barContainer = document.createElement('div');
       barContainer.className = 'password-strength-bar';
@@ -1146,15 +1429,15 @@
     }
     if (!hintsWrapper) {
       hintsWrapper = document.createElement('div');
-      hintsWrapper.id = 'password-strength-hints';
+      hintsWrapper.id = pfx + '-strength-hints';
       hintsWrapper.className = 'password-strength-hints';
       hintsWrapper.style.display = 'none';
       hintsList = document.createElement('ul');
-      hintsList.id = 'password-hints-list';
+      hintsList.id = pfx + '-hints-list';
       hintsWrapper.appendChild(hintsList);
       strength.parentNode.appendChild(hintsWrapper);
     } else {
-      hintsList = document.getElementById('password-hints-list');
+      hintsList = document.getElementById(pfx + '-hints-list');
     }
 
     // ensure 5 segments exist
@@ -1257,12 +1540,17 @@
 
   /** Champ mot de passe de la popup superviseur. */
   function initSuperviseurPasswordUx() {
-    initPasswordUxFor('modal-password');
+    initPasswordUxFor('modal-password', 'password');
+  }
+
+  /** Champ mot de passe de la popup compte RH (même UX que superviseur). */
+  function initRhPasswordUx() {
+    initPasswordUxFor('rh-modal-password', 'rh-password');
   }
 
   /** Champ mot de passe de la popup vendeur. */
   function initVendeurPasswordUx() {
-    initPasswordUxFor('vendeur-modal-password');
+    initPasswordUxFor('vendeur-modal-password', 'password');
   }
 
   /**
@@ -1324,6 +1612,150 @@
     if (closeBtn) closeBtn.addEventListener('click', close);
     if (okBtn) okBtn.addEventListener('click', close);
     modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.style.display === 'flex') close();
+    });
+  }
+
+  /**
+   * Aperçu d'une pièce jointe dans une modale (bouton « Aperçu » 👁).
+   *
+   * Le type d'affichage est décidé par le serveur (attachment_preview_kind) et
+   * transmis via data-attachment-kind :
+   *   - image    : <img> (le fichier est servi en inline) ;
+   *   - pdf      : <iframe>, qui laisse le lecteur PDF natif du navigateur ;
+   *   - audio    : <audio controls> ;
+   *   - unsupported (Word, Excel…) : nom du fichier + téléchargement.
+   *
+   * La modale existe dans dossier_view.php pour les trois rôles (vendeur,
+   * superviseur, administrateur) ; ce module se contente de la piloter.
+   */
+  function initAttachmentPreview() {
+    var modal = document.getElementById('attachment-preview-modal');
+    if (!modal) return;
+
+    var body = modal.querySelector('[data-attachment-preview-body]');
+    var nameEl = modal.querySelector('[data-attachment-preview-name]');
+    var typeEl = modal.querySelector('[data-attachment-preview-type]');
+    var downloadBtn = modal.querySelector('[data-attachment-preview-download]');
+    var lastFocus = null;
+    var previousOverflow = '';
+
+    /** Vide la zone d'affichage (libère le lecteur PDF et l'audio). */
+    function clearBody() {
+      while (body.firstChild) {
+        body.removeChild(body.firstChild);
+      }
+    }
+
+    /** Bloc « fichier non affichable » : icône + nom du fichier + explication. */
+    function renderUnsupported(name, typeLabel) {
+      var box = document.createElement('div');
+      box.className = 'attachment-preview-unavailable';
+
+      var icon = document.createElement('div');
+      icon.className = 'attachment-preview-unavailable-icon';
+      icon.textContent = '\u{1F4C4}';
+
+      var title = document.createElement('p');
+      title.className = 'attachment-preview-unavailable-title';
+      title.textContent = 'Aperçu indisponible pour ce format';
+
+      var hint = document.createElement('p');
+      hint.className = 'muted';
+      hint.textContent = (typeLabel ? typeLabel + ' — ' : '')
+        + 'le fichier « ' + name + ' » ne peut pas être affiché directement dans le navigateur.';
+
+      box.appendChild(icon);
+      box.appendChild(title);
+      box.appendChild(hint);
+      return box;
+    }
+
+    /** Construit le contenu de la modale selon le type du fichier. */
+    function render(btn) {
+      var kind = btn.getAttribute('data-attachment-kind') || 'unsupported';
+      var name = btn.getAttribute('data-attachment-name') || 'Pièce jointe';
+      var typeLabel = btn.getAttribute('data-attachment-type') || '';
+      var url = btn.getAttribute('data-attachment-url') || '';
+      var downloadUrl = btn.getAttribute('data-attachment-download') || '';
+      var canDownload = btn.getAttribute('data-attachment-can-download') !== '0';
+
+      clearBody();
+
+      if (kind === 'image' && url) {
+        var img = document.createElement('img');
+        img.className = 'attachment-preview-image';
+        img.alt = name;
+        img.src = url;
+        body.appendChild(img);
+      } else if (kind === 'pdf' && url) {
+        var frame = document.createElement('iframe');
+        frame.className = 'attachment-preview-frame';
+        frame.setAttribute('title', 'Aperçu de ' + name);
+        frame.src = url;
+        body.appendChild(frame);
+      } else if (kind === 'audio' && url) {
+        var player = document.createElement('audio');
+        player.className = 'attachment-preview-audio';
+        player.setAttribute('controls', 'controls');
+        player.setAttribute('controlsList', 'nodownload');
+        player.setAttribute('preload', 'metadata');
+        player.src = url;
+        body.appendChild(player);
+      } else {
+        body.appendChild(renderUnsupported(name, typeLabel));
+      }
+
+      // Le téléchargement n'est proposé qu'aux rôles qui y ont droit
+      // (le serveur l'interdit aux superviseurs).
+      if (downloadUrl && canDownload) {
+        downloadBtn.setAttribute('href', downloadUrl);
+        downloadBtn.hidden = false;
+      } else {
+        downloadBtn.removeAttribute('href');
+        downloadBtn.hidden = true;
+      }
+    }
+
+    function open(btn) {
+      lastFocus = btn;
+      nameEl.textContent = btn.getAttribute('data-attachment-name') || '';
+      typeEl.textContent = btn.getAttribute('data-attachment-type') || '';
+      render(btn);
+      previousOverflow = document.body.style.overflow;
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      var closeBtn = modal.querySelector('[data-attachment-preview-close]');
+      if (closeBtn) closeBtn.focus();
+    }
+
+    function close() {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = previousOverflow;
+      clearBody();
+      downloadBtn.removeAttribute('href');
+      if (lastFocus && document.body.contains(lastFocus)) lastFocus.focus();
+    }
+
+    document.addEventListener('click', function (e) {
+      if (!e.target || !e.target.closest) return;
+      var btn = e.target.closest('[data-attachment-preview]');
+      if (!btn) return;
+      e.preventDefault();
+      open(btn);
+    });
+
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) {
+        close();
+        return;
+      }
+      if (e.target.closest && e.target.closest('[data-attachment-preview-close]')) close();
+    });
+
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modal.style.display === 'flex') close();
     });

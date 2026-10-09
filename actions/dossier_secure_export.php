@@ -151,6 +151,7 @@ $rows = [[
     'CA-mois', 'CA-annuel', "Date d'effet", 'Produit', 'Compagnie',
     'Etat du dossier', 'Date validation', 'Courrier', 'Commentaire dossier',
     'Etat du contrat', "Date d'annulation", 'Contrôle Qualité', "Date d'injection",
+    'Mutuelle à résilier', 'Date de résiliation', 'Type de résiliation',
 ]];
 
 foreach ($dossiers as $d) {
@@ -185,6 +186,9 @@ foreach ($dossiers as $d) {
         format_date((string) ($d['date_contrat_non_actif'] ?? '')),
         $d['controle_qualite'] ?? '',
         format_date((string) ($d['date_injection'] ?? '')),
+        $d['mutuelle_a_resilier'] ?? '',
+        format_date((string) ($d['date_resiliation'] ?? '')),
+        $d['type_resiliation'] ?? '',
     ];
 }
 
@@ -315,7 +319,12 @@ if ($filterDesc) {
 // l'e-mail contient uniquement le lien sécurisé + le code de vérification.
 $sendEmail = !empty($_POST['send_email']);
 if ($sendEmail) {
-    $recipient = defined('MAIL_ALERT_TO') && MAIL_ALERT_TO ? MAIL_ALERT_TO : (defined('MAIL_FROM') ? MAIL_FROM : '');
+    // Destinataire = carte SMTP (profile.php) : alert_to, sinon from.
+    $smtpCfgExport = function_exists('app_smtp_config') ? app_smtp_config() : ['alert_to' => '', 'from' => ''];
+    $recipient = trim((string) ($smtpCfgExport['alert_to'] ?? ''));
+    if ($recipient === '') {
+        $recipient = trim((string) ($smtpCfgExport['from'] ?? ''));
+    }
     if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
         $mailSubject = 'Export Excel des dossiers - ' . date('d/m/Y H:i');
         $ok = send_app_email($recipient, $mailSubject, $body);

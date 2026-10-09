@@ -1,6 +1,17 @@
 <?php
 /**
- * Chat interne entre tous les utilisateurs (admin <-> superviseur <-> vendeur).
+ * Chat interne : deux conversations seulement sont autorisées.
+ *   1. admin <-> tout le monde (administrateur, superviseur, vendeur, RH) :
+ *      l'administrateur reste le pivot du chat ;
+ *   2. VENDEUR <-> SUPERVISEUR : ligne hiérarchique directe, dans les DEUX sens
+ *      (un vendeur écrit à un superviseur et inversement, comme dans la gestion
+ *      des dossiers).
+ * Toute autre paire reste refusée (superviseur <-> superviseur,
+ * vendeur <-> vendeur, RH <-> tout compte non administrateur) : la liste de
+ * contacts n'affiche que les correspondants autorisés et le serveur refuse tout
+ * le reste, même en forgeant la requête.
+ * Voir chat_pair_allowed() pour la règle unique appliquée partout (widget ET
+ * API), et chat_contact_roles() pour la liste de contacts qui en découle.
  *
  * BASE DE DONNEES (MySQL = choix le plus sûr et le plus rapide ici) :
  *  - chat_messages : messages PERSISTANTS (jamais perdus) et CHIFFRÉS.
@@ -212,7 +223,10 @@ function users_schema_ensure(PDO $db): bool
             $db->exec("ALTER TABLE users ADD COLUMN can_supervise TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active");
         }
 
-        // 2) Rôle 'superviseur' absent de l'ENUM -> on étend l'ENUM
+        // 2) Rôles manquants dans l'ENUM de `role` -> on l'élargit.
+        //    Rôles attendus : admin, superviseur, vendeur, rh.
+        //    L'ordre de la liste est celui utilisé par install.sql.
+        $expectedRoles = ['admin', 'superviseur', 'vendeur', 'rh'];
         $roleType = '';
         foreach ($cols as $c) {
             if (($c['Field'] ?? '') === 'role') {
@@ -220,10 +234,19 @@ function users_schema_ensure(PDO $db): bool
                 break;
             }
         }
-        if ($roleType !== '' && stripos($roleType, 'superviseur') === false) {
-            $db->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin','superviseur','vendeur') NOT NULL DEFAULT 'vendeur'");
-            // Répare les comptes dont le rôle avait été rejeté à l'insertion
-            $db->exec("UPDATE users SET role = 'superviseur' WHERE role NOT IN ('admin','superviseur','vendeur')");
+        if ($roleType !== '') {
+            $missing = array_values(array_filter($expectedRoles, static function (string $r) use ($roleType): bool {
+                return stripos($roleType, "'" . $r . "'") === false;
+            }));
+            if ($missing) {
+                $enumList = "'" . implode("','", $expectedRoles) . "'";
+                $db->exec("ALTER TABLE users MODIFY COLUMN role ENUM($enumList) NOT NULL DEFAULT 'vendeur'");
+            }
+            // Répare les comptes dont le rôle aurait été rejeté à l'insertion
+            // (ENUM trop étroit sur un ancien hébergement) : on ne touche
+            // QUE les valeurs hors enum, jamais un rôle métier valide.
+            $inList = "'" . implode("','", $expectedRoles) . "'";
+            $db->exec("UPDATE users SET role = 'vendeur' WHERE role NOT IN ($inList)");
         }
 
         // 3) Restaure PRIMARY KEY + AUTO_INCREMENT sur `id` si la table les a
@@ -383,13 +406,132 @@ function chat_touch_presence(PDO $db, int $userId): void
 }
 
 /**
- * Liste des autres utilisateurs actifs (admin + superviseurs + vendeurs)
- * avec statut en ligne et nombre de messages non lus reçus de chacun.
+ * Rôles autorisés à utiliser le chat. Le rôle « rh » y figure comme les
+ * autres : sa seule conversation possible est avec l'administrateur.
+ */
+function chat_allowed_roles(): array
+{
+    return ['admin', 'superviseur', 'vendeur', 'rh'];
+}
+
+/**
+ * Vrai si le rôle courant a le droit d'utiliser le chat.
+ * Source unique de vérité : chat_allowed_roles(). Évite d'oublier un rôle
+ * (comme « rh ») dans une liste en dur, et évite que le widget et l'API
+ * n'appliquent des règles différentes.
+ *
+ * Défini ici (et non dans chat_api_handler.php) car chat.php est TOUJOURS
+ * chargé par init.php, alors que chat_api_handler.php ne l'est que pour les
+ * appels AJAX : le widget de chat en a besoin sur toutes les pages.
+ */
+function can_chat_role(): bool
+{
+    return is_logged_in()
+        && in_array((string) ($_SESSION['user']['role'] ?? ''), chat_allowed_roles(), true);
+}
+
+/**
+ * RÈGLE UNIQUE DU CHAT INTERNE (appliquée par le widget ET par l'API).
+ *
+ * Deux conversations seulement sont autorisées :
+ *   1. L'ADMINISTRATEUR discute avec tout le monde (admin <-> admin inclus) :
+ *      il reste le pivot des échanges ;
+ *   2. VENDEUR <-> SUPERVISEUR : la ligne hiérarchique directe, dans les deux
+ *      sens (le vendeur écrit au superviseur qui suit ses dossiers, et le
+ *      superviseur peut répondre/écrire au vendeur).
+ *
+ * Restent INTERDITS : superviseur <-> superviseur, vendeur <-> vendeur et
+ * RH <-> tout compte non administrateur (le rôle « rh » ne parle qu'à l'admin).
+ *
+ * @param string|null $meRole   rôle de l'utilisateur courant
+ * @param string|null $peerRole rôle du correspondant
+ */
+function chat_pair_allowed(?string $meRole, ?string $peerRole): bool
+{
+    $roles = chat_allowed_roles();
+    if (!in_array((string) $meRole, $roles, true) || !in_array((string) $peerRole, $roles, true)) {
+        return false;
+    }
+    // 1) Pivot : dès que l'un des deux est administrateur, la paire est permise
+    //    (y compris admin <-> admin, l'admin est le point de passage de toutes
+    //    les discussions).
+    if ($meRole === 'admin' || $peerRole === 'admin') {
+        return true;
+    }
+    // 2) Ligne hiérarchique directe : vendeur <-> superviseur (les deux sens).
+    //    Toute autre paire sans administrateur reste refusée.
+    return ($meRole === 'vendeur' && $peerRole === 'superviseur')
+        || ($meRole === 'superviseur' && $peerRole === 'vendeur');
+}
+
+/**
+ * Rôles que $meRole verra dans sa liste de contacts ET avec lesquels il pourra
+ * discuter.
+ *
+ * DÉRIVÉE de chat_pair_allowed() (source unique) : impossible d'ajouter une
+ * paire autorisée dans le serveur sans qu'elle apparaisse dans la liste, et
+ * impossible d'afficher un contact qui refuserait ensuite les messages.
+ *
+ *   admin       -> admin, superviseur, vendeur, rh
+ *   superviseur -> admin, vendeur
+ *   vendeur     -> admin, superviseur
+ *   rh          -> admin
+ */
+function chat_contact_roles(?string $meRole): array
+{
+    $out = [];
+    foreach (chat_allowed_roles() as $peerRole) {
+        if (chat_pair_allowed($meRole, $peerRole)) {
+            $out[] = $peerRole;
+        }
+    }
+    return $out;
+}
+
+/** Rôle d'un compte actif (null si inconnu / inactif). */
+function chat_user_role(PDO $db, int $userId): ?string
+{
+    if ($userId <= 0) {
+        return null;
+    }
+    static $cache = [];
+    if (array_key_exists($userId, $cache)) {
+        return $cache[$userId];
+    }
+    try {
+        $stmt = $db->prepare('SELECT role FROM users WHERE id = :id AND is_active = 1');
+        $stmt->execute(['id' => $userId]);
+        $role = $stmt->fetchColumn();
+        $cache[$userId] = $role === false ? null : (string) $role;
+    } catch (Throwable $e) {
+        error_log('chat_user_role: ' . $e->getMessage());
+        $cache[$userId] = null;
+    }
+    return $cache[$userId];
+}
+
+/**
+ * Liste des contacts autorisés pour l'utilisateur courant.
+ *  - administrateur      : tous les comptes actifs (superviseurs, vendeurs, RH) ;
+ *  - superviseur         : les administrateurs + les VENDEURS ;
+ *  - vendeur             : les administrateurs + les SUPERVISEURS ;
+ *  - compte RH           : les administrateurs uniquement.
+ * Le filtre SQL est dérivé de chat_pair_allowed() (via chat_contact_roles) :
+ * la liste affichée ne peut donc jamais proposer une conversation que le
+ * serveur refuserait à l'envoi.
  * Une seule requête SQL (sous-requête de comptage) = rapide, pas de N+1.
  */
-function chat_get_contacts(PDO $db, int $meId): array
+function chat_get_contacts(PDO $db, int $meId, ?string $meRole = null): array
 {
-    try {
+    $meRole = $meRole ?? (chat_user_role($db, $meId) ?? '');
+    // La liste des rôles vient d'une liste blanche en dur (chat_allowed_roles()):
+    // aucune donnée utilisateur n'entre dans cette requête, l'inline est sûr.
+    $contactRoles = chat_contact_roles($meRole);
+    $roleSql = $contactRoles
+        ? "u.role IN ('" . implode("','", $contactRoles) . "')"
+        : '1 = 0'; // aucun correspondant autorisé : liste vide
+
+    $load = function () use ($db, $meId, $roleSql) {
         $stmt = $db->prepare(
             "SELECT u.id, u.username, u.nom_complet, u.role,
                     (p.last_seen_at IS NOT NULL AND p.last_seen_at >= (NOW() - INTERVAL " . CHAT_ONLINE_WINDOW . " SECOND)) AS is_online,
@@ -398,30 +540,22 @@ function chat_get_contacts(PDO $db, int $meId): array
                       WHERE m.sender_id = u.id AND m.receiver_id = :me AND m.is_read = 0) AS unread
              FROM users u
              LEFT JOIN chat_presence p ON p.user_id = u.id
-             WHERE u.is_active = 1 AND u.role IN ('admin','superviseur','vendeur') AND u.id <> :me2
+             WHERE u.is_active = 1 AND {$roleSql} AND u.id <> :me2
              ORDER BY is_online DESC, unread DESC, u.nom_complet"
         );
         $stmt->execute(['me' => $meId, 'me2' => $meId]);
         return $stmt->fetchAll();
+    };
+
+    try {
+        return $load();
     } catch (Throwable $e) {
         error_log('chat_get_contacts: ' . $e->getMessage());
         // Auto-réparation (tables + schéma users) puis une seule nouvelle tentative
         chat_tables_ensure($db);
         users_schema_ensure($db);
         try {
-            $stmt = $db->prepare(
-                "SELECT u.id, u.username, u.nom_complet, u.role,
-                        (p.last_seen_at IS NOT NULL AND p.last_seen_at >= (NOW() - INTERVAL " . CHAT_ONLINE_WINDOW . " SECOND)) AS is_online,
-                        p.last_seen_at,
-                        (SELECT COUNT(*) FROM chat_messages m
-                          WHERE m.sender_id = u.id AND m.receiver_id = :me AND m.is_read = 0) AS unread
-                 FROM users u
-                 LEFT JOIN chat_presence p ON p.user_id = u.id
-                 WHERE u.is_active = 1 AND u.role IN ('admin','superviseur','vendeur') AND u.id <> :me2
-                 ORDER BY is_online DESC, unread DESC, u.nom_complet"
-            );
-            $stmt->execute(['me' => $meId, 'me2' => $meId]);
-            return $stmt->fetchAll();
+            return $load();
         } catch (Throwable $e2) {
             error_log('chat_get_contacts(retry): ' . $e2->getMessage());
             return [];
@@ -456,19 +590,105 @@ function chat_status_diag(PDO $db, int $meId): array
 // Conversation (lecture / écriture) — texte déchiffré à la sortie
 // ---------------------------------------------------------------------
 
+// ---------------------------------------------------------------------
+// HORODATAGE : le fuseau du serveur MySQL n'est pas celui de l'utilisateur
+//
+// MySQL écrit les DATETIME dans le fuseau de SON serveur (le défaut
+// d'installation de chat_messages.created_at est CURRENT_TIMESTAMP). Afficher
+// cette valeur telle quelle donne donc une heure fausse dès que l'hébergeur
+// n'est pas réglé comme le poste de travail : sur un serveur en UTC-7, un
+// message envoyé à 11:45 s'affiche « 29/09 03:45 ».
+//
+// Correctif : la valeur SQL est convertie en heure locale du poste AU MOMENT DE
+// L'AFFICHAGE (une seule requête de détection du décalage par page, mémorisée).
+// Comme la conversion se fait à la lecture, les messages DÉJÀ enregistrés
+// reprennent eux aussi la bonne heure : aucune migration de données.
+// Logique identique à superviseurs.php / vendeurs.php
+// (format_pending_session_datetime) : une seule façon de faire dans l'appli.
+// ---------------------------------------------------------------------
+
+/**
+ * Fuseau d'AFFICHAGE des horodatages = heure du poste de travail
+ * (W. Central Africa = UTC+1), comme superviseurs.php / vendeurs.php.
+ * Volontairement fixe et sans heure d'été : on veut la même heure que
+ * l'horloge de l'utilisateur, et non celle de PHP (Europe/Paris), qui
+ * afficherait une heure en avance.
+ */
+function chat_display_timezone(): DateTimeZone
+{
+    return new DateTimeZone('Africa/Algiers');
+}
+
+/**
+ * Décalage du serveur MySQL par rapport à UTC, en secondes
+ * (= NOW() - UTC_TIMESTAMP()). Ex. : -25200 sur un serveur en UTC-7,
+ * +3600 sur un serveur en UTC+1. Mémorisé : une requête par page au maximum.
+ */
+function chat_db_offset_seconds(PDO $db): int
+{
+    static $offset = null;
+    if ($offset !== null) {
+        return $offset;
+    }
+    try {
+        $row = $db->query('SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW()) AS offset_seconds')->fetch();
+        $offset = (int) ($row['offset_seconds'] ?? 0);
+    } catch (Throwable $e) {
+        error_log('chat_db_offset_seconds: ' . $e->getMessage());
+        $offset = 0; // mieux vaut ne rien décaler que décaler au hasard
+    }
+    return $offset;
+}
+
+/**
+ * Convertit un DATETIME écrit par MySQL (donc dans le fuseau du serveur MySQL)
+ * en heure locale du poste, au format court du chat (« 29/09 11:45 »).
+ *
+ * @param string|null $sqlDateTime valeur brute de la colonne created_at
+ */
+function chat_format_time(PDO $db, ?string $sqlDateTime): string
+{
+    $value = trim((string) $sqlDateTime);
+    if ($value === '') {
+        return '';
+    }
+
+    try {
+        // La valeur SQL vaut « UTC + décalage serveur » : on retrouve l'instant
+        // UTC, puis on l'affiche dans le fuseau du poste. Le signe est choisi
+        // explicitement : un décalage négatif ne doit jamais produire
+        // « --25200 seconds », chaîne que l'analyseur de dates interprète mal.
+        $offset = chat_db_offset_seconds($db);
+        $utc = new DateTimeImmutable($value, new DateTimeZone('UTC'));
+        $utc = ($offset >= 0)
+            ? $utc->modify('-' . $offset . ' seconds')
+            : $utc->modify('+' . abs($offset) . ' seconds');
+
+        return $utc->setTimezone(chat_display_timezone())->format('d/m H:i');
+    } catch (Throwable $e) {
+        error_log('chat_format_time: ' . $e->getMessage());
+        // Repli : la valeur telle qu'elle est stockée, sans conversion
+        // hasardeuse (« 2026-09-29 03:46:00 » -> « 29/09 03:46 »).
+        return (strlen($value) >= 16)
+            ? substr($value, 8, 2) . '/' . substr($value, 5, 2) . ' ' . substr($value, 11, 5)
+            : $value;
+    }
+}
+
 /**
  * Messages de la conversation.
  * $afterId = 0 : les 200 derniers (ordre chronologique).
  * $afterId > 0 : uniquement les nouveaux messages (polling rapide).
  * Le texte est déchiffré au passage. "unread" sert à la double coche.
+ * L'heure renvoyée est convertie du fuseau du serveur MySQL vers l'heure locale
+ * du poste par chat_format_time() (voir le bloc ci-dessus).
  */
 function chat_fetch_messages(PDO $db, int $meId, int $peerId, int $afterId = 0): array
 {
     $load = function () use ($db, $meId, $peerId, $afterId) {
         if ($afterId > 0) {
             $stmt = $db->prepare(
-                "SELECT id, sender_id, message, is_read,
-                        DATE_FORMAT(created_at, '%d/%m %H:%i') AS time_fr
+                "SELECT id, sender_id, message, is_read, created_at
                  FROM chat_messages
                  WHERE id > :after
                    AND ((sender_id = :me AND receiver_id = :peer)
@@ -479,8 +699,7 @@ function chat_fetch_messages(PDO $db, int $meId, int $peerId, int $afterId = 0):
             $stmt->execute(['after' => $afterId, 'me' => $meId, 'peer' => $peerId, 'peer2' => $peerId, 'me2' => $meId]);
         } else {
             $stmt = $db->prepare(
-                "SELECT id, sender_id, message, is_read,
-                        DATE_FORMAT(created_at, '%d/%m %H:%i') AS time_fr
+                "SELECT id, sender_id, message, is_read, created_at
                  FROM chat_messages
                  WHERE (sender_id = :me AND receiver_id = :peer)
                     OR (sender_id = :peer2 AND receiver_id = :me2)
@@ -509,7 +728,7 @@ function chat_fetch_messages(PDO $db, int $meId, int $peerId, int $afterId = 0):
             'mine'   => (int) $row['sender_id'] === $meId,
             'unread' => !(int) $row['is_read'],
             'text'   => chat_decrypt((string) $row['message']),
-            'time'   => $row['time_fr'],
+            'time'   => chat_format_time($db, (string) ($row['created_at'] ?? '')),
         ];
     }
     return $messages;
@@ -611,35 +830,57 @@ function chat_mark_read(PDO $db, int $meId, int $peerId): void
     }
 }
 /**
- * Vrai si $peerId est un correspondant autorisé (compte actif :
- * admin, superviseur ou vendeur).
+ * Vrai si $peerId est un correspondant autorisé pour l'utilisateur $senderId :
+ *   - le compte existe et est actif (rôle admin, superviseur, vendeur ou rh) ;
+ *   - la paire respecte la règle de chat_pair_allowed() :
+ *     « admin <-> tout le monde » et « vendeur <-> superviseur ».
+ *     Un vendeur ne peut donc pas ouvrir de conversation avec un autre vendeur,
+ *     ni un superviseur avec un autre superviseur, et un compte RH uniquement
+ *     avec un administrateur.
  * Résultat mémorisé dans la requête courante pour éviter les requêtes répétées.
  */
-function chat_peer_allowed(PDO $db, int $peerId): bool
+function chat_peer_allowed(PDO $db, int $peerId, ?int $senderId = null, ?string $senderRole = null): bool
 {
     if ($peerId <= 0) {
         return false;
     }
+    // Interdit de se parler à soi-même.
+    if ($senderId !== null && $peerId === $senderId) {
+        return false;
+    }
     static $cache = [];
-    if (array_key_exists($peerId, $cache)) {
-        return $cache[$peerId];
+    $cacheKey = ($senderId ?? 0) . ':' . $peerId;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
     }
 
-    $load = function () use ($db, $peerId) {
+    $load = function () use ($db, $peerId, $senderId, $senderRole) {
+        // 1) Le correspondant doit être un compte actif d'un rôle autorisé.
         $stmt = $db->prepare(
-            "SELECT COUNT(*) FROM users
-             WHERE id = :id AND role IN ('admin','superviseur','vendeur') AND is_active = 1"
+            "SELECT role FROM users
+             WHERE id = :id AND role IN ('admin','superviseur','vendeur','rh') AND is_active = 1"
         );
         $stmt->execute(['id' => $peerId]);
-        return (int) $stmt->fetchColumn() > 0;
+        $peerRole = $stmt->fetchColumn();
+        if ($peerRole === false) {
+            return false;
+        }
+
+        // 2) Règle de paire (source unique) : admin <-> tout le monde, ou
+        //    vendeur <-> superviseur. Tout le reste est refusé.
+        $myRole = $senderRole;
+        if ($myRole === null && $senderId !== null) {
+            $myRole = chat_user_role($db, $senderId);
+        }
+        return chat_pair_allowed($myRole, (string) $peerRole);
     };
 
     try {
-        $cache[$peerId] = $load();
+        $cache[$cacheKey] = (bool) $load();
     } catch (Throwable $e) {
-        $cache[$peerId] = (bool) chat_retry($db, $load);
+        $cache[$cacheKey] = (bool) chat_retry($db, $load);
     }
-    return $cache[$peerId];
+    return $cache[$cacheKey];
 }
 /* ---------------------------------------------------------------------
    Nettoyage URGENT du chat (outil administrateur, voir

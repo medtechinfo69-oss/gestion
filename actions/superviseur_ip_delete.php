@@ -10,8 +10,12 @@ if ($ipId <= 0) {
     redirect('superviseurs.php');
 }
 
-// Page de retour : vendeurs.php (section vendeurs) ou superviseurs.php.
-$returnTo = ($_POST['return_to'] ?? '') === 'vendeurs.php' ? 'vendeurs.php' : 'superviseurs.php';
+// Page de retour : la page d'origine de l'utilisateur concerné
+// (vendeurs.php, superviseurs.php ou rh_comptes.php). Liste blanche stricte.
+$allowedReturnPages = ['vendeurs.php', 'superviseurs.php', 'rh_comptes.php'];
+$returnTo = in_array($_POST['return_to'] ?? '', $allowedReturnPages, true)
+    ? $_POST['return_to']
+    : 'superviseurs.php';
 
 $stmt = $db->prepare('SELECT id, user_id, ip_address FROM superviseur_approved_ips WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $ipId]);

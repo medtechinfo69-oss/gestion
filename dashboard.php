@@ -22,9 +22,9 @@ $currentYear = (int) date('Y');
 // GET (perf_*) pour ne pas affecter les autres cartes du tableau de bord.
 // ---------------------------------------------------------------------
 $perfVendeurFilter = (int) (filter_var($_GET['perf_vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);
-// Par défaut : la date du jour. Si le paramètre est présent mais vide (« Tous »),
-// aucun filtre n'est appliqué sur ce champ.
-$perfJourRaw = array_key_exists('perf_jour', $_GET) ? trim((string) $_GET['perf_jour']) : (string) date('j');
+// Filtres « Performance vendeur par contrat » : par défaut, aucun jour
+// n'est filtré (« Tous »). L'utilisateur peut sélectionner un jour précis.
+$perfJourRaw = array_key_exists('perf_jour', $_GET) ? trim((string) $_GET['perf_jour']) : '';
 $perfMoisRaw = array_key_exists('perf_mois', $_GET) ? trim((string) $_GET['perf_mois']) : (string) date('n');
 $perfAnneeRaw = array_key_exists('perf_annee', $_GET) ? trim((string) $_GET['perf_annee']) : (string) $currentYear;
 $perfJourFilter = filter_var($perfJourRaw, FILTER_VALIDATE_INT);
@@ -37,8 +37,10 @@ $perfHasDateFilter = $perfJourRaw !== '' || $perfMoisRaw !== '' || $perfAnneeRaw
 
 // Filtres « Performance vendeur par chiffre d'affaire » — indépendants des
 // filtres ci-dessus, avec par défaut la date du jour (jour / mois / année).
+// Filtres « Performance vendeur par chiffre d'affaires » : par défaut,
+// aucun jour n'est filtré (« Tous »).
+$caJourRaw = array_key_exists('ca_jour', $_GET) ? trim((string) $_GET['ca_jour']) : '';
 $caVendeurFilter = (int) (filter_var($_GET['ca_vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);
-$caJourRaw = array_key_exists('ca_jour', $_GET) ? trim((string) $_GET['ca_jour']) : (string) date('j');
 $caMoisRaw = array_key_exists('ca_mois', $_GET) ? trim((string) $_GET['ca_mois']) : (string) date('n');
 $caAnneeRaw = array_key_exists('ca_annee', $_GET) ? trim((string) $_GET['ca_annee']) : (string) $currentYear;
 $caJourFilter = filter_var($caJourRaw, FILTER_VALIDATE_INT);
@@ -66,9 +68,9 @@ $monthLabels = [
 //  - "Jour", "Mois", "Année" : champs texte (saisie libre, sans liste déroulante)
 //    Jour et Mois vides = pas de filtre sur ce champ. Année vide = année en cours.
 // ---------------------------------------------------------------------
-// Par défaut (premier chargement, sans paramètre GET) : la date du jour.
-// Si le paramètre est présent mais vide (« Tous »), aucun filtre n'est appliqué.
-$jourRaw = array_key_exists('jour', $_GET) ? trim((string) $_GET['jour']) : (string) date('j');
+// Par défaut : aucun filtre journalier. « Tous » reste disponible dans le
+// formulaire et l'utilisateur peut choisir un jour précis si nécessaire.
+$jourRaw = array_key_exists('jour', $_GET) ? trim((string) $_GET['jour']) : '';
 $moisRaw = array_key_exists('mois', $_GET) ? trim((string) $_GET['mois']) : (string) date('n');
 $anneeRaw = trim((string) ($_GET['annee'] ?? ''));
 $vendeurFilter = (int) (filter_var($_GET['vendeur'] ?? '', FILTER_VALIDATE_INT) ?: 0);

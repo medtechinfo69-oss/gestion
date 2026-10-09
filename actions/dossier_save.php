@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
 require_once __DIR__ . '/../includes/security_integration.php';
-require_dossier_access();
+require_dossier_create_access();
 csrf_require();
 
 $user = current_user();
@@ -17,10 +17,12 @@ if ($isEdit && !is_admin() && !is_role_superviseur()) {
     redirect('dossiers.php');
 }
 
-// Un vendeur ne peut pas non plus CRÉER un dossier (même avec can_supervise = 1) :
-// il consulte uniquement sa propre liste. Cela bloque un POST direct forgé sur
-// ce script sans identifiant, alors que le formulaire/le menu lui sont masqués.
-if (!$isEdit && !is_admin() && !is_role_superviseur()) {
+// Un vendeur peut CRÉER un dossier (même capacité que le superviseur, voir
+// can_create_dossier()) : le dossier créé lui est automatiquement attribué
+// (valeur forcée plus bas). En revanche il ne peut toujours pas MODIFIER un
+// dossier existant (garde précédente, inchangée), ni supprimer/valider quoi
+// que ce soit sur les autres rôles.
+if (!$isEdit && !can_create_dossier()) {
     sec_log('permission_denied', 'dossier', null, 'Vendeur attempted to create dossier', false, 'Creation reserved to admin/superviseur');
     http_response_code(403);
     set_flash('error', 'Création de dossier réservée aux administrateurs et superviseurs.');
@@ -70,7 +72,8 @@ if (is_role_superviseur() && $isEdit) {
     if ($courrierLocked) {
         $courrierValues = courrier_values($existing['courrier'] ?? '');
     }
-    $courrierValues = is_array($courrierValues) ? array_values(array_intersect(options_courrier(), array_map('clean_str', $courrierValues))) : [];
+    $courrierValues = is_array($courrierValues) ? array_map('courrier_canonical', array_map('clean_str', $courrierValues)) : [];
+    $courrierValues = array_values(array_intersect(options_courrier(), $courrierValues));
     $courrier = json_encode(array_values(array_unique($courrierValues)), JSON_UNESCAPED_UNICODE);
     $etat = etat_dossier_from_courrier($courrierValues);
     $postedEtatContrat = clean_str($_POST['etat_contrat'] ?? '');
@@ -196,7 +199,9 @@ try {
                     date_dossier_complet = :date_dossier_complet, etat_contrat = :etat_contrat,
                     controle_qualite = :controle_qualite,
                     date_contrat_non_actif = :date_contrat_non_actif, commentaire = :commentaire,
-                    motif_annulation = :motif_annulation, updated_by = :updated_by
+                    motif_annulation = :motif_annulation,
+                    mutuelle_a_resilier = :mutuelle_a_resilier, date_resiliation = :date_resiliation,
+                    type_resiliation = :type_resiliation, updated_by = :updated_by
                 WHERE id = :id';
         $stmt = $db->prepare($sql);
         $data['updated_by'] = $user['id'];
@@ -231,12 +236,14 @@ try {
                     (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
                      nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville,
                      type_signature, ca_mois, ca_annuel, date_effet, date_injection, produit, compagnie, courrier, etat_dossier,
-                     date_dossier_complet, etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation, created_by)
+                     date_dossier_complet, etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation,
+                     mutuelle_a_resilier, date_resiliation, type_resiliation, created_by)
                 VALUES
                     (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
                      :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville,
                      :type_signature, :ca_mois, :ca_annuel, :date_effet, :date_injection, :produit, :compagnie, :courrier, :etat_dossier,
-                     :date_dossier_complet, :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
+                     :date_dossier_complet, :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation,
+                     :mutuelle_a_resilier, :date_resiliation, :type_resiliation, :created_by)';
         $stmt = $db->prepare($sql);
         $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
         $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;
@@ -272,8 +279,16 @@ try {
     sec_log($action, 'dossier', (string) $id, ($isEdit ? 'Updated' : 'Created') . ' dossier: ' . ($data['nom'] ?? ''));
 } catch (PDOException $e) {
     $db->rollBack();
-    if ((int) $e->getCode() === 23000) {
-        set_flash('error', 'Ce numéro de portable existe déjà pour un autre dossier.');
+    // SQLSTATE 23000 = violation d'integrite. Le message montre n'est annonce
+    // que si la cause reelle est bien le telephone 2 (contrainte
+    // uq_dossiers_portable). Sinon on ne trompe pas l'utilisateur en lui
+    // evoquant un numero en double alors qu'il vient de le laisser vide : un
+    // telephone 2 vide est stocke a NULL et ne peut donc pas creer de doublon.
+    $portableRenseigne = trim((string) ($data['portable'] ?? '')) !== '';
+    $estDoublonPortable = $portableRenseigne
+        && (str_contains($e->getMessage(), 'uq_dossiers_portable') || stripos($e->getMessage(), 'Duplicate entry') !== false);
+    if ($estDoublonPortable) {
+        set_flash('error', 'Ce numéro de téléphone 2 existe déjà pour un autre dossier.');
         sec_log('permission_denied', 'dossier', null, 'Duplicate phone number', false, 'Duplicate entry');
     } else {
         error_log('dossier_save error: ' . $e->getMessage());

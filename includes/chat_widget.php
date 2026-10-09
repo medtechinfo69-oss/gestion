@@ -1,10 +1,15 @@
 <?php
 /**
  * Widget de chat flottant (cercle en bas à droite, style Messenger).
- * Visible par les admins, superviseurs ET vendeurs connectés.
- * Affiche la liste des contacts (tous les comptes actifs) avec voyant vert = en ligne.
+ * Visible par les admins, superviseurs, vendeurs ET comptes RH connectés.
+ * Paires autorisées (voir chat_pair_allowed() dans includes/chat.php) :
+ *   - l'administrateur discute avec tout le monde ;
+ *   - un VENDEUR discute avec un SUPERVISEUR (et inversement).
+ * Un compte RH ne voit que les administrateurs ; un vendeur ne voit dans ses
+ * contacts que les administrateurs et les superviseurs.
+ * Affiche la liste des contacts autorisés avec voyant vert = en ligne.
  */
-if (!defined('APP_INIT') || !is_logged_in() || (!is_admin() && !is_superviseur() && !is_vendeur_user())) {
+if (!defined('APP_INIT') || !can_chat_role()) {
   return;
 }
 $chatMe = current_user();
@@ -16,7 +21,7 @@ $chatContactsJs = [];
 try {
     $chatDb = isset($db) ? $db : null;
     if ($chatDb instanceof PDO) {
-        foreach (chat_get_contacts($chatDb, (int) $chatMe['id']) as $chatC) {
+        foreach (chat_get_contacts($chatDb, (int) $chatMe['id'], (string) ($chatMe['role'] ?? '')) as $chatC) {
             $chatId = (int) $chatC['id'];
             $chatContactsJs[$chatId] = [
                 'id'       => $chatId,
@@ -433,6 +438,30 @@ try {
 <script>
   (function () {
     var CSRF = <?= json_encode($chatCsrf) ?>;
+    // Règle d'accès (source unique côté serveur : chat_pair_allowed() en PHP) :
+    //   - l'administrateur discute avec tout le monde ;
+    //   - un VENDEUR discute avec un SUPERVISEUR (et inversement) ;
+    //   - un compte RH ne discute qu'avec l'administrateur.
+    var IS_ADMIN = <?= is_admin() ? 'true' : 'false' ?>;
+    var MY_ROLE = <?= json_encode((string) ($chatMe['role'] ?? '')) ?>;
+    // Libellé d'un rôle pour l'affichage (miroir JS de role_label() en PHP).
+    // Passé par PHP pour rester la source unique : un nouveau rôle n'a pas
+    // à être ajouté deux fois.
+    // NB : boucle simple volontairement (pas de fn() fléchée, qui exige
+    // PHP 7.4) — plusieurs hébergeurs mutualisés tournent encore en 7.2/7.3
+    // et une simple erreur de syntaxe rendrait TOUTES les pages en HTTP 500.
+    <?php
+    $roleLabelsJs = [];
+    foreach (login_allowed_roles() as $roleName) {
+        $roleLabelsJs[$roleName] = role_label($roleName);
+    }
+    ?>
+    var ROLE_LABELS = <?= json_encode($roleLabelsJs) ?>;
+
+    /** Libellé lisible d'un rôle, avec repli sur le rôle brut. */
+    function roleText(role) {
+      return ROLE_LABELS[role] || (role || '');
+    }
     // TRANSPORT PRINCIPAL : la PAGE COURANTE sert l'API (?chat_api=...).
     // Certains hébergeurs gratuits (InfinityFree) filtrent les requêtes vers
     // le dossier actions/ ; une requête vers la page elle-même passe toujours.
@@ -512,6 +541,10 @@ try {
         if (!d.ok) return;
         lastDiag = d.diag || null;
         var online = false, unread = 0;
+        // Liste REMPLACÉE (et non fusionnée) : la liste renvoyée par le serveur
+        // fait déjà foi (chaque rôle ne reçoit que ses correspondants autorisés :
+        // admin = tout le monde, vendeur = admins + superviseurs, etc.).
+        contacts = {};
         d.contacts.forEach(function (c) { contacts[c.id] = c; if (c.online) online = true; unread += c.unread; });
         presence.classList.toggle('online', online);
         if (unread > 0) { badge.style.display = 'flex'; badge.textContent = unread > 99 ? '99+' : unread; }
@@ -536,7 +569,7 @@ try {
     }
 
     /** Message affiché quand la liste est vide : explique la VRAIE raison. */
-    function emptyListMessage() {
+    function adminEmptyListMessage() {
       if (apiFail) {
         return 'API du chat momentanément injoignable (protection de l’hébergeur). Reconnexion automatique en cours…';
       }
@@ -561,6 +594,27 @@ try {
       return 'Aucun contact disponible. Activez ou créez un autre compte (admin, superviseur ou vendeur) pour discuter.';
     }
 
+    /**
+     * Message quand la liste est vide : chaque rôle voit la bonne explication.
+     * Rappel des paires autorisées (miroir de chat_pair_allowed() en PHP) :
+     *   admin -> tout le monde ; vendeur <-> superviseur ; rh -> admin seul.
+     */
+    function emptyListMessage() {
+      if (!IS_ADMIN) {
+        if (apiFail) {
+          return 'API du chat momentanément injoignable (protection de l’hébergeur). Reconnexion automatique en cours…';
+        }
+        if (MY_ROLE === 'vendeur') {
+          return 'Aucun contact disponible. Vous pouvez écrire à l’administrateur ou à un superviseur.';
+        }
+        if (MY_ROLE === 'superviseur') {
+          return 'Aucun contact disponible. Vous pouvez écrire à l’administrateur ou à un vendeur.';
+        }
+        return 'Aucun administrateur disponible pour le chat. Vous pouvez écrire uniquement à l’administrateur.';
+      }
+      return adminEmptyListMessage();
+    }
+
     function renderList() {
       var html = '';
       var arr = Object.values(contacts);
@@ -571,7 +625,7 @@ try {
           '<div class="chat-avatar">' + esc((c.name || '?').charAt(0).toUpperCase()) +
           '<span class="chat-dot' + (c.online ? ' online' : '') + '"></span></div>' +
           '<div class="cc-info"><div class="cc-name">' + esc(c.name) + '</div>' +
-          '<div class="cc-role">' + (c.role === 'admin' ? 'Administrateur' : (c.role === 'vendeur' ? 'Vendeur' : 'Superviseur')) +
+          '<div class="cc-role">' + roleText(c.role) +
           (c.online ? ' &middot; en ligne' : ' &middot; hors ligne') + '</div></div>' +
           '<span class="cc-badge"' + (c.unread ? ' style="display:flex"' : '') + '>' + c.unread + '</span></div>';
       });
@@ -629,8 +683,9 @@ try {
      * Met à jour les coches de TOUS mes messages selon l'état de lecture :
      *   - envoyé, pas encore lu   -> 1 coche grise
      *   - lu par le correspondant -> 2 coches bleues ("Vu")
-     * Fonctionne côté admin ET côté superviseur (logique symétrique :
-     * celui qui envoie voit les coches, celui qui reçoit fait passer à "vu").
+     * Fonctionne pour TOUS les rôles (logique symétrique : celui qui envoie
+     * voit les coches, celui qui reçoit fait passer à "vu"), y compris la
+     * conversation vendeur <-> superviseur.
      */
     function markSeen() {
       msgsEl.querySelectorAll('.chat-msg.mine[data-id]').forEach(function (el) {

@@ -19,7 +19,7 @@ require __DIR__ . '/includes/header.php';
   <div class="card-body">
     <h2>Importer un fichier Excel</h2>
     <p class="help-text">Formats acceptés : .xlsx ou .csv. La première ligne doit contenir les mêmes en-têtes que le tableau Dossiers.</p>
-    <form action="<?= e(APP_URL) ?>/actions/dossiers_import.php" method="post" enctype="multipart/form-data">
+    <form action="<?= e(APP_URL) ?>/actions/dossiers_import.php" method="post" enctype="multipart/form-data" data-upload-max-bytes="<?= max_import_size_bytes($db) ?>">
       <?= csrf_field() ?>
       <div class="form-group">
         <label for="fichier">Fichier Excel</label>

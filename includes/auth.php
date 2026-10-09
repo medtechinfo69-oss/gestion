@@ -196,6 +196,81 @@ function is_supervisor_like(): bool
 }
 
 /**
+ * Vrai pour un compte RESSOURCES HUMAINES (rôle « rh »).
+ *
+ * Profil d'accès STRICT : un compte RH ne voit QUE le menu « Gestion RH »
+ * (Tableau RH, Employés, Salaires, Historique) et son profil. Il n'a aucun
+ * accès à la gestion de production (dossiers, prime, origines), ni aux pages
+ * d'administration, ni aux autres rôles. Voir can_access_rh() et
+ * rh_page_lock() qui appliquent ce verrou de façon centralisée.
+ */
+function is_rh(): bool
+{
+    return is_logged_in() && ($_SESSION['user']['role'] ?? '') === 'rh';
+}
+
+/**
+ * Libellé lisible d'un rôle, pour l'affichage dans l'interface.
+ * Source unique : évite qu'un nouveau rôle (comme « rh ») s'affiche sous
+ * le mauvais libellé dans la barre latérale.
+ */
+function role_label(string $role): string
+{
+    $labels = [
+        'admin'       => 'Administrateur',
+        'superviseur' => 'Superviseur',
+        'vendeur'     => 'Vendeur',
+        'rh'          => 'RH',
+    ];
+    return $labels[$role] ?? ucfirst($role);
+}
+
+/**
+ * Vrai si l'utilisateur peut administrer le module RH (pages + actions).
+ * L'administrateur global garde toujours tous les droits ; un compte RH est
+ * un compte dédié, avec EXACTEMENT les mêmes fonctions dans le module RH.
+ */
+function can_access_rh(): bool
+{
+    return is_admin() || is_rh();
+}
+
+/**
+ * Liste des rôles autorisés à se connecter. Le rôle « rh » est inclus :
+ * c'est un rôle métier à part entière, strictement cloisonné sur la RH.
+ */
+function login_allowed_roles(): array
+{
+    return ['admin', 'superviseur', 'vendeur', 'rh'];
+}
+
+/**
+ * Pages et SCRIPTS D'ACTION accessibles à un compte RH. Tout le reste lui est
+ * refusé (403) et l'utilisateur est renvoyé vers son tableau de bord RH.
+ * 'profile.php' reste accessible : c'est là qu'un compte RH change son mot
+ * de passe (y compris imposé à la première connexion).
+ *
+ * Les scripts d'action du module DOIVENT figurer ici : sans eux, le
+ * cloisonnement interceptait les formulaires AVANT leur traitement (le
+ * contrôle porte sur le nom du script appelé, y compris dans actions/).
+ * L'enregistrement, la modification et la suppression d'un employé ou d'un
+ * bulletin de salaire étaient alors silencieusement ignorés : le compte RH
+ * était renvoyé à son tableau de bord sans message d'erreur.
+ *
+ * La gestion des comptes RH (rh_comptes.php + rh_save.php / rh_update.php /
+ * rh_delete.php) est, elle, réservée à l'administrateur.
+ */
+function rh_allowed_pages(): array
+{
+    return [
+        'rh_dashboard.php', 'rh_employees.php', 'rh_salaries.php', 'rh_history.php',
+        // Écritures du module RH : création, modification, suppression.
+        'rh_employee_action.php', 'rh_salary_action.php',
+        'profile.php', 'logout.php', 'profile_update.php',
+    ];
+}
+
+/**
  * Vrai pour tout compte soumis à l'approbation d'adresse IP à la connexion :
  * superviseurs et vendeurs « superviseur-like ». Le drapeau est enregistré en
  * session à l'authentification (voir attempt_login).
@@ -221,6 +296,43 @@ function require_dossier_access(): void
     }
 }
 
+/**
+ * CRÉATION d'un dossier : administrateur, superviseur ET vendeur.
+ *
+ * Le vendeur obtient la MÊME capacité de créer un dossier que le superviseur ;
+ * il ne s'agit en revanche QUE de la création : la modification, la
+ * suppression, l'import Excel et le reste du module restent strictement
+ * réservés à l'administrateur et au superviseur strict (les gardes
+ * correspondantes dans dossier_form.php et actions/dossier_save.php ne sont
+ * pas modifiées).
+ *
+ * Le vendeur connecté saisit toujours son propre dossier : le champ
+ * « Vendeur » est figé en lecture seule dans le formulaire ET forcé côté
+ * serveur (voir actions/dossier_save.php), il ne peut donc ni choisir ni
+ * rattacher un dossier à un autre vendeur.
+ */
+function can_create_dossier(): bool
+{
+    return is_admin() || is_superviseur() || is_vendeur_user();
+}
+
+/**
+ * Garde des écrans et actions de SAISIE d'un dossier (création, et
+ * modification pour les seuls administrateurs / superviseurs).
+ * Le refus renvoie vers la liste des dossiers, plus pertinente que le tableau
+ * de bord de production pour un vendeur.
+ */
+function require_dossier_create_access(): void
+{
+    require_login();
+    if (!can_create_dossier()) {
+        http_response_code(403);
+        set_flash('error', 'Accès réservé aux administrateurs, superviseurs et vendeurs.');
+        header('Location: ' . APP_URL . '/dossiers.php');
+        exit;
+    }
+}
+
 function require_login(): void
 {
     if (!is_logged_in()) {
@@ -228,7 +340,7 @@ function require_login(): void
         exit;
     }
 
-    if (!in_array($_SESSION['user']['role'] ?? '', ['admin', 'superviseur', 'vendeur'], true)) {
+    if (!in_array($_SESSION['user']['role'] ?? '', login_allowed_roles(), true)) {
         logout_user();
         header('Location: ' . APP_URL . '/login.php');
         exit;
@@ -242,6 +354,10 @@ function require_login(): void
         header('Location: ' . APP_URL . '/profile.php?force=1');
         exit;
     }
+
+    // Cloisonnement du rôle « rh » : appliqué APRÈS le contrôle du mot de
+    // passe, pour qu'un compte RH puisse toujours passer par profile.php.
+    rh_page_lock();
 }
 
 function require_admin(): void
@@ -264,6 +380,58 @@ function require_admin_or_superviseur(): void
         header('Location: ' . APP_URL . '/dashboard.php');
         exit;
     }
+}
+
+/**
+ * Garde le module RH : autorisé à l'administrateur ET au compte RH.
+ * Un compte RH obtient ainsi EXACTEMENT les mêmes fonctions RH que
+ * l'administrateur, mais reste cantonné à ce module (voir rh_page_lock()).
+ */
+function require_rh(): void
+{
+    require_login();
+    if (!can_access_rh()) {
+        // Refus SILENCIEUX, comme rh_page_lock() : on redirige vers le
+        // tableau de bord RH sans afficher d'alerte (voir le journal).
+        http_response_code(403);
+        log_security_event('ACCESS_DENIED', 'Acces au module Gestion RH refuse pour ce role');
+        header('Location: ' . APP_URL . '/rh_dashboard.php');
+        exit;
+    }
+}
+
+/**
+ * CLOISONNEMENT DU RÔLE « rh » (appelé en fin de require_login()).
+ *
+ * Un compte RH n'est autorisé que sur les pages de rh_allowed_pages() :
+ * toute page de production (dashboard, dossiers, prime, origines) ou
+ * d'administration (superviseurs, vendeurs, sécurité, réparation BDD…)
+ * lui renvoie un 403 et le redirige vers son tableau de bord RH.
+ *
+ * C'est un garde-fou CENTRALISÉ : appelé par require_login(), donc appelé
+ * automatiquement par chaque page et chaque action de l'application, y
+ * compris si l'on oublie d'ajouter require_rh() quelque part.
+ */
+function rh_page_lock(): void
+{
+    if (!is_rh()) {
+        return;
+    }
+    $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    if (in_array($script, rh_allowed_pages(), true)) {
+        return;
+    }
+    // Refus SILENCIEUX : pas de message d'erreur a l'ecran. Un compte RH qui
+    // ouvre par erreur une page hors module (dashboard, dossiers…) est
+    // simplement renvoye vers son tableau de bord RH. La tentative reste
+    // tracee dans le journal de securite pour l'administrateur.
+    http_response_code(403);
+    log_security_event(
+        'ACCESS_DENIED',
+        "role=rh bloque sur la page {$script} (hors module Gestion RH)"
+    );
+    header('Location: ' . APP_URL . '/rh_dashboard.php');
+    exit;
 }
 
 /**
@@ -326,11 +494,16 @@ function attempt_login(PDO $db, string $username, string $password): array
         return ['success' => false, 'message' => 'Identifiants incorrects.'];
     }
 
-    // Approbation d'adresse IP : s'applique aux superviseurs ET aux vendeurs
-    // « superviseur-like » (can_supervise = 1). Une IP inconnue crée une demande
-    // en attente qu'un administrateur doit approuver depuis la page dédiée.
+    // Approbation d'adresse IP : s'applique aux superviseurs, aux vendeurs
+    // « superviseur-like » (can_supervise = 1) ET aux comptes RH.
+    // Une IP inconnue crée une demande en attente qu'un administrateur doit
+    // approuver depuis la page Superviseurs, Vendeurs ou RH.
     $canSupervise = ($user['role'] === 'vendeur' && !empty($user['can_supervise']));
-    $requiresIpApproval = ($user['role'] === 'superviseur' || $canSupervise);
+    $requiresIpApproval = in_array(
+        $user['role'],
+        ['superviseur', 'rh'],
+        true
+    ) || $canSupervise;
 
     if ($requiresIpApproval) {
         try {

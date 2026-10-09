@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_dossier_access();
+require_dossier_create_access();
 
 // Seuls l'admin et le rôle « superviseur » strict peuvent MODIFIER un dossier.
 // Les vendeurs (même avec can_supervise = 1) restent en lecture seule :
@@ -13,10 +13,11 @@ if (!empty($_GET['id']) && !is_admin() && !is_role_superviseur()) {
     redirect('dossiers.php');
 }
 
-// Un vendeur (même can_supervise = 1) n'a ni « Nouveau dossier » ni « Importer » :
-// il ne peut consulter que sa propre liste. L'accès direct à la page de création
-// (sans id) lui est donc refusé ici, en complément du menu et de la liste.
-if (empty($_GET['id']) && !is_admin() && !is_role_superviseur()) {
+// CRÉATION : le vendeur dispose désormais de la même capacité que le
+// superviseur (can_create_dossier()) ; la MODIFICATION, elle, reste
+// interdite (garde ci-dessus). require_dossier_create_access() a déjà exclu
+// les rôles non habilités (cloisonnement du rôle « rh » compris).
+if (empty($_GET['id']) && !can_create_dossier()) {
     http_response_code(403);
     set_flash('error', 'Création de dossier réservée aux administrateurs et superviseurs.');
     redirect('dossiers.php');
@@ -27,6 +28,7 @@ $dossier = null;
 $isEdit = false;
 $isAdmin = is_admin();
 $isSuperviseur = is_role_superviseur();
+$isVendeur = is_vendeur_user();
 
 if ($id) {
     $stmt = $db->prepare('SELECT * FROM dossiers WHERE id = :id');
@@ -58,6 +60,7 @@ $courrierLocked = $isEdit
 // « Actif » ; l'administrateur peut alors le débloquer via « Réactiver
 // supervision » (voir actions/dossier_reactivate.php).
 $etatContratLocked = $isEdit && (($dossier['etat_contrat'] ?? 'Actif') !== 'Actif');
+$controleQualiteLocked = $isEdit && (($dossier['date_controle_qualite_supervision'] ?? null) !== null);
 
 // Ré-affichage après erreur de validation (données conservées en session)
 $formData = $_SESSION['form_data'] ?? null;
@@ -84,7 +87,7 @@ $vendeurs = $db->query("SELECT id, nom_complet FROM users WHERE role = 'vendeur'
 // vendeur connecté). Les administrateurs et superviseurs conservent la liste
 // complète et restent libres de choisir n'importe quel vendeur.
 $currentUserId = (int) (current_user()['id'] ?? 0);
-$lockedVendeur = is_vendeur_user();
+$lockedVendeur = $isVendeur;
 $lockedVendeurId = $lockedVendeur ? ($isEdit ? (int) $dossier['vendeur_id'] : $currentUserId) : 0;
 $lockedVendeurNom = '';
 if ($lockedVendeur) {
@@ -107,21 +110,27 @@ require __DIR__ . '/includes/header.php';
 <?php if ($isSuperviseur && $isEdit): ?>
 <div class="card dossier-form-card">
   <div class="card-body">
-    <p class="help-text">Vous pouvez uniquement modifier le courrier et le commentaire. L'état du dossier est calculé automatiquement.</p>
-    <form action="<?= e(APP_URL) ?>/actions/dossier_save.php" method="post">
+    <p class="help-text">Vous pouvez uniquement modifier le commentaire du dossier. Les sections Courrier, État du contrat et Contrôle qualité sont gérées par l'administrateur et ne sont pas modifiables ici.</p>
+    <form action="<?= e(APP_URL) ?>/actions/dossier_save.php" method="post" data-supervision-form>
       <?= csrf_field() ?>
       <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+      <input type="hidden" name="save_section" value="commentaire">
       <div class="form-grid mb-16">
         <div class="form-group span-full">
           <label>Courrier</label>
-          <div class="flex gap-12" style="flex-wrap:wrap;">
+          <div class="courrier-grid">
             <?php foreach (options_courrier() as $option): ?>
               <?php $checked = in_array($option, $courrierValues, true); ?>
-              <label><input type="checkbox" class="courrier-checkbox" name="courrier[]" value="<?= e($option) ?>" <?= $checked ? 'checked' : '' ?> <?= $courrierLocked ? 'disabled' : '' ?>> <?= e($option) ?></label>
+              <label class="courrier-option">
+                <input type="checkbox" class="courrier-checkbox" name="courrier[]" value="<?= e($option) ?>" <?= $checked ? 'checked' : '' ?> <?= $courrierLocked ? 'disabled' : '' ?>>
+                <span><?= e($option) ?></span>
+              </label>
             <?php endforeach; ?>
           </div>
-          <div id="courrier-message" class="alert alert-error" style="display:none;margin-top:10px;">Merci de contacter l'administrateur.</div>
-          <div class="help-text">Les quatre cases cochées donnent automatiquement « Dossier complet ».</div>
+          <?php if ($courrierLocked): ?>
+            <div id="courrier-message" class="alert alert-error" style="margin-top:10px;">Merci de contacter l'administrateur.</div>
+          <?php endif; ?>
+          <div class="help-text">Cochez les quatre cases pour obtenir automatiquement « Dossier complet ».</div>
           <button type="submit" name="save_section" value="courrier" class="btn btn-primary btn-sm section-save" <?= $courrierLocked || $dossierCompletLocked ? 'disabled' : '' ?>>Enregistrer Courrier</button>
         </div>
         <div class="form-group span-full">
@@ -132,18 +141,24 @@ require __DIR__ . '/includes/header.php';
             <?php endforeach; ?>
           </select>
           <input type="hidden" id="etat_contrat_locked" name="etat_contrat_locked" value="">
+          <?php if ($etatContratLocked): ?>
+            <div class="alert alert-error" style="margin-top:10px;">Merci de contacter l'administrateur.</div>
+          <?php endif; ?>
           <button type="submit" name="save_section" value="etat_contrat" class="btn btn-primary btn-sm section-save" <?= $etatContratLocked ? 'disabled' : '' ?>>Enregistrer État du contrat</button>
         </div>
         <div class="form-group span-full">
           <label for="controle_qualite">Contrôle qualité</label>
-          <select id="controle_qualite" name="controle_qualite" <?= (($dossier['date_controle_qualite_supervision'] ?? null) !== null) ? 'disabled' : '' ?>>
+          <select id="controle_qualite" name="controle_qualite" <?= $controleQualiteLocked ? 'disabled' : '' ?> aria-disabled="<?= $controleQualiteLocked ? 'true' : 'false' ?>">
             <option value="">— Sélectionner —</option>
             <?php foreach (controles_qualite_valides() as $controle): ?>
               <option value="<?= e($controle) ?>" <?= ($dossier['controle_qualite'] ?? '') === $controle ? 'selected' : '' ?>><?= e($controle) ?></option>
             <?php endforeach; ?>
           </select>
           <input type="hidden" id="controle_qualite_locked" name="controle_qualite_locked" value="">
-          <button type="submit" name="save_section" value="controle_qualite" class="btn btn-primary btn-sm section-save" <?= (($dossier['date_controle_qualite_supervision'] ?? null) !== null) ? 'disabled' : '' ?>>Enregistrer Contrôle qualité</button>
+          <?php if ($controleQualiteLocked): ?>
+            <div class="alert alert-error" style="margin-top:10px;">Merci de contacter l'administrateur.</div>
+          <?php endif; ?>
+          <button type="submit" name="save_section" value="controle_qualite" class="btn btn-primary btn-sm section-save" <?= $controleQualiteLocked ? 'disabled' : '' ?>>Enregistrer Contrôle qualité</button>
         </div>
         <div class="form-group span-full">
           <label for="commentaire">Commentaire dossier</label>
@@ -312,14 +327,16 @@ require __DIR__ . '/includes/header.php';
           <?php if (isset($formErrors['mail'])): ?><div class="field-error"><?= e($formErrors['mail']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
-          <label for="telfix">Téléphone 1</label>
-          <input type="tel" id="telfix" name="telfix" value="<?= e($v('telfix')) ?>" maxlength="30">
+          <label for="telfix">Téléphone 1 <span class="req">*</span></label>
+          <input type="tel" id="telfix" name="telfix" value="<?= e($v('telfix')) ?>" maxlength="30" class="<?= isset($formErrors['telfix']) ? 'input-error' : '' ?>">
+          <?php if (isset($formErrors['telfix'])): ?><div class="field-error"><?= e($formErrors['telfix']) ?></div><?php endif; ?>
         </div>
         <div class="form-group">
-          <label for="portable">Téléphone 2 <span class="req">*</span></label>
+          <label for="portable">Téléphone 2</label>
           <input type="tel" id="portable" name="portable" value="<?= e($v('portable')) ?>" maxlength="30" class="<?= isset($formErrors['portable']) ? 'input-error' : '' ?>">
           <?php if (isset($formErrors['portable'])): ?><div class="field-error"><?= e($formErrors['portable']) ?></div><?php endif; ?>
-          <div class="help-text">Doit être unique (règle reprise du classeur d'origine).</div>
+          <?php /* Champ facultatif : seule la precision est ajoutee, le design reste inchange. */ ?>
+          <div class="help-text">Facultatif. S'il est renseigné, ce numéro doit être unique.</div>
         </div>
         <div class="form-group">
           <label for="nombre_personnes">Nombre d'assurés</label>
@@ -397,14 +414,25 @@ require __DIR__ . '/includes/header.php';
           </datalist>
           <?php if (isset($formErrors['compagnie'])): ?><div class="field-error"><?= e($formErrors['compagnie']) ?></div><?php endif; ?>
         </div>
+        <?php // Ni le superviseur ni le vendeur ne renseignent ces champs à la
+              // création (Courrier, État du contrat, Contrôle qualité et motif
+              // d'annulation) : leur formulaire est identique. Ces champs sont
+              // gérés par l'administrateur ; actions/dossier_save.php applique
+              // alors les valeurs par défaut (dossier incomplet, contrat
+              // « Actif », pas de contrôle qualité). ?>
+        <?php if (!$isSuperviseur && !$isVendeur): ?>
         <div class="form-group">
           <label>Courrier</label>
-          <div class="flex gap-12" style="flex-wrap:wrap;">
+          <div class="courrier-grid">
+            <?php $courrierPost = courrier_values($v('courrier')); ?>
             <?php foreach (options_courrier() as $option): ?>
-              <label><input type="checkbox" name="courrier[]" value="<?= e($option) ?>" <?= in_array($option, courrier_values($v('courrier')), true) ? 'checked' : '' ?>> <?= e($option) ?></label>
+              <label class="courrier-option">
+                <input type="checkbox" name="courrier[]" value="<?= e($option) ?>" <?= in_array($option, $courrierPost, true) ? 'checked' : '' ?>>
+                <span><?= e($option) ?></span>
+              </label>
             <?php endforeach; ?>
           </div>
-          <div class="help-text">Les quatre cases cochées donnent automatiquement « Dossier complet ».</div>
+          <div class="help-text">Cochez les quatre cases pour obtenir automatiquement « Dossier complet ».</div>
         </div>
         <div class="form-group">
           <label for="etat_contrat">État du contrat <span class="req">*</span></label>
@@ -429,6 +457,34 @@ require __DIR__ . '/includes/header.php';
           <input type="text" id="motif_annulation" name="motif_annulation" value="<?= e($v('motif_annulation')) ?>" maxlength="255" placeholder="ex : Radiation pour non paiement">
           <div class="help-text">Renseigné automatiquement dès que l'état du contrat n'est plus « Actif ».</div>
         </div>
+        <?php
+        // -----------------------------------------------------------------
+        // Nouveaux champs facultatifs de résiliation de la mutuelle.
+        // Visibles uniquement par l'administrateur (même bloc que Courrier /
+        // État du contrat / Motif d'annulation) : le vendeur et le
+        // superviseur ne les renseignent pas à la création.
+        // ----------------------------------------------------------------- ?>
+        <div class="form-group span-full">
+          <label for="mutuelle_a_resilier">Mutuelle à résilier</label>
+          <input type="text" id="mutuelle_a_resilier" name="mutuelle_a_resilier" value="<?= e($v('mutuelle_a_resilier')) ?>" maxlength="255" placeholder="ex : Harmonie Mutuelle, Alan…" class="<?= isset($formErrors['mutuelle_a_resilier']) ? 'input-error' : '' ?>">
+          <?php if (isset($formErrors['mutuelle_a_resilier'])): ?><div class="field-error"><?= e($formErrors['mutuelle_a_resilier']) ?></div><?php endif; ?>
+        </div>
+        <div class="form-group">
+          <label for="date_resiliation">Date de résiliation</label>
+          <input type="date" id="date_resiliation" name="date_resiliation" value="<?= e($v('date_resiliation')) ?>" class="<?= isset($formErrors['date_resiliation']) ? 'input-error' : '' ?>">
+          <?php if (isset($formErrors['date_resiliation'])): ?><div class="field-error"><?= e($formErrors['date_resiliation']) ?></div><?php endif; ?>
+        </div>
+        <div class="form-group">
+          <label for="type_resiliation">Type de résiliation</label>
+          <select id="type_resiliation" name="type_resiliation" class="<?= isset($formErrors['type_resiliation']) ? 'input-error' : '' ?>">
+            <option value="">— Sélectionner —</option>
+            <?php foreach (types_resiliation_valides() as $typeResiliation): ?>
+              <option value="<?= e($typeResiliation) ?>" <?= $v('type_resiliation') === $typeResiliation ? 'selected' : '' ?>><?= e($typeResiliation) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <?php if (isset($formErrors['type_resiliation'])): ?><div class="field-error"><?= e($formErrors['type_resiliation']) ?></div><?php endif; ?>
+        </div>
+        <?php endif; ?>
         </div>
         <div class="form-group span-full">
           <label for="commentaire">Commentaire dossier</label>

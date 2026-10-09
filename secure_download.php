@@ -107,8 +107,8 @@ require __DIR__ . '/includes/header.php';
     <?php elseif ($downloadInfo): ?>
       <div style="margin-bottom:20px;">
         <p style="font-size:16px;margin-bottom:10px;">Entrez le code de vérification reçu par email.</p>
-        <p style="font-size:12px;color:#666;">Fichier: <strong><?= e($downloadInfo['filename']) ?></strong></p>
-        <p style="font-size:12px;color:#666;">Tentatives restantes: <strong><?= (int) $remainingAttempts ?></strong></p>
+        <p class="dl-fine">Fichier: <strong><?= e($downloadInfo['filename']) ?></strong></p>
+        <p class="dl-fine">Tentatives restantes: <strong><?= (int) $remainingAttempts ?></strong></p>
       </div>
       <form method="post" style="max-width:300px;margin:0 auto;">
         <div style="margin-bottom:15px;">
@@ -116,8 +116,8 @@ require __DIR__ . '/includes/header.php';
         </div>
         <button type="submit" class="btn btn-primary btn-block">Télécharger</button>
       </form>
-      <p style="margin-top:20px;font-size:12px;color:#666;">
-        Lien expire le: <?= date('d/m/Y à H:i', strtotime($downloadInfo['expires_at'])) ?>
+      <p class="dl-fine" style="margin-top:20px;">
+        Lien expire le: <?= format_datetime_tn($downloadInfo['expires_at'], 'd/m/Y à H:i') ?>
       </p>
     <?php endif; ?>
   </div>

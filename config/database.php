@@ -55,6 +55,24 @@ class Database
                 } catch (Throwable $e) {
                     error_log('DB sql_mode not applied: ' . $e->getMessage());
                 }
+
+                // FUSEAU HORAIRE — correction de la cause racine.
+                // Les colonnes DATETIME valent CURRENT_TIMESTAMP / NOW(), que
+                // MySQL évalue dans le fuseau du SERVEUR (souvent UTC sur un
+                // hébergeur mutualisé). Sans ce réglage, une notification
+                // créée à 10:00 en heure de Tunis est enregistrée 2 h plus
+                // tôt (UTC) ou plus tard, puis affichée décalée.
+                // On force donc la session sur le fuseau applicatif : NOW()
+                // stocke désormais la bonne heure tunisienne.
+                try {
+                    $tz = self::appTimezone();
+                    // Forme numérique : acceptée même sur un serveur dont les
+                    // tables de fuseau ne sont pas installées (timezone absent).
+                    $offset = sprintf('%+03d:%02d', (int) ($tz->getOffset(new DateTime('now', $tz)) / 3600), 0);
+                    self::$instance->exec("SET SESSION time_zone = '" . $offset . "'");
+                } catch (Throwable $e) {
+                    error_log('DB time_zone not applied: ' . $e->getMessage());
+                }
             } catch (PDOException $e) {
                 if (defined('APP_ENV') && APP_ENV === 'development') {
                     die('Erreur de connexion à la base de données : ' . $e->getMessage());
@@ -127,7 +145,29 @@ class Database
         exit;
     }
 
-    // Empêche le clonage et l'instanciation externe
+    /**
+     * Fuseau horaire applicatif (heure de Tunisie, UTC+1, sans heure d'été).
+     *
+     * Source UNIQUE de vérité : utilisée par PHP (date_default_timezone_set
+     * dans les fichiers de config), par la session MySQL (SET SESSION
+     * time_zone) et par l'affichage des horodatages.
+     *
+     * Pourquoi Africa/Tunis et pas Europe/Paris (qui était utilisé avant) :
+     * la Tunisie est à UTC+1 toute l'année, alors que Paris passe à UTC+2 en
+     * été. Entre mars et octobre, toutes les dates de l'application étaient
+     * donc affichées avec une heure d'avance.
+     */
+    public static function appTimezone(): DateTimeZone
+    {
+        static $tz = null;
+        if ($tz === null) {
+            $tz = new DateTimeZone(defined('APP_TIMEZONE') ? (string) APP_TIMEZONE : 'Africa/Tunis');
+        }
+        return $tz;
+    }
+
+    /** Empêche le clonage et l'instanciation externe
+     */
     private function __construct() {}
     private function __clone() {}
 }

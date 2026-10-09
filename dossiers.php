@@ -5,12 +5,22 @@ require_login();
 
 $user = current_user();
 $isAdmin = is_admin();
-// Rôle strict « vendeur » (même si can_supervise = 1) : il n'a PAS accès à
-// l'ensemble des dossiers. Il consulte uniquement SA propre liste, et les
-// boutons « Nouveau dossier » / « Importer Excel » lui sont retirés.
+// Rôle strict « vendeur » : il n'a PAS accès à l'ensemble des dossiers.
+// Il consulte uniquement SA propre liste et l'import Excel lui est retiré.
+// Il peut en revanche CRÉER un dossier, exactement comme le superviseur
+// (voir can_create_dossier() dans includes/auth.php).
 $isVendeurSession = is_vendeur_user();
 $canAccessAll = can_access_dossiers() && !$isVendeurSession;
+// « + Nouveau dossier » : administrateur, superviseur ET vendeur.
+// « Importer Excel » : administrateur / superviseur uniquement (inchangé).
+$canCreateDossier = can_create_dossier();
 $hideSupervisorColumns = is_superviseur() || $isVendeurSession;
+// Cases a cocher de la colonne de selection : autorisees a l'administrateur,
+// au superviseur et au vendeur. Pour le superviseur et le vendeur, la case est
+// en lecture seule (compteurs seuls) : aucune action ni modification n'est
+// proposee, ce bloc etant rendu sans les boutons d'action de lot.
+$canSelectRows = $isAdmin || is_role_superviseur() || $isVendeurSession;
+$isReadOnlySelection = !$isAdmin;
 $userName  = (string) ($user['nom_complet'] ?? $user['username'] ?? '');
 $userEmail = (string) ($user['email'] ?? '');
 
@@ -33,7 +43,8 @@ $etatContratSelected = is_array($etatContratFilter) ? $etatContratFilter : ($eta
 $sortableColumns = [
   'date_vente' => 'd.date_vente', 'nom' => 'd.nom', 'ca_mois' => 'd.ca_mois', 'ca_annuel' => 'd.ca_annuel',
     'etat_dossier' => 'd.etat_dossier', 'compagnie' => 'd.compagnie', 'created_at' => 'd.created_at',
-    'date_injection' => 'd.date_injection',
+    'date_injection' => 'd.date_injection', 'date_resiliation' => 'd.date_resiliation',
+    'type_resiliation' => 'd.type_resiliation',
 ];
 $sort = $_GET['sort'] ?? 'date_vente';
 $sort = array_key_exists($sort, $sortableColumns) ? $sort : 'date_vente';
@@ -61,6 +72,7 @@ if ($search !== '') {
         'd.type_signature', 'd.produit', 'd.compagnie', 'd.ta_origine', 'd.p_prod',
         'd.etat_dossier', 'd.etat_contrat', 'd.controle_qualite', 'd.commentaire',
         'd.motif_annulation', 'd.date_injection',
+        'd.mutuelle_a_resilier', 'd.type_resiliation',
         'CAST(d.ca_mois AS CHAR)', 'CAST(d.ca_annuel AS CHAR)', 'CAST(d.nombre_personnes AS CHAR)',
         'CAST(d.date_vente AS CHAR)', 'CAST(d.date_effet AS CHAR)', 'CAST(d.date_courrier_supervision AS CHAR)',
         'CAST(d.date_etat_contrat_supervision AS CHAR)', 'CAST(d.date_controle_qualite_supervision AS CHAR)',
@@ -83,7 +95,7 @@ if (in_array($etatFilter, etats_dossier_valides(), true)) {
 $etatContratValues = [];
 if ($etatContratFilter !== '') {
     $rawValues = is_array($etatContratFilter) ? $etatContratFilter : explode(',', $etatContratFilter);
-    $allowed = etats_contrat_valides(true);
+    $allowed = etats_contrat_valides();
     foreach ($rawValues as $v) {
         $v = trim((string) $v);
         if ($v !== '' && in_array($v, $allowed, true)) {
@@ -181,15 +193,19 @@ function sort_link(string $col, string $label, string $sort, string $dir): strin
 }
 
 $pageTitle = 'Dossiers';
+// Cette page est la seule a utiliser le selecteur multiple « multiselect.js ».
+$loadMultiselect = true;
 $pageSubtitle = $isVendeurSession ? 'Vos dossiers' : ($canAccessAll ? 'Ensemble des dossiers enregistrés' : 'Vos dossiers');
 $activePage = 'dossiers';
 $exportQuery = $_GET;
 unset($exportQuery['page']);
 $exportUrl = APP_URL . '/actions/dossiers_export.php' . ($exportQuery ? '?' . http_build_query($exportQuery) : '');
 $topbarActions = '';
+if ($canCreateDossier) {
+  $topbarActions .= '<a href="' . e(APP_URL) . '/dossier_form.php" class="btn btn-accent">+ Nouveau dossier</a> ';
+}
 if ($canAccessAll) {
-  $topbarActions .= '<a href="' . e(APP_URL) . '/dossier_form.php" class="btn btn-accent">+ Nouveau dossier</a> '
-    . '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
+  $topbarActions .= '<a href="' . e(APP_URL) . '/dossiers_import.php" class="btn btn-outline">Importer Excel</a> ';
 }
 if ($isAdmin) {
   $topbarActions .= '<form method="post" action="' . e(APP_URL) . '/actions/dossier_secure_export.php" class="" style="display:inline-block;vertical-align:top;margin:0;">' . csrf_field() . '
@@ -254,7 +270,7 @@ require __DIR__ . '/includes/header.php';
       <input type="search" id="q" name="q" placeholder="Tous les champs : nom, vendeur, compagnie, mail, produit…" value="<?= e($search) ?>">
     </div>
     <div class="form-group">
-      <label for="etat">État</label>
+      <label for="etat">État du dossier</label>
       <select id="etat" name="etat">
         <option value="">Tous</option>
         <?php foreach (etats_dossier_valides() as $etat): ?>
@@ -324,37 +340,43 @@ require __DIR__ . '/includes/header.php';
     <table class="data-table data-table--wide">
       <thead>
         <tr>
-          <?php if ($isAdmin): ?><th class="selection-cell"><input type="checkbox" data-select-all aria-label="Sélectionner tous les dossiers affichés"></th><?php endif; ?>
-          <th>Vendeur</th><th>Origine</th><th>Prod</th>
-          <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th>Civilité</th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
-          <th>Date d'effet</th>
-          <?php if (!$hideSupervisorColumns): ?><th>Produit</th><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
-          <th class="col-etat">Etat du dossier</th><th>Courrier</th><th>Commentaire dossier</th><th class="col-etat">Etat du contrat</th><th>Contrôle qualité</th><th>Date d'injection</th>
+          <?php if ($canSelectRows): ?><th class="selection-cell"><input type="checkbox" data-select-all data-row-select-all aria-label="Sélectionner tous les dossiers affichés"></th><?php endif; ?>
+          <th>Vendeur</th><th>Origine</th>
+          <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
+          <?php if (!$hideSupervisorColumns): ?><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
+          <th class="col-etat">Etat du dossier</th>
+          <th><?= sort_link('type_resiliation', 'Type de résiliation', $sort, $dir) ?></th>
+          <th><?= sort_link('date_resiliation', 'Date de résiliation', $sort, $dir) ?></th>
+          <th class="col-etat">Etat du contrat</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($dossiers as $d): ?>
         <tr class="<?= row_class_etat($d['etat_dossier']) ?>">
-          <?php if ($isAdmin): ?><td class="selection-cell"><input type="checkbox" name="dossier_ids[]" value="<?= (int) $d['id'] ?>" data-dossier-select aria-label="Sélectionner le dossier <?= (int) $d['id'] ?>"></td><?php endif; ?>
+          <?php if ($canSelectRows): ?>
+            <td class="selection-cell">
+              <?php if ($isAdmin): ?>
+                <input type="checkbox" name="dossier_ids[]" value="<?= (int) $d['id'] ?>" data-dossier-select data-row-select aria-label="Sélectionner le dossier <?= (int) $d['id'] ?>">
+              <?php else: ?>
+                <?php // Superviseur / vendeur : case de simple comptage, sans
+                      // « name » afin qu'aucun formulaire ne puisse la soumettre. ?>
+                <input type="checkbox" value="<?= (int) $d['id'] ?>" data-row-select aria-label="Sélectionner le dossier <?= (int) $d['id'] ?>">
+              <?php endif; ?>
+            </td>
+          <?php endif; ?>
           <td title="<?= e($d['vendeur_nom']) ?>"><?= e(truncate_chars($d['vendeur_nom'])) ?: '<span class="muted">—</span>' ?></td>
           <td title="<?= e($d['ta_origine']) ?>"><?= e(truncate_chars($d['ta_origine'])) ?: '<span class="muted">—</span>' ?></td>
-          <td title="<?= e($d['p_prod']) ?>"><?= e(truncate_chars($d['p_prod'])) ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap"><?= format_date($d['date_vente']) ?></td>
-          <td><?= e(truncate_chars($d['civilite'])) ?></td>
           <td><a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" title="<?= e($d['nom']) ?>"><?= e(truncate_chars($d['nom'])) ?></a></td>
           <td title="<?= e($d['prenom']) ?>"><?= e(truncate_chars($d['prenom'])) ?></td>
-          <td><?= format_date($d['date_effet']) ?></td>
           <?php if (!$hideSupervisorColumns): ?>
-          <td title="<?= e($d['produit']) ?>"><?= e(truncate_chars($d['produit'])) ?: '<span class="muted">—</span>' ?></td>
           <td title="<?= e($d['compagnie']) ?>"><?= e(truncate_chars($d['compagnie'])) ?: '<span class="muted">—</span>' ?></td>
           <?php endif; ?>
           <td class="col-etat"><?= badge_etat(truncate_chars($d['etat_dossier'])) ?></td>
-          <td title="<?= e(implode(', ', courrier_values($d['courrier'] ?? ''))) ?>"><?= e(truncate_chars(implode(', ', courrier_values($d['courrier'] ?? '')))) ?: '<span class="muted">—</span>' ?></td>
-          <td title="<?= e($d['commentaire']) ?>"><?= e(truncate_chars($d['commentaire'])) ?: '<span class="muted">—</span>' ?></td>
+          <td title="<?= e($d['type_resiliation'] ?? '') ?>"><?= e(truncate_chars($d['type_resiliation'] ?? '')) ?: '<span class="muted">—</span>' ?></td>
+          <td class="nowrap"><?= !empty($d['date_resiliation']) ? format_date($d['date_resiliation']) : '<span class="muted">—</span>' ?></td>
           <td class="col-etat"><?= badge_etat_contrat(truncate_chars($d['etat_contrat'])) ?></td>
-          <td title="<?= e($d['controle_qualite'] ?? '') ?>"><?= e(truncate_chars($d['controle_qualite'] ?? '')) ?: '<span class="muted">—</span>' ?></td>
-          <td class="nowrap"><?= format_date(($d['date_injection'] ?? null)) ?: '<span class="muted">—</span>' ?></td>
           <td class="nowrap">
             <span class="row-actions">
             <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Voir" aria-label="Voir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></a>
@@ -381,6 +403,15 @@ require __DIR__ . '/includes/header.php';
   <form action="<?= e(APP_URL) ?>/actions/dossier_bulk_delete.php" method="post" data-bulk-delete-form>
     <?= csrf_field() ?>
   </form>
+  <?php endif; ?>
+
+  <?php // Superviseur / vendeur : simple compteur de cases cochees, AUCUNE action
+        // ni modification possible (aucun formulaire, aucun bouton de lot). ?>
+  <?php if ($isReadOnlySelection && $dossiers): ?>
+  <div class="bulk-actions" data-row-selection-counters>
+    <span class="bulk-count">Lignes cochées : <strong data-row-checked-count>0</strong></span>
+    <span class="bulk-count">Lignes affichées : <strong data-row-displayed-count><?= count($dossiers) ?></strong></span>
+  </div>
   <?php endif; ?>
 
   <?php if ($totalPages > 1): ?>

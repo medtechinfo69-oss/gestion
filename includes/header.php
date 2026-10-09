@@ -22,17 +22,78 @@ $user = current_user();
   <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <meta name="description" content="<?= e(APP_NAME) ?> — application privée de gestion des dossiers, des employés et des salaires.">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#1f2937">
+  <script>
+    /* Thème clair/sombre — exécuté AVANT le premier rendu (aucun flash) :
+         choix mémorisé (localStorage « gd-theme »), sinon préférence système.
+         La bascule est déléguée au document : elle fonctionne dès le <head>,
+         sans attendre app.js. Voir aussi la page de connexion (login.php). */
+    (function () {
+      var root = document.documentElement;
+      var THEME_KEY = 'gd-theme';
+      var theme = null;
+      try { theme = localStorage.getItem(THEME_KEY); } catch (e) { }
+      if (theme !== 'light' && theme !== 'dark') {
+        theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      var metaTheme = document.querySelector('meta[name="theme-color"]');
+      function paint(t) {
+        if (metaTheme) metaTheme.setAttribute('content', t === 'dark' ? '#0A1120' : '#F2F8FA');
+      }
+      root.setAttribute('data-theme', theme);
+      paint(theme);
+      function syncLabels() {
+        document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
+          var dark = root.getAttribute('data-theme') === 'dark';
+          btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+          btn.setAttribute('aria-label', dark ? 'Passer en mode clair' : 'Passer en mode sombre');
+          btn.setAttribute('title', dark ? 'Mode clair' : 'Mode sombre');
+        });
+      }
+      document.addEventListener('click', function (event) {
+        var btn = event.target && event.target.closest ? event.target.closest('[data-theme-toggle]') : null;
+        if (!btn) return;
+        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        var update = function () {
+          root.setAttribute('data-theme', next);
+          try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
+          paint(next);
+          syncLabels();
+        };
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!reduced && typeof document.startViewTransition === 'function') {
+          /* Révélation en onde : le nouveau thème se propage en cercle depuis
+             le bouton cliqué (positions stockées dans --theme-origin-*). */
+          var rect = btn.getBoundingClientRect();
+          root.style.setProperty('--theme-origin-x', Math.round(rect.left + rect.width / 2) + 'px');
+          root.style.setProperty('--theme-origin-y', Math.round(rect.top + rect.height / 2) + 'px');
+          document.startViewTransition(update);
+        } else {
+          update();
+        }
+      });
+      document.addEventListener('DOMContentLoaded', syncLabels);
+    })();
+  </script>
   <?php if (!defined('CACHE_VERSION')): ?>
     <link rel="canonical" href="<?= e(APP_URL . strtok($_SERVER['REQUEST_URI'] ?? '', '?')) ?>">
   <?php endif; ?>
+  <?php /* favicon-32 : 1 Ko au lieu de 82 Ko pour la version 512. Le navigateur
+          .download en revanche la version 192/512 pour l'ecran d'accueil. */ ?>
+  <link rel="icon" type="image/png" sizes="32x32" href="<?= e(APP_URL) ?>/assets/img/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="<?= e(APP_URL) ?>/assets/img/favicon-180.png">
   <link rel="icon" type="image/png" sizes="512x512" href="<?= e(APP_URL) ?>/assets/img/favicon-512x512.png">
   <?php /* Précharge la feuille de style : le navigateur la récupère en parallèle
            du HTML au lieu d'attendre de l'avoir entièrement analysé. */ ?>
   <link rel="preload" as="style" href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= e(asset_version('css/style.css')) ?>">
   <link rel="stylesheet"
     href="<?= e(APP_URL) ?>/assets/css/style.css?v=<?= e(asset_version('css/style.css')) ?>">
+  <?php /* Multiselect n'est utilise que par quelques pages (import,selecteurs
+           multiples) : on ne le precharge pas partout. */ ?>
+  <?php if (!empty($loadMultiselect)): ?>
+  <link rel="preload" as="script" href="<?= e(APP_URL) ?>/assets/js/multiselect.js?v=<?= e(asset_version('js/multiselect.js')) ?>">
+  <?php endif; ?>
 </head>
 
 <body>
@@ -41,7 +102,7 @@ $user = current_user();
       <div class="sidebar-brand">
         <div class="sidebar-brand-text">
           <div class="sidebar-brand-title"><img class="sidebar-title-icon"
-              src="<?= e(APP_URL) ?>/assets/img/favicon-512x512.png" alt="" aria-hidden="true"> Gestion Prod & RH</div>
+              src="<?= e(APP_URL) ?>/assets/img/favicon-32.png" alt="" aria-hidden="true"> Gestion Prod & RH</div>
         </div>
         <button type="button" class="sidebar-collapse" id="sidebar-collapse" data-sidebar-collapse
           aria-label="Réduire le menu" aria-expanded="true" title="Réduire le menu">
@@ -54,18 +115,25 @@ $user = current_user();
         <div class="sidebar-user">
           <div class="name">Bienvenue,</div>
           <span class="role badge-role-<?= e($user['role']) ?>" style="background:none;padding:0;">
-            <?php if (is_vendeur_user()): ?>
-              <?php // Vendeur connecté : on affiche son nom (ex. « Laurence ferrari »)
-                    // au lieu du libellé générique « Vendeur ». ?>
-              <?= e((string) ($user['nom_complet'] ?? $user['username'] ?? 'Vendeur')) ?>
+            <?php // Un compte « métier » (vendeur, superviseur, RH) est identifié
+                    // par son NOM (ex. « Laurence ferrari », « Emma »,
+                    // « Flora Dupond ») ; seul l'administrateur garde le
+                    // libellé générique de sa fonction (« Administrateur »). ?>
+            <?php if (is_vendeur_user() || is_rh() || is_role_superviseur()): ?>
+              <?= e((string) ($user['nom_complet'] ?? $user['username'] ?? role_label((string) ($user['role'] ?? '')))) ?>
             <?php else: ?>
-              <?= $user['role'] === 'admin' ? 'Administrateur' : 'Superviseur' ?>
+              <?= e(role_label((string) ($user['role'] ?? ''))) ?>
             <?php endif; ?>
           </span>
         </div>
       <?php endif; ?>
 
+      <?php /* Un compte RH est cloisonné sur le module « Gestion RH » : tout le
+              groupe « Gestion Prod » (dashboard, dossiers, prime, origines) ne
+              lui est pas affiché. Le cloisonnement reste garanti côté serveur
+              par rh_page_lock(), ce n'est ici qu'un confort d'affichage. */ ?>
       <nav class="nav-group">
+        <?php if (!is_rh()): ?>
         <div class="nav-label">Gestion Prod</div>
         <a href="<?= e(APP_URL) ?>/dashboard.php" class="nav-item <?= $activePage === 'dashboard' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
@@ -82,9 +150,11 @@ $user = current_user();
             </svg></span> Dossiers
         </a>
         <div class="nav-submenu">
-          <?php // « Nouveau dossier » : réservé à l'admin et au superviseur strict.
-                // Un vendeur (même can_supervise = 1) ne voit que sa propre liste. ?>
-          <?php if (is_admin() || is_role_superviseur()): ?>
+          <?php // « Nouveau dossier » : autorisé à l'admin, au superviseur strict
+                // ET au vendeur (même capacité de créer un dossier que le
+                // superviseur — voir can_create_dossier()). Le vendeur reste
+                // limité à SA liste : aucune autre page ne s'ouvre pour lui. ?>
+          <?php if (can_create_dossier()): ?>
             <a href="<?= e(APP_URL) ?>/dossier_form.php"
               class="nav-item nav-subitem <?= $activePage === 'dossier_form' ? 'active' : '' ?>">
               <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
@@ -119,7 +189,11 @@ $user = current_user();
               </svg></span> Origine
           </a>
           <?php endif; ?>
-        <?php if (is_admin()): ?>
+        <?php endif; /* fin du groupe « Gestion Prod » (masqué pour les comptes RH) */ ?>
+        <?php /* « Gestion RH » : visible par l'administrateur ET par les comptes
+                RH. Aucun autre rôle n'y a accès — le cloisonnement est aussi
+                appliqué côté serveur (require_rh() / rh_page_lock()). */ ?>
+        <?php if (can_access_rh()): ?>
           <div class="nav-label">Gestion RH</div>
           <a href="<?= e(APP_URL) ?>/rh_dashboard.php"
             class="nav-item <?= $activePage === 'rh_dashboard' ? 'active' : '' ?>">
@@ -170,9 +244,24 @@ $user = current_user();
                 <path d="M20 21c0-3.3-3.6-6-8-6s-8 2.7-8 6" />
               </svg></span> Superviseurs
           </a>
+          <?php /* Comptes RH : placés juste sous « Superviseurs », dans le MÊME
+                  groupe « Compte » — un seul libellé, donc aucun doublon.
+                  Réservé à l'administrateur : le rôle « rh » est cloisonné sur
+                  son module par rh_page_lock(). */ ?>
+          <a href="<?= e(APP_URL) ?>/rh_comptes.php"
+            class="nav-item <?= $activePage === 'rh_comptes' ? 'active' : '' ?>">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+                <path d="M4 7.5A2 2 0 0 1 6 5.5h12a2 2 0 0 1 2 2V10H4V7.5Z" />
+                <path d="M4 19.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2V17H4v2.5Z" />
+                <path d="M12 10v7" />
+              </svg></span> RH
+          </a>
         <?php endif; ?>
 
-        <div class="nav-label">Administration</div>
+        <?php /* Un compte RH n'accède qu'à la RH : les autres groupes
+                (Administration, Sécurité) sont déjà masqués par leurs
+                conditions is_admin() ci-dessous. */ ?>
+        <div class="nav-label"><?= is_rh() ? 'Paramètres' : 'Administration' ?></div>
         <a href="<?= e(APP_URL) ?>/profile.php" class="nav-item <?= $activePage === 'profile' ? 'active' : '' ?>">
           <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
               <circle cx="12" cy="8" r="3.2" />
@@ -247,7 +336,7 @@ $user = current_user();
                     <span class="notif-ico"><?= admin_notification_icon((string) ($notif['action'] ?? '')) ?></span>
                     <span class="notif-body">
                       <span class="notif-title"><?= e((string) ($notif['title'] ?? '')) ?></span>
-                      <span class="notif-meta"><?= e((string) ($notif['actor_username'] ?? '')) ?> &middot; <?= e(date('d/m/Y H:i', strtotime((string) ($notif['created_at'] ?? 'now')))) ?></span>
+                      <span class="notif-meta"><?= e((string) ($notif['actor_username'] ?? '')) ?> &middot; <?= e(format_datetime_tn($notif['created_at'] ?? null)) ?></span>
                     </span>
                   </a>
                 <?php endforeach; ?>
@@ -256,7 +345,21 @@ $user = current_user();
             </div>
           </div>
         <?php endif; ?>
-        <div id="topbar-actions"><?= $topbarActions ?? '' ?></div>
+        <div id="topbar-actions">
+          <?php /* Bascule clair/sombre « Le Tiroir » du thème — pilotée par le
+                  script inline du <head> (mémorisée en localStorage). */ ?>
+          <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false"
+            aria-label="Passer en mode sombre" title="Mode sombre">
+            <svg class="theme-ico theme-ico-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M5.3 18.7l1.5-1.5M17.2 6.8l1.5-1.5" />
+            </svg>
+            <svg class="theme-ico theme-ico-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <?= $topbarActions ?? '' ?>
+        </div>
       </header>
 
       <div class="content">

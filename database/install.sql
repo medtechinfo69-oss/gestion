@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `id`                   INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `username`             VARCHAR(60)  NOT NULL,
     `password_hash`        VARCHAR(255) NOT NULL,
-    `role`                 ENUM('admin','superviseur','vendeur') NOT NULL DEFAULT 'vendeur',
+    `role`                 ENUM('admin','superviseur','vendeur','rh') NOT NULL DEFAULT 'vendeur',
     `nom_complet`          VARCHAR(150) NOT NULL,
     `email`                VARCHAR(190) NULL,
     `is_active`            TINYINT(1)   NOT NULL DEFAULT 1,
@@ -70,7 +70,10 @@ CREATE TABLE IF NOT EXISTS `users` (
     `updated_at`           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_users_username` (`username`),
-    UNIQUE KEY `uq_users_email` (`email`)
+    UNIQUE KEY `uq_users_email` (`email`),
+    -- Menu « Vendeurs » / listes deroulantes : WHERE role='vendeur'
+    -- ORDER BY nom_complet (evite table temporaire + tri).
+    KEY `idx_users_role_nom` (`role`, `nom_complet`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -86,8 +89,12 @@ CREATE TABLE IF NOT EXISTS `dossiers` (
     `nom`                               VARCHAR(150) NOT NULL,
     `prenom`                            VARCHAR(150) NOT NULL,
     `mail`                              VARCHAR(190) NULL,
+    -- Téléphone 1 est obligatoire (contrôle applicatif dans
+    -- validate_dossier_input) ; Téléphone 2 est facultatif. La colonne reste
+    -- NULL : MySQL autorise plusieurs NULL sous une contrainte UNIQUE, ce qui
+    -- permet à plusieurs dossiers de n'avoir qu'un seul téléphone.
     `telfix`                            VARCHAR(30)  NULL,
-    `portable`                          VARCHAR(30)  NOT NULL,
+    `portable`                          VARCHAR(30)  NULL,
     `nombre_personnes`                  TINYINT UNSIGNED NOT NULL DEFAULT 1,
     `date_naissance_assure`             VARCHAR(255) NULL,
     `age_assure_principal`              VARCHAR(100) NULL,
@@ -105,22 +112,33 @@ CREATE TABLE IF NOT EXISTS `dossiers` (
     `date_courrier_supervision`         DATE NULL,
     `etat_dossier`                      ENUM('Dossier complet','Dossier incomplet') NOT NULL DEFAULT 'Dossier incomplet',
     `date_dossier_complet`              DATE NULL,
-    `etat_contrat`                      ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','Sans effet qualite','CSS') NOT NULL DEFAULT 'Actif',
+    `etat_contrat`                      ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','Sans effet qualite','Sans effet mutuelle','CSS') NOT NULL DEFAULT 'Actif',
     `date_etat_contrat_supervision`     DATE NULL,
     `controle_qualite`                  ENUM('OK','Moyen','KO') NULL DEFAULT NULL,
     `date_controle_qualite_supervision` DATE NULL,
     `date_contrat_non_actif`            DATE NULL,
     `commentaire`                       TEXT NULL,
     `motif_annulation`                  VARCHAR(255) NULL,
+    -- Résiliation de la mutuelle (nouveaux champs facultatifs) :
+    -- un dossier actif ne renseigne rien, les trois colonnes restent NULL.
+    `mutuelle_a_resilier`               VARCHAR(255) NULL,
+    `date_resiliation`                  DATE NULL,
+    `type_resiliation`                  VARCHAR(100) NULL,
     `created_by`                        INT UNSIGNED NOT NULL,
     `updated_by`                        INT UNSIGNED NULL,
     `created_at`                        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`                        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_dossiers_portable` (`portable`),
+    -- Liste « Mes dossiers » : le vendeur connecte filtre toujours sur
+    -- vendeur_id (evite un balayage complet de la table).
     KEY `idx_dossiers_vendeur` (`vendeur_id`),
     KEY `idx_dossiers_etat` (`etat_dossier`),
+    -- Page « Dossiers annulés » : filtre etat_contrat + tri par date de vente.
+    KEY `idx_dossiers_etat_vente` (`etat_contrat`, `date_vente`),
     KEY `idx_dossiers_date_vente` (`date_vente`),
+    -- Filtre « Compagnie » : SELECT DISTINCT compagnie ORDER BY compagnie.
+    -- Evite une table temporaire + tri sur toute la table.
     KEY `idx_dossiers_compagnie` (`compagnie`),
     KEY `idx_dossiers_ville` (`ville`),
     KEY `idx_dossiers_nom` (`nom`,`prenom`),
@@ -141,7 +159,11 @@ CREATE TABLE IF NOT EXISTS `dossier_historique` (
     `nouvelle_valeur` TEXT NULL,
     `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    -- Index composite : la fiche dossier filtre par dossier_id ET trie par
+    -- created_at. Sans lui, MySQL balaye toute la table + filesort a chaque
+    -- ouverture d'une fiche (requete la plus frequente de l'application).
     KEY `idx_hist_dossier` (`dossier_id`),
+    KEY `idx_hist_dossier_date` (`dossier_id`, `created_at`),
     KEY `idx_hist_created` (`created_at`),
     CONSTRAINT `fk_hist_dossier` FOREIGN KEY (`dossier_id`) REFERENCES `dossiers`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_hist_user`    FOREIGN KEY (`user_id`)    REFERENCES `users`(`id`)    ON DELETE SET NULL
@@ -509,7 +531,7 @@ CREATE TABLE IF NOT EXISTS `security_audit_log` (
     `id`                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id`              INT UNSIGNED DEFAULT 0,
     `username`             VARCHAR(100) NOT NULL DEFAULT '',
-    `user_role`            ENUM('admin','superviseur','vendeur') NOT NULL DEFAULT 'vendeur',
+    `user_role`            ENUM('admin','superviseur','vendeur','rh') NOT NULL DEFAULT 'vendeur',
     `action_type`          ENUM('view','create','update','delete','export','download','login','logout','permission_denied','security_event') NOT NULL,
     `resource_type`        ENUM('dossier','employee','salary','attachment','user','setting','system','export','login') NOT NULL DEFAULT 'system',
     `resource_id`          VARCHAR(100) NULL,
@@ -548,7 +570,9 @@ CREATE TABLE IF NOT EXISTS `security_events` (
     `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_event_type` (`event_type`, `created_at`),
-    KEY `idx_event_sev`  (`severity`, `created_at`)
+    KEY `idx_event_sev`  (`severity`, `created_at`),
+    -- Ecran « Surveillance » : filtre sur les 24 dernieres heures.
+    KEY `idx_sec_events_date` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -621,7 +645,7 @@ INSERT IGNORE INTO `origines` (`nom`) VALUES
 -- ---------------------------------------------------------------------
 INSERT IGNORE INTO `settings` (`setting_key`, `setting_value`) VALUES
 ('company_name',         'Gestion des Dossiers'),
-('max_upload_mb',        '5'),
+    ('max_upload_mb',        '30'),
 ('password_min_length',  '12'),
 ('password_max_age_days','90'),
 ('password_history_count','5');

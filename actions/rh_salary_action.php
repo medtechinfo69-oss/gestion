@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
-require_admin_or_superviseur();
+require_rh(); // administrateur OU compte RH (mêmes fonctions, module RH seul)
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   header('Location: ' . APP_URL . '/rh_salaries.php');
@@ -50,7 +50,14 @@ if ($action === 'update') {
 
   $roleStmt = $pdo->prepare('SELECT e.position FROM salary_records sr JOIN employees e ON e.id=sr.employee_id WHERE sr.id=:id');
   $roleStmt->execute(['id' => $id]);
-  $salaryBase = $roleStmt->fetchColumn() === 'Responsable' ? (float) $paidDays : (float) $paidHours;
+  $position = $roleStmt->fetchColumn();
+  // Sans ce contrôle, un identifiant inexistant (bulletin déjà supprimé depuis
+  // un autre onglet) renvoyait « Salaire recalculé avec succès » alors que
+  // l'UPDATE n'avait touché aucune ligne : l'utilisateur croyait avoir saved.
+  if ($position === false) {
+    salary_redirect('Ce bulletin de salaire n\'existe plus. Actualisez la page.', 'error', $month, $year);
+  }
+  $salaryBase = $position === 'Responsable' ? (float) $paidDays : (float) $paidHours;
   $salary = round($salaryBase * (float) $rate, 2);
   $stmt = $pdo->prepare('UPDATE salary_records SET total_hours=:h, hourly_rate_used=:r, calculated_salary=:s, normal_worked_days=:normal, unjustified_absence_days=:absdays, unjustified_absence_hours=:abshours, paid_days=:paiddays, paid_hours=:paidhours, late_count=:late, heures_sup=:heuresup, n_depart=:ndepart WHERE id=:id');
   $stmt->execute(['h' => $paidHours, 'r' => round((float) $rate, 2), 's' => $salary, 'normal' => $normalDays, 'absdays' => $absenceDays, 'abshours' => $absenceHours, 'paiddays' => $paidDays, 'paidhours' => $paidHours, 'late' => $lateCount, 'heuresup' => $heuresSup, 'ndepart' => $nDepart, 'id' => $id]);
@@ -112,8 +119,8 @@ if ($action === 'add') {
 }
 
 if ($action === 'delete') {
-  if (!is_admin()) {
-    salary_redirect('Seul un administrateur peut supprimer un bulletin de salaire.', 'error', $month, $year);
+  if (!can_access_rh()) {
+    salary_redirect('Seul un administrateur ou un compte RH peut supprimer un bulletin de salaire.', 'error', $month, $year);
   }
   $id = (int) ($_POST['id'] ?? 0);
   if ($id <= 0) {
@@ -130,8 +137,8 @@ if ($action === 'delete') {
 }
 
 if ($action === 'bulk_delete') {
-  if (!is_admin()) {
-    salary_redirect('Seul un administrateur peut supprimer des bulletins de salaire.', 'error', $month, $year);
+  if (!can_access_rh()) {
+    salary_redirect('Seul un administrateur ou un compte RH peut supprimer des bulletins de salaire.', 'error', $month, $year);
   }
   $ids = $_POST['salary_ids'] ?? [];
   if (empty($ids)) {
@@ -150,8 +157,8 @@ if ($action === 'bulk_delete') {
 }
 
 if ($action === 'delete_all') {
-  if (!is_admin()) {
-    salary_redirect('Seul un administrateur peut supprimer tous les bulletins.', 'error', $month, $year);
+  if (!can_access_rh()) {
+    salary_redirect('Seul un administrateur ou un compte RH peut supprimer tous les bulletins.', 'error', $month, $year);
   }
   try {
     $stmt = $pdo->prepare('DELETE FROM salary_records WHERE month=:m AND year=:y');

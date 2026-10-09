@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/init.php';
-require_admin();
+require_rh(); // administrateur OU compte RH (mêmes fonctions, module RH seul)
 require_once __DIR__ . '/../includes/xlsx.php';
 
 $month = isset($_GET['month']) ? (int) $_GET['month'] : (int) date('n');

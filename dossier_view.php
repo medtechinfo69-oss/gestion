@@ -78,6 +78,8 @@ $champLabels = [
     'ville' => 'Ville', 'type_signature' => 'Type de signature', 'ca_mois' => 'CA mensuel', 'ca_annuel' => 'CA annuel',
     'date_effet' => "Date d'effet", 'produit' => 'Produit', 'compagnie' => 'Compagnie', 'etat_dossier' => 'État du dossier',
     'courrier' => 'Courrier', 'commentaire' => 'Commentaire dossier', 'etat_contrat' => 'État du contrat', 'controle_qualite' => 'Contrôle qualité', 'motif_annulation' => "Motif d'annulation",
+    'mutuelle_a_resilier' => 'Mutuelle à résilier', 'date_resiliation' => 'Date de résiliation',
+    'type_resiliation' => 'Type de résiliation',
     'date_dossier_complet' => 'Date validation', 'date_contrat_non_actif' => "Date d'annulation",
 ];
 
@@ -137,7 +139,7 @@ require __DIR__ . '/includes/header.php';
       <div class="detail-item"><div class="k">Civilité</div><div class="v"><?= e($dossier['civilite']) ?></div></div>
       <div class="detail-item"><div class="k">Nom</div><div class="v"><?= e($dossier['nom']) ?></div></div>
       <div class="detail-item"><div class="k">Prénom</div><div class="v"><?= e($dossier['prenom']) ?></div></div>
-      <div class="detail-item"><div class="k">Mail</div><div class="v"><?= $dossier['mail'] ? '<a href="mailto:' . e($dossier['mail']) . '">' . e($dossier['mail']) . '</a>' : '—' ?></div></div>
+      <div class="detail-item"><div class="k">Mail</div><div class="v"><?php if (!empty($dossier['mail']) && filter_var($dossier['mail'], FILTER_VALIDATE_EMAIL)): ?><a href="#" class="client-mail-link" data-client-mail-open title="Envoyer un e-mail au client"><?= e($dossier['mail']) ?></a><?php else: ?>—<?php endif; ?></div></div>
       <div class="detail-item"><div class="k">Tél. fixe</div><div class="v"><?= e($dossier['telfix']) ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Portable</div><div class="v"><?= e($dossier['portable']) ?></div></div>
       <div class="detail-item"><div class="k">Nombre de personnes</div><div class="v"><?= (int) $dossier['nombre_personnes'] ?></div></div>
@@ -165,6 +167,9 @@ require __DIR__ . '/includes/header.php';
       <div class="detail-item"><div class="k">Date d'annulation</div><div class="v"><?= !empty($dossier['date_contrat_non_actif']) ? format_date($dossier['date_contrat_non_actif']) : '—' ?></div></div>
 
       <div class="detail-item"><div class="k">Contrôle qualité</div><div class="v"><?= e($dossier['controle_qualite'] ?? '') ?: '—' ?></div></div>
+      <div class="detail-item"><div class="k">Mutuelle à résilier</div><div class="v"><?= e($dossier['mutuelle_a_resilier'] ?? '') ?: '—' ?></div></div>
+      <div class="detail-item"><div class="k">Date de résiliation</div><div class="v"><?= !empty($dossier['date_resiliation']) ? format_date($dossier['date_resiliation']) : '—' ?></div></div>
+      <div class="detail-item"><div class="k">Type de résiliation</div><div class="v"><?= e($dossier['type_resiliation'] ?? '') ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Commentaire</div><div class="v"><?= $dossier['commentaire'] ? nl2br(e($dossier['commentaire'])) : '—' ?></div></div>
             <?php if ($dossier['motif_annulation']): ?>
             <div class="detail-item detail-item--wide"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
@@ -176,16 +181,37 @@ require __DIR__ . '/includes/header.php';
       <?php if ($isAdmin && $supervisionActive): ?>
       <div class="card mb-16">
        <div class="card-header"><h2>Supervision</h2></div>
-       <div class="card-body flex-between" style="flex-wrap:wrap;gap:12px;">
+       <div class="card-body">
           <div>
             <div>Ce dossier est actuellement <strong>verrouillé</strong> par la supervision.</div>
-            <div class="muted" style="font-size:0.82rem;">La réactivation efface les dates de validation et d'annulation pour permettre de modifier à nouveau le dossier.</div>
+            <div class="muted" style="font-size:0.82rem;">Réactivez uniquement la section souhaitée : les dates de validation / annulation correspondantes seront effacées.</div>
           </div>
-          <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" data-confirm="Réactiver la supervision pour ce dossier ? Ses dates de validation et d'annulation seront effacées.">
-            <?= csrf_field() ?>
-            <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
-            <button type="submit" class="btn btn-primary">Réactiver supervision</button>
-          </form>
+          <div class="flex gap-8" style="flex-wrap:wrap;margin-top:14px;">
+            <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver uniquement la section Courrier ?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+              <input type="hidden" name="scope" value="courrier">
+              <button type="submit" class="btn btn-primary btn-sm">Réactiver Courrier</button>
+            </form>
+            <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver uniquement la section État du contrat ?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+              <input type="hidden" name="scope" value="etat_contrat">
+              <button type="submit" class="btn btn-primary btn-sm">Réactiver État du contrat</button>
+            </form>
+            <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver uniquement la section Contrôle qualité ?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+              <input type="hidden" name="scope" value="controle_qualite">
+              <button type="submit" class="btn btn-primary btn-sm">Réactiver Contrôle qualité</button>
+            </form>
+            <form method="post" action="<?= e(APP_URL) ?>/actions/dossier_reactivate.php" style="display:inline;" data-confirm="Réactiver TOUTES les sections de supervision ?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="id" value="<?= (int) $dossier['id'] ?>">
+              <input type="hidden" name="scope" value="all">
+              <button type="submit" class="btn btn-outline btn-sm">Réactiver tout</button>
+            </form>
+          </div>
        </div>
       </div>
       <?php endif; ?>
@@ -210,6 +236,25 @@ require __DIR__ . '/includes/header.php';
               <?php endif; ?>
             </span>
             <span class="flex gap-8 row-actions">
+              <?php
+              // Aperçu dans une modale (PDF, images, audio). Le type d'affichage
+              // est calculé côté serveur : la modale se contente de l'utiliser.
+              $previewKind = attachment_preview_kind($a['type_mime']);
+              $previewUrl = e(APP_URL) . '/actions/attachment_download.php?id=' . (int) $a['id'] . '&preview=1';
+              ?>
+              <button type="button"
+                      class="btn btn-outline btn-sm btn-icon-action"
+                      title="Aperçu"
+                      aria-label="Aperçu de la pièce jointe"
+                      data-attachment-preview
+                      data-attachment-name="<?= e($a['nom_original']) ?>"
+                      data-attachment-kind="<?= e($previewKind) ?>"
+                      data-attachment-type="<?= e(attachment_mime_label($a['type_mime'])) ?>"
+                      data-attachment-url="<?= $previewUrl ?>"
+                      data-attachment-download="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>"
+                      data-attachment-can-download="<?= $isSuperviseur ? '0' : '1' ?>">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
               <?php if (!$isSuperviseur): ?>
               <a href="<?= e(APP_URL) ?>/actions/attachment_download.php?id=<?= (int) $a['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Télécharger" aria-label="Télécharger"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></a>
               <?php endif; ?>
@@ -229,7 +274,7 @@ require __DIR__ . '/includes/header.php';
       <p class="muted">Aucune pièce jointe pour ce dossier.</p>
     <?php endif; ?>
 
-    <?php if ($isAdmin || $isSuperviseur): ?><form action="<?= e(APP_URL) ?>/actions/attachment_upload.php" method="post" enctype="multipart/form-data" style="margin-top:14px;">
+    <?php if ($isAdmin || $isSuperviseur): ?><form action="<?= e(APP_URL) ?>/actions/attachment_upload.php" method="post" enctype="multipart/form-data" data-upload-max-bytes="<?= max_import_size_bytes($db) ?>" style="margin-top:14px;">
       <?= csrf_field() ?>
       <input type="hidden" name="dossier_id" value="<?= (int) $dossier['id'] ?>">
       <div class="flex gap-8" style="align-items:center;flex-wrap:wrap;">
@@ -276,9 +321,13 @@ require __DIR__ . '/includes/header.php';
       <ul class="timeline">
         <?php foreach ($historique as $h): ?>
           <li>
-            <div class="ts"><?= date('d/m/Y à H:i', strtotime($h['created_at'])) ?> &middot; <?= e($h['auteur'] ?? 'Système') ?></div>
+            <div class="ts"><?= format_datetime_tn($h['created_at'], 'd/m/Y à H:i') ?> &middot; <?= e($h['auteur'] ?? 'Système') ?></div>
             <?php if ($h['action'] === 'creation'): ?>
               Création du dossier.
+            <?php elseif (in_array($h['action'], ['ajout_piece_jointe', 'suppression_piece_jointe'], true)): ?>
+              <?= $h['action'] === 'ajout_piece_jointe' ? 'Ajout d’une pièce jointe' : 'Suppression d’une pièce jointe' ?>
+              <?php $attachmentName = $h['action'] === 'ajout_piece_jointe' ? $h['nouvelle_valeur'] : $h['ancienne_valeur']; ?>
+              <?php if ($attachmentName !== null && $attachmentName !== ''): ?> « <?= e(mb_strimwidth((string) $attachmentName, 0, 100, '…')) ?> »<?php endif; ?>.
             <?php elseif ($h['champ']): ?>
               Modification de « <?= e($champLabels[$h['champ']] ?? $h['champ']) ?> » :
               <span class="muted"><?= e(mb_strimwidth((string) $h['ancienne_valeur'], 0, 60, '…')) ?: '(vide)' ?></span>
@@ -326,6 +375,98 @@ require __DIR__ . '/includes/header.php';
   </div>
 </div>
 <?php endif; ?>
+
+<?php
+// Popup « Envoyer un e-mail au client » : objet + message pré-remplis avec
+// les SEULS courriers non cochés (ex. 2 pièces manquantes => seules ces 2
+// pièces listées). Envoi réel via la carte SMTP (actions/dossier_mail_client.php).
+$clientMailOk = !empty($dossier['mail']) && filter_var($dossier['mail'], FILTER_VALIDATE_EMAIL);
+$clientManquants = courrier_manquants($dossier['courrier'] ?? '');
+$clientMailTo = $clientMailOk ? (string) $dossier['mail'] : '';
+$clientMailSubject = client_mail_subject_missing($clientManquants);
+$clientMailBody = client_mail_body_missing($dossier, $clientManquants);
+$smtpOk = function_exists('app_mail_configured') ? app_mail_configured() : false;
+?>
+<?php if ($clientMailOk): ?>
+<div id="client-mail-modal" class="client-mail-modal" style="display:none;" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="client-mail-title">
+  <div class="client-mail-dialog">
+    <div class="client-mail-head">
+      <h2 id="client-mail-title">E-mail au client</h2>
+      <button type="button" class="client-mail-close" data-client-mail-close aria-label="Fermer">&times;</button>
+    </div>
+    <div class="client-mail-summary">
+      <span class="client-mail-to"><?= e($clientMailTo) ?></span>
+      <?php if ($clientManquants): ?>
+        <span class="client-mail-count"><?= count($clientManquants) ?> pièce(s) manquante(s)</span>
+      <?php else: ?>
+        <span class="client-mail-count ok">Dossier complet ✓</span>
+      <?php endif; ?>
+    </div>
+    <?php if ($clientManquants): ?>
+    <ul class="client-mail-missing">
+      <?php foreach ($clientManquants as $piece): ?><li><?= e($piece) ?></li><?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+    <?php if (!$smtpOk): ?>
+    <p class="client-mail-warn">⚠️ Envoi SMTP non configuré : demandez à l'administrateur de renseigner la carte E-mail (SMTP) des Paramètres.</p>
+    <?php endif; ?>
+    <form action="<?= e(APP_URL) ?>/actions/dossier_mail_client.php" method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="dossier_id" value="<?= (int) $dossier['id'] ?>">
+      <input type="hidden" name="to" value="<?= e($clientMailTo) ?>">
+      <div class="form-group">
+        <label for="client-mail-subject">Objet</label>
+        <input type="text" id="client-mail-subject" name="subject" value="<?= e($clientMailSubject) ?>" maxlength="200" required>
+      </div>
+      <div class="form-group">
+        <label for="client-mail-body">Message</label>
+        <textarea id="client-mail-body" name="body" rows="12" maxlength="10000" required><?= e($clientMailBody) ?></textarea>
+      </div>
+      <div class="client-mail-actions">
+        <button type="button" class="btn btn-outline" data-client-mail-close>Annuler</button>
+        <button type="submit" class="btn btn-primary">Envoyer</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var modal = document.getElementById('client-mail-modal');
+  if (!modal) return;
+  function open(e) { if (e) e.preventDefault(); modal.style.display = 'flex'; modal.setAttribute('aria-hidden', 'false'); }
+  function close() { modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true'); }
+  document.querySelectorAll('[data-client-mail-open]').forEach(function (a) { a.addEventListener('click', open); });
+  modal.querySelectorAll('[data-client-mail-close]').forEach(function (b) { b.addEventListener('click', close); });
+  modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.style.display !== 'none') close(); });
+})();
+</script>
+<?php endif; ?>
+
+<!-- Aperçu d'une pièce jointe : modale affichée par assets/js/app.js
+     (initAttachmentPreview). Disponible pour le vendeur, le superviseur
+     et l'administrateur ; le contenu est construit à partir des
+     attributs data-* du bouton « Aperçu » de chaque fichier. -->
+<div id="attachment-preview-modal" class="attachment-preview-modal" style="display:none;" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="attachment-preview-title">
+  <div class="attachment-preview-dialog">
+    <div class="attachment-preview-head">
+      <h2 id="attachment-preview-title">Aperçu</h2>
+      <button type="button" class="attachment-preview-close" data-attachment-preview-close aria-label="Fermer l'aperçu">&times;</button>
+    </div>
+    <div class="attachment-preview-meta">
+      <span class="attachment-preview-name" data-attachment-preview-name></span>
+      <span class="muted" data-attachment-preview-type></span>
+    </div>
+    <div class="attachment-preview-body" data-attachment-preview-body></div>
+    <div class="attachment-preview-actions">
+      <a class="btn btn-outline btn-sm" data-attachment-preview-download hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Télécharger
+      </a>
+      <button type="button" class="btn btn-primary btn-sm" data-attachment-preview-close>Fermer</button>
+    </div>
+  </div>
+</div>
 
 <?php if ($isAdmin): ?>
 <script>

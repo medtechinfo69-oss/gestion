@@ -121,6 +121,15 @@ function import_courrier_values(string $text): array
     foreach ($options as $option) {
         $keyToCanonical[import_courrier_key($option)] = $option;
     }
+    // Les anciens libellés (renommés : « Devoir de conseil » et
+    // « Consentement ») restent reconnus : les fichiers exportés avant les
+    // renommages continuent donc de s'importer sans perte. Les clés sont
+    // triées par longueur décroissante plus bas, lors de la recherche par
+    // sous-chaîne, afin que « Devoir de conseil » ne soit pas confondu avec
+    // le libellé actuel « Devoir de conseil et consentement » qui le contient.
+    foreach (courrier_legacy_alias() as $legacy => $canonical) {
+        $keyToCanonical[import_courrier_key($legacy)] = $canonical;
+    }
 
     $tokens = preg_split('/[,;|\/\n\r\t]+/', $text) ?: [];
     $result = [];
@@ -139,12 +148,39 @@ function import_courrier_values(string $text): array
         // 2) Le texte peut contenir plusieurs options collées ou un libellé
         //    enrichi (« Résiliation (faite) ») : on cherche chaque option
         //    canonique en sous-chaîne pour l'extraire sans perte.
+        //
+        //    Les clés sont testées de la plus LONGUE à la plus courte, et une
+        //    clé déjà couverte par une correspondance plus longue est ignorée.
+        //    Sans cela, « Devoir de conseil » (ancien libellé) serait trouvé
+        //    DANS « Devoir de conseil et consentement » (libellé actuel) et
+        //    compterait deux options au lieu d'une.
         $matched = false;
-        foreach ($keyToCanonical as $optKey => $canonical) {
-            if ($optKey !== '' && str_contains($key, $optKey)) {
-                $result[] = $canonical;
-                $matched = true;
+        $candidates = array_keys($keyToCanonical);
+        usort($candidates, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+        $consumed = [];
+        foreach ($candidates as $optKey) {
+            if ($optKey === '') {
+                continue;
             }
+            $pos = strpos($key, $optKey);
+            if ($pos === false) {
+                continue;
+            }
+            $len = strlen($optKey);
+            // La zone est-elle déjà recouverte par une correspondance plus longue ?
+            $overlaps = false;
+            foreach ($consumed as [$start, $length]) {
+                if ($pos < $start + $length && $start < $pos + $len) {
+                    $overlaps = true;
+                    break;
+                }
+            }
+            if ($overlaps) {
+                continue;
+            }
+            $consumed[] = [$pos, $len];
+            $result[] = $keyToCanonical[$optKey];
+            $matched = true;
         }
         if (!$matched) {
             $unmatched[] = $token;
@@ -199,7 +235,10 @@ function import_vendeur_id(PDO $db, string $sellerName, array &$vendeursByName):
 function import_xlsx_rows(string $path): array
 {
     if (!class_exists('ZipArchive')) {
-        throw new RuntimeException('La lecture .xlsx nécessite l’extension PHP ZipArchive. Activez extension=zip dans C:\\xampp\\php\\php.ini puis redémarrez Apache.');
+        // Message sans chemin local : « C:\xampp\php\php.ini » n'a de sens que sur
+        // une machine Windows de developpement.
+        throw new RuntimeException('La lecture .xlsx nécessite l’extension PHP ZipArchive, absente de ce serveur. '
+            . 'Contactez votre hébergeur pour l’activer (php.ini : extension=zip).');
     }
     $zip = new ZipArchive();
     if ($zip->open($path) !== true) {
@@ -287,16 +326,21 @@ function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusiness
     // sinon un export suivi d'un réimport perdait ces informations.
     $data['date_dossier_complet'] = $data['date_dossier_complet'] ?? null;
     $data['date_contrat_non_actif'] = $data['date_contrat_non_actif'] ?? null;
+    $data['mutuelle_a_resilier'] = $data['mutuelle_a_resilier'] ?? null;
+    $data['date_resiliation'] = $data['date_resiliation'] ?? null;
+    $data['type_resiliation'] = $data['type_resiliation'] ?? null;
     $sql = 'INSERT INTO dossiers
         (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
          nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville, type_signature,
          ca_mois, ca_annuel, date_effet, date_injection, produit, compagnie, courrier, etat_dossier, date_dossier_complet,
-         etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation, created_by)
+         etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation,
+         mutuelle_a_resilier, date_resiliation, type_resiliation, created_by)
         VALUES
         (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
          :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville, :type_signature,
          :ca_mois, :ca_annuel, :date_effet, :date_injection, :produit, :compagnie, :courrier, :etat_dossier, :date_dossier_complet,
-         :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation, :created_by)';
+         :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation,
+         :mutuelle_a_resilier, :date_resiliation, :type_resiliation, :created_by)';
     $data['created_by'] = $userId;
     $db->prepare($sql)->execute($data);
     // Keep creation history logging even for imports
@@ -341,10 +385,12 @@ try {
         $vendeursByName[import_normalize_header($name)] = (int) $id;
     }
 
-    // Un dossier est un DOUBLON seulement si TOUTES les valeurs cles sont
-    // identiques : telephone + CA-mois + compagnie.
-    // Deux lignes avec le meme telephone mais un CA-mois OU une compagnie
-    // differents NE sont PAS des doublons : elles sont importees.
+    // Un dossier est un DOUBLON quand Téléphone 1 (« telfix »), CA-mois et
+    // compagnie sont identiques.
+    // Deux lignes avec le même Téléphone 1 mais un CA-mois OU une compagnie
+    // différents NE sont PAS des doublons : elles sont importées.
+    // Téléphone 2 (« portable ») est FACULTATIF et n'entre pas dans la clé :
+    // il peut être vide, et son absence ne rend jamais une ligne différente.
     //
     // IMPORTANT : la cle doit etre construite sur les valeurs NORMALISEES
     // telles qu'elles sont (ou seront) STOCKEES en base, sinon une simple
@@ -393,7 +439,7 @@ try {
         };
         $caMoisKey = $caMoisNorm($caMois);
         // Le CA-annuel n'est PAS inclus dans la cle : il est entierement derive
-        // du CA-mois (ca_mois * 12 * 0.846). L'inclure n'apportait aucun
+        // du CA-mois (ca_mois * 12). L'inclure n'apportait aucun
         // discriminant utile et provoquait des faux "non doublons" a cause du
         // recalcul/arrondi. Deux lignes avec meme telephone, meme CA-mois et
         // meme compagnie sont donc des doublons, point.
@@ -403,15 +449,12 @@ try {
         // jamais reconnue comme doublon et se reimporte a chaque envoi du meme
         // fichier (1 dossier importe + N doublons a l'infini).
         $compagnieKey = $clean($compagnie !== '' ? $compagnie : 'Autre');
-        // La colonne `portable` recoit un suffixe d'unicite (« ...-46-1 ») a
-        // l'insertion : on le retire afin de comparer la valeur du fichier a
-        // celle de la base.
-        $portableBase = (string) preg_replace('/-\d+-\d+$/', '', trim($portable));
-        // Le telephone de reference est Tel 1, sinon Tel 2.
+        // Téléphone 1 (« telfix ») est la SEULE référence de doublonnage.
+        // Téléphone 2 (« portable ») est facultatif et n'entre volontairement
+        // PAS dans la clé : une ligne sans Téléphone 2 ne doit donc jamais être
+        // perçue comme différente d'une ligne identique qui en a un, et
+        // aucune valeur de Téléphone 2 n'est utilisée comme repli.
         $phone = $phoneNorm($telfix);
-        if ($phone === '') {
-            $phone = $phoneNorm($portableBase);
-        }
         if ($phone === '') {
             // Aucun numero exploitable : repli sur l'identite du dossier
             // (nom + prenom + date de vente), sinon la meme ligne serait
@@ -453,16 +496,20 @@ try {
     // Rend la valeur de `portable` unique au regard de la contrainte UNIQUE :
     // si elle est déjà utilisée (en base ou par une autre ligne déjà préparée),
     // on lui ajoute un suffixe discriminant au lieu de faire échouer l'import.
-    $makePortableUnique = static function (string $portable, int $rowNumber) use (&$usedPortables): string {
+    // Téléphone 2 étant facultatif, une valeur vide reste NULL (aucun repli
+    // artificiel) : MySQL autorise plusieurs NULL sous une clé UNIQUE.
+    $makePortableUnique = static function (string $portable, int $rowNumber) use (&$usedPortables): ?string {
         $portable = trim($portable);
-        if ($portable !== '' && !isset($usedPortables[$portable])) {
+        if ($portable === '') {
+            return null;
+        }
+        if (!isset($usedPortables[$portable])) {
             $usedPortables[$portable] = true;
             return $portable;
         }
-        $base = $portable !== '' ? $portable : 'N/A';
         $suffix = 1;
         do {
-            $candidate = $base . '-' . $rowNumber . '-' . $suffix;
+            $candidate = $portable . '-' . $rowNumber . '-' . $suffix;
             $suffix++;
         } while (isset($usedPortables[$candidate]));
         $usedPortables[$candidate] = true;
@@ -502,7 +549,7 @@ try {
 
         // La colonne « CA-annuel » est lue telle qu'elle figure dans le fichier
         // (l'export produit cet en-tête). La validation la recalcule de toute
-        // façon à partir du CA mensuel (ca_mois * 12 * 0.846) : cette lecture
+        // façon à partir du CA mensuel (ca_mois * 12) : cette lecture
         // sert donc uniquement à conserver la compatibilité des fichiers
         // exportés puis réimportés.
         $caAnnuelVal = import_cell($row, $indexes, ['CA-annuel', 'CA annuel', 'CA Annuel']);
@@ -542,10 +589,11 @@ try {
             $existingOrigines[mb_strtolower($origineRaw)] = true;
         }
 
-        // Le portable doit rester unique en base : un portable vide retombe
-        // sur le tel fixe, puis sur un identifiant de repli.
-        $basePortable = $portable !== '' ? $portable : ($telfix !== '' ? $telfix : '');
-        $postPortable = $basePortable !== '' ? $basePortable : 'N/A';
+        // Téléphone 2 (portable) est facultatif : on transmet la valeur brute,
+        // éventuellement vide (-> NULL en base). Seule la colonne `telfix`
+        // (Téléphone 1) est obligatoire, et l'import la tolère manquante via
+        // validate_dossier_input(..., allowImportCompatibility: true).
+        $postPortable = $portable;
 
         // Colonnes de supervision : dates de validation / d'annulation et motif.
         // Elles figurent dans l'export et doivent être relues telles quelles au
@@ -585,6 +633,13 @@ try {
             'date_dossier_complet' => $dateValidationRaw !== '' ? $dateValidationRaw : null,
             'date_contrat_non_actif' => $dateAnnulationRaw !== '' ? $dateAnnulationRaw : null,
             'motif_annulation' => $motifAnnulationRaw,
+            // Trois champs de résiliation (formulaire dossier_form.php) :
+            // relus au réimport pour ne pas perdre les valeurs à chaque
+            // cycle export → import (même règle que les colonnes de
+            // supervision ci-dessus).
+            'mutuelle_a_resilier' => import_cell($row, $indexes, ['Mutuelle à résilier', 'Mutuelle a resilier']),
+            'date_resiliation' => import_date_value(import_cell($row, $indexes, ['Date de résiliation', 'Date resiliation'])),
+            'type_resiliation' => import_cell($row, $indexes, ['Type de résiliation', 'Type resiliation']),
         ];
 
         $result = validate_dossier_input($post, $db, null, true);

@@ -13,6 +13,7 @@ define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME', 'Gestion des Dossiers');
 define('APP_URL', 'https://votre-domaine.example');
 define('APP_ENV', 'production');
+define('APP_TIMEZONE', 'Africa/Tunis');
 define('SECURITY_MODE', true);
 define('APP_SECRET_KEY', 'REMPLACEZ_PAR_UNE_CHAINE_ALEATOIRE_LONGUE_ET_SECRETE');
 define('PASSWORD_MAX_AGE_DAYS', 90);
@@ -20,16 +21,10 @@ define('SESSION_LIFETIME', 7200);
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_LOCKOUT_TIME', 900);
 define('ITEMS_PER_PAGE', 25);
-define('IMPORT_MAX_SIZE', 10 * 1024 * 1024);
+define('IMPORT_MAX_SIZE', 30 * 1024 * 1024);
 define('UPLOAD_DIR', __DIR__ . '/../uploads/dossiers/');
-define('UPLOAD_MAX_SIZE', 5 * 1024 * 1024);
-define('MAIL_HOST', getenv('MAIL_HOST') ?: 'smtp.gmail.com');
-define('MAIL_PORT', (int) (getenv('MAIL_PORT') ?: 587));
-define('MAIL_USERNAME', getenv('MAIL_USERNAME') ?: 'your@gmail.com');
-define('MAIL_PASSWORD', getenv('MAIL_PASSWORD') ?: '');
-define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') ?: 'tls');
-define('MAIL_FROM', getenv('MAIL_FROM') ?: 'your@gmail.com');
-define('MAIL_ALERT_TO', getenv('MAIL_ALERT_TO') ?: 'medtechinfo69@gmail.com');
+define('UPLOAD_MAX_SIZE', 30 * 1024 * 1024);
+// SMTP : aucune constante ici — source unique = carte « E-mail (SMTP) » de profile.php (table settings).
 define('UPLOAD_ALLOWED_EXT', ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm', 'opus', 'wma']);
 define('UPLOAD_ALLOWED_MIME', [
     'application/pdf',
@@ -40,7 +35,7 @@ define('UPLOAD_ALLOWED_MIME', [
     'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/webm', 'audio/opus', 'audio/x-ms-wma',
 ]);
 
-date_default_timezone_set('Europe/Paris');
+date_default_timezone_set('Africa/Tunis');
 error_reporting(0);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');

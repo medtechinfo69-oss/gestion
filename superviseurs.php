@@ -20,6 +20,49 @@ try {
     $pendingSessions = [];
 }
 
+// Fuseau de référence des horodatages : aligné sur le poste de travail
+// (W. Central Africa = UTC+1). Evite d'afficher une heure en avance.
+$displayTimezone = new DateTimeZone('Africa/Algiers');
+
+/**
+ * Les DATETIME MySQL (CURRENT_TIMESTAMP) sont stockés avec le fuseau du
+ * serveur MySQL. On détecte son décalage, puis on affiche la valeur dans le
+ * fuseau local de l'utilisateur pour que date et heure soient exactes.
+ */
+function format_pending_session_datetime(PDO $db, ?string $sqlDateTime, DateTimeZone $displayTimezone): string
+{
+    static $serverOffsetSeconds = null;
+    $value = trim((string) $sqlDateTime);
+    if ($value === '') {
+        return '—';
+    }
+
+    try {
+        if ($serverOffsetSeconds === null) {
+            $row = $db->query('SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW()) AS offset_seconds')->fetch();
+            $serverOffsetSeconds = (int) ($row['offset_seconds'] ?? 0);
+        }
+
+        // La valeur SQL est lue dans le fuseau du serveur MySQL, puis ramenée
+        // au fuseau d'affichage en retirant le décalage du serveur.
+        $stored = new DateTimeImmutable($value, new DateTimeZone('UTC'));
+        $secondsToRemove = $serverOffsetSeconds;
+
+        // Reconstruction : heure SQL = heure UTC + offset serveur.
+        // Le signe est appliqué EXPLICITEMENT : un offset négatif (serveur en
+        // UTC-7, fréquent chez les hébergeurs américains) ne doit pas produire
+        // « --25200 seconds », chaîne que l'analyseur de dates de PHP
+        // interprète de travers (l'heure affichée était alors fausse de
+        // plusieurs heures).
+        $utcValue = ($secondsToRemove >= 0)
+            ? $stored->modify('-' . $secondsToRemove . ' seconds')
+            : $stored->modify('+' . abs($secondsToRemove) . ' seconds');
+        return $utcValue->setTimezone($displayTimezone)->format('d/m/Y H:i');
+    } catch (Throwable $e) {
+        return date('d/m/Y H:i', strtotime($value) ?: time());
+    }
+}
+
 $approvedIps = [];
 foreach ($superviseurs as $s) {
     try {
@@ -60,7 +103,7 @@ require __DIR__ . '/includes/header.php';
           <td><?= e($session['username']) ?></td>
           <td><code><?= e($session['ip_address']) ?></code></td>
           <td><?= e(substr($session['user_agent'], 0, 60)) ?></td>
-          <td><?= date('d/m/Y H:i', strtotime($session['created_at'])) ?></td>
+          <td><?= format_pending_session_datetime($db, $session['created_at'] ?? null, $displayTimezone) ?></td>
           <td class="text-center">
             <form method="post" action="<?= e(APP_URL) ?>/actions/superviseur_session_action.php" style="display:inline;">
               <?= csrf_field() ?>
@@ -121,7 +164,7 @@ require __DIR__ . '/includes/header.php';
                   <div>
                     <code><?= e($ip['ip_address']) ?></code>
                     <?php if (!empty($ip['label'])): ?><span class="muted">(<?= e($ip['label']) ?>)</span><?php endif; ?>
-                    <br><span class="muted" style="font-size:0.75rem;"><?= date('d/m/Y H:i', strtotime($ip['approved_at'])) ?></span>
+                    <br><span class="muted" style="font-size:0.75rem;"><?= format_datetime_tn($ip['approved_at']) ?></span>
                   </div>
                   <form action="<?= e(APP_URL) ?>/actions/superviseur_ip_delete.php" method="post"
                         data-confirm="Supprimer l'IP <?= e($ip['ip_address']) ?> ? Le superviseur devra redemander une approbation pour cette adresse."

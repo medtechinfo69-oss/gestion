@@ -11,8 +11,12 @@ superviseur_schema_repair($db);
 $sessionId = (int) ($_POST['session_id'] ?? 0);
 $action = $_POST['action'] ?? '';
 $reason = clean_str($_POST['reason'] ?? '');
-// Page de retour : vendeurs.php (section vendeurs) ou superviseurs.php.
-$returnTo = ($_POST['return_to'] ?? '') === 'vendeurs.php' ? 'vendeurs.php' : 'superviseurs.php';
+// Page de retour : la page d'origine de l'utilisateur concerné
+// (vendeurs.php, superviseurs.php ou rh_comptes.php). Liste blanche stricte.
+$allowedReturnPages = ['vendeurs.php', 'superviseurs.php', 'rh_comptes.php'];
+$returnTo = in_array($_POST['return_to'] ?? '', $allowedReturnPages, true)
+    ? $_POST['return_to']
+    : 'superviseurs.php';
 
 if ($sessionId <= 0 || !in_array($action, ['approve', 'deny'], true)) {
     set_flash('error', 'Demande invalide.');

@@ -154,9 +154,9 @@ require __DIR__ . '/includes/header.php';
         <tbody>
           <?php foreach ($logs as $log): ?>
           <tr class="data-row">
-            <td class="nowrap"><?= date('d/m/Y H:i:s', strtotime($log['created_at'])) ?></td>
+            <td class="nowrap"><?= format_datetime_tn($log['created_at'], 'd/m/Y H:i:s') ?></td>
             <td><?= e($log['username']) ?></td>
-            <td><span class="badge badge-<?= $log['user_role'] === 'admin' ? 'danger' : ($log['user_role'] === 'superviseur' ? 'warning' : 'info') ?>"><?= e($log['user_role']) ?></span></td>
+            <td><span class="badge badge-<?= $log['user_role'] === 'admin' ? 'danger' : ($log['user_role'] === 'superviseur' ? 'warning' : 'info') ?>"><?= e(role_label((string) $log['user_role'])) ?></span></td>
             <td><span class="action-pill action-pill--<?= e($log['action_type']) ?>"><?= e($log['action_type']) ?></span></td>
             <td><?= e($log['resource_type']) ?></td>
             <td class="description-cell"><?= e($log['resource_description'] ?? '-') ?></td>

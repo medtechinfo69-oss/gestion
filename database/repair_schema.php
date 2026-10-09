@@ -412,6 +412,175 @@ function repair_schema_all(PDO $db, bool $verbose = true, bool $dedupeBusiness =
         catch (Throwable $e) { $errors++; echo "  $table.{$def[0]} : ERREUR " . $e->getMessage() . "\n"; }
     }
 
+    // 4) dossiers.portable :Telephone 2 est devenu FACULTATIF (c'est
+    //    Telephone 1 / telfix qui est obligatoire). La colonne etait NOT NULL,
+    //    ce qui faisait echouer l'enregistrement d'un dossier sans telephone 2.
+    //    On la rend nullable ; la cle UNIQUE reste valide car MySQL autorise
+    //    plusieurs NULL dans un index unique.
+    //    COMPLEMENT hosting : les anciennes lignes contiennent souvent '' ou
+    //    ' ' (chaine vide / espaces) au lieu de NULL. Or '' occupe UNE valeur
+    //    sous l'index UNIQUE uq_dossiers_portable : le 2e dossier sans
+    //    telephone 2 echouait en « Duplicate entry '' ». On normalise donc
+    //    toutes les valeurs sans chiffre vers NULL AVANT tout ALTER/UNIQUE,
+    //    ce qui rend l'enregistrement « tel 1 seul » toujours possible.
+    if ($verbose) { echo "--- 4. dossiers.portable nullable (Telephone 2 facultatif) ---\n"; }
+    try {
+        if ($db->query("SHOW TABLES LIKE " . $db->quote('dossiers'))->fetchColumn()) {
+            $portableCol = null;
+            foreach ($db->query("SHOW COLUMNS FROM `dossiers` LIKE 'portable'")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                $portableCol = $c;
+            }
+            if (!$portableCol) {
+                if ($verbose) { echo "  dossiers.portable : colonne absente (ignoree)\n"; }
+            } else {
+                // 4a) Normalise les « vides » ('', espaces, '+', '.', sans
+                //     chiffre) vers NULL : aucune donnee reelle n'est touchee
+                //     (la condition exige qu'il n'y ait AUCUN chiffre 0-9).
+                try {
+                    $norm = $db->exec(
+                        "UPDATE `dossiers` SET `portable` = NULL " .
+                        "WHERE `portable` IS NOT NULL AND `portable` NOT REGEXP '[0-9]'"
+                    );
+                    if ($verbose) {
+                        echo "  dossiers.portable : " . (int) $norm . " valeur(s) vide(s) normalisee(s) vers NULL.\n";
+                    }
+                } catch (Throwable $eNorm) {
+                    // REGEXP indisponible sur un vieux MySQL : repli LIKE.
+                    try {
+                        $norm2 = $db->exec(
+                            "UPDATE `dossiers` SET `portable` = NULL " .
+                            "WHERE `portable` IS NOT NULL AND TRIM(`portable`) IN ('', '+', '.', '++', '..', '+.', '.+')"
+                        );
+                        if ($verbose) {
+                            echo "  dossiers.portable : " . (int) $norm2 . " valeur(s) vide(s) normalisee(s) vers NULL (repli).\n";
+                        }
+                    } catch (Throwable $eNorm2) {
+                        if ($verbose) { echo "  dossiers.portable : normalisation impossible (" . $eNorm2->getMessage() . ")\n"; }
+                    }
+                }
+                // 4b) Rend la colonne NULL si elle est encore NOT NULL.
+                $portableCol2 = null;
+                foreach ($db->query("SHOW COLUMNS FROM `dossiers` LIKE 'portable'")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                    $portableCol2 = $c;
+                }
+                if (strtoupper((string) ($portableCol2['Null'] ?? $portableCol['Null'])) !== 'YES') {
+                    $db->exec("ALTER TABLE `dossiers` MODIFY COLUMN `portable` VARCHAR(30) NULL");
+                    if ($verbose) { echo "  dossiers.portable : NOT NULL -> NULL.\n"; }
+                } elseif ($verbose) {
+                    echo "  dossiers.portable : deja NULL (OK).\n";
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $errors++;
+        echo "  dossiers.portable : ERREUR " . $e->getMessage() . "\n";
+    }
+
+    // 5) Renommage des libelles de courrier (« Devoir de conseil » ->
+    //    « Attestation de droit », « Consentement » -> « Devoir de conseil et
+    //    consentement »). La colonne `courrier` contient un JSON d'options.
+    //
+    //    On décode / re-encode chaque valeur plutôt que d'utiliser REPLACE() :
+    //    « Devoir de conseil » est un PREFIXE de « Devoir de conseil et
+    //    consentement », donc un REPLACE() textual corromprait le libellé le
+    //    plus long en « Attestation de droit et consentement » (valeur qui
+    //    n'existe nulle part). Seule la correspondance EXACTE est migrée.
+    if ($verbose) { echo "--- 5. Renommage des libelles de courrier ---\n"; }
+    try {
+        if ($db->query("SHOW TABLES LIKE " . $db->quote('dossiers'))->fetchColumn()) {
+            $renamedTotal = 0;
+            $select = $db->query("SELECT id, courrier FROM dossiers WHERE courrier IS NOT NULL AND courrier <> '' AND courrier <> '[]'");
+            $update = $db->prepare('UPDATE dossiers SET courrier = :c WHERE id = :id');
+            foreach ($select->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $values = json_decode((string) $row['courrier'], true);
+                if (!is_array($values)) {
+                    continue;
+                }
+                $alias = courrier_legacy_alias();
+                $changed = false;
+                $new = [];
+                foreach ($values as $value) {
+                    $value = (string) $value;
+                    if (isset($alias[$value])) {
+                        $value = $alias[$value];
+                        $changed = true;
+                    }
+                    $new[] = $value;
+                }
+                if (!$changed) {
+                    continue;
+                }
+                $update->execute([
+                    'c'  => json_encode($new, JSON_UNESCAPED_UNICODE),
+                    'id' => (int) $row['id'],
+                ]);
+                $renamedTotal++;
+            }
+            if ($renamedTotal > 0) {
+                if ($verbose) { echo "  dossiers.courrier : $renamedTotal dossier(s) mis a jour.\n"; }
+                $warnings += $renamedTotal;
+            } elseif ($verbose) {
+                echo "  dossiers.courrier : aucun libelle ancien (OK).\n";
+            }
+        }
+    } catch (Throwable $e) {
+        $errors++;
+        echo "  dossiers.courrier : ERREUR " . $e->getMessage() . "\n";
+    }
+
+    // 6) dossiers.etat_contrat : ajoute 'Sans effet mutuelle' a l'ENUM.
+    //    Sans cela, tout enregistrement avec cette valeur echoue en
+    //    « Data truncated for column 'etat_contrat' » sur les bases creees
+    //    avant l'ajout. Idempotent : ne fait rien si la valeur existe deja.
+    if ($verbose) { echo "--- 6. dossiers.etat_contrat ENUM (Sans effet mutuelle) ---\n"; }
+    try {
+        if ($db->query("SHOW TABLES LIKE " . $db->quote('dossiers'))->fetchColumn()) {
+            $col = $db->query("SHOW COLUMNS FROM `dossiers` LIKE 'etat_contrat'")->fetch(PDO::FETCH_ASSOC);
+            if (!$col) {
+                if ($verbose) { echo "  dossiers.etat_contrat : colonne absente (ignoree)\n"; }
+            } elseif (strpos((string) ($col['Type'] ?? ''), 'Sans effet mutuelle') !== false) {
+                if ($verbose) { echo "  dossiers.etat_contrat : 'Sans effet mutuelle' deja present (OK).\n"; }
+            } else {
+                $db->exec("ALTER TABLE `dossiers` MODIFY COLUMN `etat_contrat` ENUM('Actif','Renonciation','Résiliation infra-annuelle','Résiliation à échéance','Radié pour non-paiement','Sans effet qualite','Sans effet mutuelle','CSS') NOT NULL DEFAULT 'Actif'");
+                if ($verbose) { echo "  dossiers.etat_contrat : ENUM etendu (Sans effet mutuelle ajoute).\n"; }
+            }
+        }
+    } catch (Throwable $e) {
+        $errors++;
+        echo "  dossiers.etat_contrat : ERREUR " . $e->getMessage() . "\n";
+    }
+
+    // 7) dossiers : nouveaux champs « Mutuelle à résilier », « Date de
+    //    résiliation » et « Type de résiliation » (formulaire dossier_form.php).
+    //    Idempotent : chaque colonne est ajoutée uniquement si elle n'existe
+    //    pas encore. Les trois sont NULLables — aucun dossier existant n'est
+    //    modifié.
+    if ($verbose) { echo "--- 7. dossiers : champs de résiliation (mutuelle) ---\n"; }
+    try {
+        if ($db->query("SHOW TABLES LIKE " . $db->quote('dossiers'))->fetchColumn()) {
+            $newCols = [
+                'mutuelle_a_resilier' => 'VARCHAR(255) NULL',
+                'date_resiliation'    => 'DATE NULL',
+                'type_resiliation'    => 'VARCHAR(100) NULL',
+            ];
+            $existingCols = [];
+            foreach ($db->query("SHOW COLUMNS FROM `dossiers`")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                $existingCols[$c['Field']] = true;
+            }
+            foreach ($newCols as $col => $def) {
+                if (isset($existingCols[$col])) {
+                    if ($verbose) { echo "  dossiers.$col : presente (OK).\n"; }
+                    continue;
+                }
+                $db->exec("ALTER TABLE `dossiers` ADD COLUMN `$col` $def");
+                if ($verbose) { echo "  dossiers.$col : AJOUTEE.\n"; }
+            }
+        }
+    } catch (Throwable $e) {
+        $errors++;
+        echo "  dossiers résiliation : ERREUR " . $e->getMessage() . "\n";
+    }
+
     try { $db->exec('SET FOREIGN_KEY_CHECKS = 1'); } catch (Throwable $e) {}
 
     return ['ok' => $errors === 0, 'warnings' => $warnings, 'errors' => $errors];

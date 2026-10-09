@@ -5,8 +5,9 @@
  * Chaque action effectuée par un SUPERVISEUR (création / modification /
  * suppression / import / pièce jointe / RH / salaires) est enregistrée ici
  * dans une table INSERT-ONLY : aucune fonction UPDATE ni DELETE n'existe
- * dans ce module, et la page dédiée n'offre que la lecture. Un superviseur
- * ne peut donc ni masquer ni altérer la trace de ses propres actions.
+ * dans ce module. La page dédiée réserve à l'administrateur les suppressions
+ * unitaires et groupées ; un superviseur ne peut donc ni masquer ni altérer
+ * la trace de ses propres actions.
  *
  * La table est créée automatiquement (CREATE TABLE IF NOT EXISTS) pour
  * fonctionner aussi sur l'hébergement sans import SQL manuel.
@@ -17,9 +18,21 @@ if (!defined('APP_INIT')) {
     exit('Accès direct interdit.');
 }
 
-/** Crée la table des notifications si elle n'existe pas encore. */
+/**
+ * Cree la table des notifications si elle n'existe pas encore.
+ *
+ * La verification (CREATE TABLE IF NOT EXISTS + SHOW COLUMNS) n'est faite
+ * qu'UNE FOIS par requete : sans cette memorisation, chaque appel repetait
+ * deux requetes MySQL, alors que la page notifications.php en declenche
+ * cinq (historique, compteur, cloche, liste, marquage).
+ */
 function admin_notifications_ensure(PDO $db): bool
 {
+    static $checked = false;
+    if ($checked) {
+        return true;
+    }
+
     try {
         $db->exec(
             "CREATE TABLE IF NOT EXISTS admin_notifications (
@@ -67,9 +80,12 @@ function admin_notifications_ensure(PDO $db): bool
             }
             $db->exec("ALTER TABLE admin_notifications MODIFY COLUMN id $idType NOT NULL AUTO_INCREMENT");
         }
+        $checked = true;
         return true;
     } catch (Throwable $e) {
         error_log('admin_notifications_ensure: ' . $e->getMessage());
+        // On ne memorise PAS l'echec : un appel ulterieur peut reussir
+        // (table creee entre-temps par un autre script).
         return false;
     }
 }

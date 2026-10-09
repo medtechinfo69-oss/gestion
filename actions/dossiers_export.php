@@ -151,6 +151,9 @@ $columns = [
     'motif_annulation'     => "Motif d'annulation",
     'controle_qualite'     => 'Contrôle Qualité',
     'date_injection'       => "Date d'injection",
+    'mutuelle_a_resilier'  => 'Mutuelle à résilier',
+    'date_resiliation'     => 'Date de résiliation',
+    'type_resiliation'     => 'Type de résiliation',
 ];
 if ($hideSupervisorColumns) {
     foreach (['produit', 'compagnie', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {
@@ -169,7 +172,7 @@ foreach ($dossiers as $rowNumber => $dossier) {
     $cells = '';
     foreach (array_keys($columns) as $index => $key) {
         $value = $dossier[$key] ?? '';
-        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif', 'date_injection'], true)) {
+        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif', 'date_injection', 'date_resiliation'], true)) {
             $value = format_date((string) $value);
         } elseif ($key === 'courrier') {
             $value = implode(', ', courrier_values((string) $value));
@@ -194,7 +197,10 @@ $workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relatio
 
 if (!class_exists('ZipArchive')) {
     http_response_code(500);
-    exit('Export .xlsx impossible : activez extension=zip dans C:\\xampp\\php\\php.ini puis redémarrez Apache.');
+    // Message sans chemin local : l'affichage « C:\xampp\php\php.ini » etait
+    // trompeur des que le projet tourne sur un hebergement Linux.
+    exit('Export .xlsx impossible : l’extension PHP « zip » n’est pas activée sur ce serveur. '
+        . 'Contactez votre hébergeur pour l’activer (php.ini : extension=zip).');
 }
 // Fichier temporaire : app_temp_file() évite /home/tmp (hors open_basedir sur
 // les hébergements mutualisés) et privilégie uploads/tmp du projet.

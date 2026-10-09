@@ -1,9 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
-require_admin();
+require_rh(); // administrateur OU compte RH — et rien d'autre
 
 $user = current_user();
-$isAdmin = is_admin();
+$isAdmin = is_admin(); // page en lecture seule pour le tableau de bord
 $pageTitle = 'Tableau de bord';
 $pageSubtitle = 'Vue d\'ensemble de la gestion RH';
 $activePage = 'rh_dashboard';

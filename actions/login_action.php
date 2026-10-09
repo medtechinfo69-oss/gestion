@@ -49,4 +49,6 @@ if (!empty($result['user']['must_change_password']) || !empty($result['password_
 
 sec_log('login', 'login', null, 'Successful login for ' . $username);
 set_flash('success', 'Bienvenue, ' . $result['user']['nom_complet'] . '.');
-redirect('dashboard.php');
+// Un compte RH est redirigé vers le tableau de bord RH (le dashboard de
+// production lui est interdit) ; les autres rôles vers le dashboard de gestion.
+redirect(is_rh() ? 'rh_dashboard.php' : 'dashboard.php');

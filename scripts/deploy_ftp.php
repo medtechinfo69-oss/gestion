@@ -14,6 +14,13 @@
  *   --force            Re-televerse meme les fichiers deja a jour
  *   --only=<prefixe>   Ne traite que les chemins commencant par <prefixe>
  *                      (ex : --only=actions/  --only=config/)
+ *   --files=<a,b,c>    Ne televerse que CETTE liste de fichiers precis, en
+ *                      chemins relatifs (ex : --files=includes/functions.php,
+ *                      dossier_form.php). Contrairement a --only (qui filtre
+ *                      par dossier et emporte donc tous les fichiers modifies
+ *                      d'un meme dossier), --files est destine aux deploiements
+ *                      cibles quand l'arborescence locale contient d'autres
+ *                      modifications non encore validees.
  *   --data-uploads     Inclut le contenu de uploads/dossiers (donnees locales)
  *   --with-readme      Inclut readme*.txt (identifiants en clair, deconseille)
  *
@@ -188,7 +195,9 @@ function should_skip(string $relative, bool $withUploads, bool $withReadme): boo
     $base = basename($rel);
 
     // Dossiers techniques et fichiers de travail : jamais deployes.
-    foreach (['.git', '.vscode', 'node_modules'] as $skip) {
+    // '.kilo' contient les worktrees d'agents (une COPIE COMPLETE du projet) :
+    // sans cette exclusion, chaque deploiement televerse le code deux fois.
+    foreach (['.git', '.vscode', '.kilo', 'node_modules'] as $skip) {
         if ($rel === $skip || str_starts_with($rel, $skip . '/')) {
             return true;
         }
@@ -203,6 +212,13 @@ function should_skip(string $relative, bool $withUploads, bool $withReadme): boo
         return true;
     }
 
+    // Fichiers temporaires de travail (exports de doublons .xlsx en attente de
+    // telechargement) : ce sont des DONNEES CLIENT locales, jamais du code.
+    // Seul le .htaccess de protection du dossier est conserve sur le serveur.
+    if (str_starts_with($rel, 'uploads/tmp/') && $base !== '.htaccess') {
+        return true;
+    }
+
     // Pieces jointes locales (donnees du poste, pas du serveur).
     if (str_starts_with($rel, 'uploads/dossiers/') && !$withUploads) {
         return !in_array($base, ['index.php', '.htaccess'], true);
@@ -213,6 +229,14 @@ function should_skip(string $relative, bool $withUploads, bool $withReadme): boo
         return true;
     }
 
+    // Configuration LOCALE de developpement : ne doit jamais monter sur
+    // l'hebergement. Elle contient APP_ENV=development et display_errors=1 ;
+    // la version du serveur est config.hosting.php. config.php ne selectionne
+    // config.local.php que pour localhost / IP privees.
+    if ($rel === 'config/config.local.php') {
+        return true;
+    }
+
     return false;
 }
 
@@ -220,9 +244,10 @@ function should_skip(string $relative, bool $withUploads, bool $withReadme): boo
  * Parcourt recursivement le projet et retourne les dossiers puis les fichiers
  * a deployer, en chemin relatif (les dossiers exclus ne sont pas explores).
  *
+ * @param list<string>|null $onlyFiles  liste blanche de fichiers (chemins relatifs)
  * @return array{dirs:list<string>,files:array<string,string>}
  */
-function collect_tree(bool $withUploads, bool $withReadme, ?string $onlyPrefix): array
+function collect_tree(bool $withUploads, bool $withReadme, ?string $onlyPrefix, ?array $onlyFiles = null): array
 {
     $root = realpath(PROJECT_ROOT);
     if ($root === false) {
@@ -234,7 +259,20 @@ function collect_tree(bool $withUploads, bool $withReadme, ?string $onlyPrefix):
     $files = [];
     $prefix = $onlyPrefix !== null ? strtolower(str_replace('\\', '/', trim($onlyPrefix, '/'))) : null;
 
-    $walk = static function (string $dir, string $relative) use (&$walk, &$dirs, &$files, $root, $withUploads, $withReadme, $prefix): void {
+    // Liste blanche normalisee : comparaisons insensibles a la casse et aux
+    // separateurs, comme le reste du script.
+    $whitelist = null;
+    if ($onlyFiles !== null && $onlyFiles !== []) {
+        $whitelist = [];
+        foreach ($onlyFiles as $rel) {
+            $rel = strtolower(str_replace('\\', '/', trim((string) $rel, " \t\n\r\0\x0B/")));
+            if ($rel !== '') {
+                $whitelist[$rel] = true;
+            }
+        }
+    }
+
+    $walk = static function (string $dir, string $relative) use (&$walk, &$dirs, &$files, $root, $withUploads, $withReadme, $prefix, $whitelist): void {
         foreach ((array) scandir($dir) as $entry) {
             if ($entry === '.' || $entry === '..') {
                 continue;
@@ -252,6 +290,14 @@ function collect_tree(bool $withUploads, bool $withReadme, ?string $onlyPrefix):
                 continue;
             }
 
+            if ($whitelist !== null) {
+                if (!isset($whitelist[strtolower($rel)])) {
+                    continue;
+                }
+                $files[$rel] = $path;
+                continue;
+            }
+
             if ($prefix !== null && !str_starts_with(strtolower($rel), $prefix)) {
                 continue;
             }
@@ -263,6 +309,25 @@ function collect_tree(bool $withUploads, bool $withReadme, ?string $onlyPrefix):
     $walk($root, '');
     ksort($dirs);
     ksort($files);
+
+    // En liste blanche, on ne cree que les dossiers VRAIMENT necessaires aux
+    // fichiers demandes (evite de joindre des dossiers sans rapport).
+    if ($whitelist !== null) {
+        $needed = [];
+        foreach (array_keys($files) as $rel) {
+            $parts = explode('/', dirname($rel));
+            $acc = '';
+            foreach ($parts as $part) {
+                if ($part === '.' || $part === '') {
+                    continue;
+                }
+                $acc = $acc === '' ? $part : $acc . '/' . $part;
+                $needed[$acc] = true;
+            }
+        }
+        $dirs = array_keys($needed);
+        sort($dirs);
+    }
 
     return ['dirs' => array_values($dirs), 'files' => $files];
 }
@@ -321,15 +386,27 @@ function mode_check(array $cfg): int
  * Televerse l'arborescence du projet vers le serveur.
  *
  * @param array<string,mixed> $cfg
- * @param array{dryRun:bool,force:bool,withUploads:bool,withReadme:bool,only:?string,verbose:bool} $opt
+ * @param array{dryRun:bool,force:bool,withUploads:bool,withReadme:bool,only:?string,files:list<string>,verbose:bool} $opt
  */
 function mode_upload(array $cfg, array $opt): int
 {
-    $tree = collect_tree($opt['withUploads'], $opt['withReadme'], $opt['only']);
+    $tree = collect_tree($opt['withUploads'], $opt['withReadme'], $opt['only'], $opt['files'] ?? null);
     $total = count($tree['files']);
 
+    // En liste blanche, on signale les chemins demandes qui n'existent pas
+    // localement : une coquille dans --files ne doit pas passer inapercee.
+    if (!empty($opt['files'])) {
+        $found = array_map('strtolower', array_keys($tree['files']));
+        foreach ($opt['files'] as $wanted) {
+            $wanted = strtolower(str_replace('\\', '/', trim((string) $wanted, " \t\n\r\0\x0B/")));
+            if ($wanted !== '' && !in_array($wanted, $found, true)) {
+                err('Fichier demande introuvable localement (non deploye) : ' . $wanted);
+            }
+        }
+    }
+
     if ($total === 0) {
-        err('Aucun fichier a televerser (verifiez --only).');
+        err('Aucun fichier a televerser (verifiez --only / --files).');
         return 1;
     }
 
@@ -439,6 +516,7 @@ $command = $argv[1] ?? 'upload';
 $flags = array_slice($argv, 2);
 
 $only = null;
+$files = null;
 $verbose = false;
 $unknown = [];
 foreach ($flags as $flag) {
@@ -453,10 +531,29 @@ foreach ($flags as $flag) {
         $only = substr($flag, 7);
         continue;
     }
+    if (str_starts_with($flag, '--files=')) {
+        $files = array_values(array_filter(
+            array_map('trim', explode(',', substr($flag, 8))),
+            static fn(string $f): bool => $f !== ''
+        ));
+        continue;
+    }
     $unknown[] = $flag;
 }
 
-if ($unknown !== [] && $command !== 'list') {
+// --only et --files sont mutuellement exclusifs : l'un filtre par prefixe de
+// dossier, l'autre est une liste blanche de fichiers. Les melanger donnerait
+// un resultat trompeur (liste blanche vide si le prefixe ne correspond pas).
+if ($only !== null && $files !== null) {
+    err('--only et --files ne peuvent pas etre combines.');
+    exit(2);
+}
+
+// Les commandes de diagnostic (grep, diff) acceptent des arguments positionnels
+// supplementaires : ils ne sont donc pas traites comme des options inconnues.
+$diagnostic = in_array($command, ['list', 'grep', 'diff'], true);
+
+if ($unknown !== [] && !$diagnostic) {
     err('Option inconnue : ' . implode(' ', $unknown));
     exit(2);
 }
@@ -470,6 +567,55 @@ switch ($command) {
     case 'list':
         exit(mode_list($config, (string) ($argv[2] ?? '')));
 
+    case 'grep': {
+        // Affiche les lignes distantes d'un fichier (ou la presence d'un motif).
+        $rel = (string) ($argv[2] ?? '');
+        $needle = (string) ($argv[3] ?? '');
+        $conn = ftp_open($config);
+        $tmp = tempnam(sys_get_temp_dir(), 'ftp');
+        if (!@ftp_get($conn, $tmp, $config['path'] . $rel, FTP_BINARY)) {
+            err('Fichier distant introuvable : ' . $rel);
+            exit(1);
+        }
+        $lines = file($tmp, FILE_IGNORE_NEW_LINES);
+        foreach ($lines as $no => $line) {
+            if ($needle === '' || stripos($line, $needle) !== false) {
+                out(sprintf('%4d | %s', $no + 1, $line));
+            }
+        }
+        @unlink($tmp);
+        @ftp_close($conn);
+        exit(0);
+    }
+
+    case 'diff': {
+        // Verifie que le contenu distant correspond bien au local (par empreinte
+        // MD5) : le mode « upload » ne compare que les tailles, ce qui laisse
+        // passer un fichier tronque ou un ancien cache.
+        $conn = ftp_open($config);
+        $tree = collect_tree(false, false, $only, $files ?? null);
+        $diff = 0;
+        foreach ($tree['files'] as $rel => $local) {
+            $remote = $config['path'] . $rel;
+            $tmp = tempnam(sys_get_temp_dir(), 'ftp');
+            if (!@ftp_get($conn, $tmp, $remote, FTP_BINARY)) {
+                echo "ABSENT  $rel\n";
+                $diff++;
+                continue;
+            }
+            $a = md5_file($local);
+            $b = md5_file($tmp);
+            if ($a !== $b) {
+                echo "DIFF    $rel (local $a / distant $b)\n";
+                $diff++;
+            }
+            @unlink($tmp);
+        }
+        @ftp_close($conn);
+        out(sprintf('%d fichier(s) different(s) sur %d.', $diff, count($tree['files'])));
+        exit($diff === 0 ? 0 : 1);
+    }
+
     case 'upload':
         exit(mode_upload($config, [
             'dryRun'      => in_array('--dry-run', $flags, true),
@@ -477,6 +623,7 @@ switch ($command) {
             'withUploads' => in_array('--data-uploads', $flags, true),
             'withReadme'  => in_array('--with-readme', $flags, true),
             'only'        => $only,
+            'files'       => $files ?? [],
             'verbose'     => $verbose,
         ]));
 

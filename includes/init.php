@@ -87,7 +87,7 @@ $db = Database::getConnection();
 // ---------------------------------------------------------------------------
 if (isset($_REQUEST['chat_api'])
     && is_logged_in()
-    && in_array($_SESSION['user']['role'] ?? '', ['admin', 'superviseur', 'vendeur'], true)) {
+    && in_array($_SESSION['user']['role'] ?? '', login_allowed_roles(), true)) {
     // Réponse 100 % JSON : en dev (display_errors=1), tout warning échoé
     // avant le JSON casse r.json() côté client (bulle « non envoyé » à tort).
     while (ob_get_level() > 0) { @ob_end_clean(); }

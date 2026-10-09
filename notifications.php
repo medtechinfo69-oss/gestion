@@ -24,11 +24,15 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 25;
 
 $history = admin_notifications_history($db, $page, $perPage, $filterActor, $filterAction);
-$unread = 0;
+
+// Nombre de notifications non lues. On passe par la fonction du module
+// (meme source que la cloche de l'en-tete) : l'ancienne version relanait ici
+// un COUNT(*) identique a celui du header, soit une requete en double.
+$unread = admin_notifications_unread_count($db);
 try {
-    $unread = (int) $db->query('SELECT COUNT(*) FROM admin_notifications WHERE is_read = 0')->fetchColumn();
+  $notificationsTotal = (int) $db->query('SELECT COUNT(*) FROM admin_notifications')->fetchColumn();
 } catch (Throwable $e) {
-    $unread = 0;
+  $notificationsTotal = 0;
 }
 
 $topbarActions = '';
@@ -91,7 +95,7 @@ require __DIR__ . '/includes/header.php';
   <div class="notif-page-head">
     <div>
       <h2>Activité des superviseurs</h2>
-      <div class="muted">Journal des actions des superviseurs. Vous pouvez marquer les notifications comme lues ou supprimer une entrée du journal.</div>
+      <div class="muted">Journal des actions des superviseurs. Sélectionnez une ou plusieurs notifications pour les supprimer, ou videz tout le journal.</div>
     </div>
     <span class="muted"><?= (int) $history['total'] ?> notification(s)</span>
   </div>
@@ -116,11 +120,36 @@ require __DIR__ . '/includes/header.php';
     </div>
   </form>
 
+  <?php if ($history['items'] || $notificationsTotal > 0): ?>
+  <div class="bulk-actions notif-bulk-actions" data-notif-bulk-actions>
+    <?php if ($history['items']): ?>
+    <span class="bulk-count" data-notif-selection-count>0 notification sélectionnée</span>
+    <?php endif; ?>
+    <div class="notif-bulk-buttons">
+      <?php if ($history['items']): ?>
+      <form id="notif-bulk-delete-form" action="<?= e(APP_URL) ?>/actions/notification_bulk_delete.php" method="post" data-confirm="Supprimer définitivement les notifications sélectionnées ?">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="selected">
+        <button type="submit" class="btn btn-danger btn-sm" data-notif-delete-selected disabled>Supprimer la sélection</button>
+      </form>
+      <?php endif; ?>
+    <?php if ($notificationsTotal > 0): ?>
+      <form action="<?= e(APP_URL) ?>/actions/notification_bulk_delete.php" method="post" data-confirm="Supprimer définitivement toutes les notifications du journal ? Cette action concerne aussi les autres pages et filtres.">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="all">
+        <button type="submit" class="btn btn-danger btn-sm">Tout supprimer</button>
+      </form>
+    <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <div class="table-card">
     <div class="table-wrap">
       <table class="data-table">
         <thead>
           <tr>
+            <?php if ($history['items']): ?><th class="selection-cell"><input type="checkbox" data-notif-select-all aria-label="Sélectionner toutes les notifications de cette page"></th><?php endif; ?>
             <th>Date/Heure</th>
             <th>Superviseur</th>
             <th>Action</th>
@@ -132,8 +161,13 @@ require __DIR__ . '/includes/header.php';
         </thead>
         <tbody>
           <?php foreach ($history['items'] as $n): ?>
-            <tr class="data-row<?= empty($n['is_read']) ? ' notif-row-unread' : '' ?>">
-              <td class="nowrap" data-label="Date / heure"><?= e(date('d/m/Y H:i:s', strtotime((string) ($n['created_at'] ?? 'now')))) ?></td>
+          <?php /* Horodatage en heure de Tunis : la session MySQL enregistre
+                     déjà en Africa/Tunis (voir config/database.php), on ne
+                     fait donc qu'un formatage, sans conversion. */ ?>
+          <?php $notifDate = format_datetime_tn($n['created_at'] ?? null, 'd/m/Y H:i:s'); ?>
+          <tr class="data-row<?= empty($n['is_read']) ? ' notif-row-unread' : '' ?>">
+              <td class="selection-cell" data-label="Sélection"><input type="checkbox" name="notification_ids[]" value="<?= (int) $n['id'] ?>" form="notif-bulk-delete-form" data-notif-select aria-label="Sélectionner la notification <?= (int) $n['id'] ?>"></td>
+              <td class="nowrap" data-label="Date / heure"><?= e($notifDate) ?></td>
               <td data-label="Superviseur"><strong><?= e((string) ($n['actor_username'] ?? '')) ?></strong></td>
               <td>
                 <span class="action-pill action-pill--<?= e((string) ($n['action'] ?? '')) ?>"><?= admin_notification_icon((string) ($n['action'] ?? '')) ?> <?= e(admin_notification_action_label((string) ($n['action'] ?? ''))) ?></span>
@@ -162,7 +196,7 @@ require __DIR__ . '/includes/header.php';
                 <span class="notif-actions">
                 <button type="button" class="btn btn-outline btn-sm notif-icon-btn" title="Voir le détail" aria-label="Voir le détail"
                   data-notif-view
-                  data-date="<?= e(date('d/m/Y H:i:s', strtotime((string) ($n['created_at'] ?? 'now')))) ?>"
+                  data-date="<?= e($notifDate) ?>"
                   data-actor="<?= e((string) ($n['actor_username'] ?? '')) ?>"
                   data-action="<?= e(admin_notification_action_label((string) ($n['action'] ?? ''))) ?>"
                   data-entity="<?= e((string) ($n['entity'] ?? '')) ?><?= !empty($n['entity_id']) ? ' #' . e((string) $n['entity_id']) : '' ?>"
@@ -185,7 +219,7 @@ require __DIR__ . '/includes/header.php';
           <?php endforeach; ?>
           <?php if (!$history['items']): ?>
             <tr>
-              <td colspan="7">
+              <td colspan="<?= $history['items'] ? 8 : 7 ?>">
                 <div class="empty-state">
                   <div class="empty-icon">&#128276;</div>
                   Aucune activité de superviseur enregistrée pour le moment.

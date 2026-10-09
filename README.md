@@ -276,19 +276,14 @@ base de donnees, aux uploads et a l'export Excel.
 
 ### 2.1 Notifications e-mail
 
-Les alertes utilisent Gmail SMTP et sont envoyees a `medtechinfo69@gmail.com`
-ainsi qu'aux adresses des comptes admin actifs. Utilisez un mot de passe
-d'application Google, jamais le mot de passe normal du compte :
+Les alertes utilisent Gmail SMTP et sont envoyees a l'adresse de notification
+ainsi qu'aux adresses des comptes admin actifs. Source UNIQUE : la carte
+« E-mail (SMTP) » de la page Paramètres (`profile.php`, compte admin) —
+aucune constante SMTP dans `config.*.php`. Utilisez un mot de passe
+d'application Google, jamais le mot de passe normal du compte.
 
-```text
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USERNAME=medtechinfo69@gmail.com
-MAIL_PASSWORD=votre_mot_de_passe_application_google
-MAIL_ENCRYPTION=tls
-MAIL_FROM=medtechinfo69@gmail.com
-MAIL_ALERT_TO=medtechinfo69@gmail.com
-```
+Pour changer de compte d'envoi : Paramètres → carte E-mail (SMTP) →
+renseignez le nouveau compte → « Enregistrer et tester ».
 
 Un export RH admin est envoye en piece jointe par e-mail et n'est pas
 telecharge dans le navigateur. Les modifications faites par un superviseur sur un dossier,

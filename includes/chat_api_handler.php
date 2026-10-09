@@ -5,14 +5,19 @@
  *  2. LA PAGE COURANTE via ?chat_api=... (transport de secours : certains
  *     hébergeurs gratuits filtrent les requêtes AJAX vers le dossier actions/,
  *     alors que les requêtes vers la page elle-même passent toujours).
- * Sécurité : tous les rôles connectés (admin / superviseur / vendeur),
- * CSRF sur l'envoi,
- * anti-spam côté serveur, validation de l'existence du correspondant.
+ * Sécurité : tous les rôles connectés (admin / superviseur / vendeur / rh),
+ * CSRF sur l'envoi, anti-spam côté serveur, validation de l'existence du
+ * correspondant. Les paires autorisées sont définies UNE FOIS dans
+ * includes/chat.php (chat_pair_allowed) : admin <-> tout le monde et
+ * vendeur <-> superviseur. Toute autre paire est refusée ici (403).
  */
 if (!defined('APP_INIT')) {
     http_response_code(403);
     exit('Accès direct interdit.');
 }
+
+// Le rôle connecté est vérifié par can_chat_role() (défini dans chat.php,
+// toujours chargé via init.php) : une seule règle pour le widget et l'API.
 
 function chat_api_handle(PDO $db, string $action): void
 {
@@ -25,7 +30,7 @@ function chat_api_handle(PDO $db, string $action): void
         header('Cache-Control: no-store');
     }
 
-    if (!is_admin() && !is_superviseur() && !is_vendeur_user()) {
+    if (!can_chat_role()) {
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => 'Accès refusé.']);
         return;
@@ -33,6 +38,7 @@ function chat_api_handle(PDO $db, string $action): void
 
     $me = current_user();
     $meId = (int) $me['id'];
+    $meRole = (string) ($me['role'] ?? '');
     chat_tables_ensure($db);
     users_schema_ensure($db); // répare un éventuel ancien schéma de la table users
     chat_touch_presence($db, $meId);
@@ -41,7 +47,7 @@ function chat_api_handle(PDO $db, string $action): void
     switch ($action) {
         case 'status':
             $contacts = [];
-            foreach (chat_get_contacts($db, $meId) as $c) {
+            foreach (chat_get_contacts($db, $meId, $meRole) as $c) {
                 $contacts[] = [
                     'id' => (int) $c['id'],
                     'username' => $c['username'],
@@ -66,10 +72,10 @@ function chat_api_handle(PDO $db, string $action): void
                 echo json_encode(['ok' => false, 'error' => 'Correspondant invalide.']);
                 break;
             }
-            if (!chat_peer_allowed($db, $peerId)) {
+            if (!chat_peer_allowed($db, $peerId, $meId, $meRole)) {
                 log_security_event('CHAT_ACCESS_DENIED', "user {$meId} -> peer {$peerId}");
                 http_response_code(403);
-                echo json_encode(['ok' => false, 'error' => 'Correspondant introuvable.']);
+                echo json_encode(['ok' => false, 'error' => 'Conversation non autorisée.']);
                 break;
             }
             chat_mark_read($db, $meId, $peerId);
@@ -94,10 +100,10 @@ function chat_api_handle(PDO $db, string $action): void
                 echo json_encode(['ok' => false, 'error' => 'Message vide ou correspondant invalide.']);
                 break;
             }
-            if (!chat_peer_allowed($db, $peerId)) {
+            if (!chat_peer_allowed($db, $peerId, $meId, $meRole)) {
                 log_security_event('CHAT_ACCESS_DENIED', "send {$meId} -> {$peerId}");
                 http_response_code(403);
-                echo json_encode(['ok' => false, 'error' => 'Correspondant introuvable.']);
+                echo json_encode(['ok' => false, 'error' => 'Conversation non autorisée (vous pouvez écrire à l\'administrateur, et à un superviseur si vous êtes vendeur).']);
                 break;
             }
             // Vérifie / répare le schéma de la table chat_messages avant l'insertion.

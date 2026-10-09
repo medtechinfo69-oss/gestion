@@ -537,6 +537,57 @@ p { margin: 0 0 1em; }
   padding-left: 10px;
   padding-right: 10px;
 }
+
+/* --- Mode réduit : le TIROIR du libellé s'ouvre depuis la barre ----------
+   Au survol d'une icône, une capsule part de DERRIÈRE la barre réduite et
+   glisse vers la droite : le texte se découvre par rideau (overflow:hidden).
+   Ni bulle flottante, ni pointeur : le libellé reste physiquement rattaché
+   à la ligne survolée. La clé illusion : z-index 15 < barre (20) — l'icône
+   reste visible au-dessus et la portion repliée (0-68px) est masquée par la
+   barre elle-même. Créée et pilotée par app.js (une seule pour tout le menu). */
+.sidebar-flyout {
+  position: fixed;
+  left: 0;
+  top: 0;                     /* Y + hauteur posés par app.js */
+  height: 0;
+  width: 68px;                /* replié : entièrement sous la barre (invisible) */
+  z-index: 15;                /* sous la barre (20), sur le contenu (topbar 10) */
+  overflow: hidden;
+  border-radius: 12px;
+  background: #0b2545;
+  box-shadow: 0 12px 28px rgba(2, 12, 27, 0.4);
+  pointer-events: none;       /* ne bloque jamais un clic */
+  transition: width 0.3s cubic-bezier(0.2, 0.85, 0.3, 1.08); /* léger rebond */
+}
+.sidebar-flyout-text {
+  position: absolute;
+  left: 76px;                 /* sort de la barre (68px) + 8px d'écart */
+  top: 50%;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+  transition: opacity 0.2s ease 0.05s, transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1) 0.05s;
+}
+.sidebar-flyout.is-open .sidebar-flyout-text {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+/* Retour visuel : l'icône survolée passe à l'ambre et s'anime au tiroir. */
+.sidebar.collapsed .nav-item .ico {
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+.sidebar.collapsed .nav-item:hover .ico {
+  color: #f59e0b;
+  transform: scale(1.12);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-flyout,
+  .sidebar-flyout-text { transition: none; }
+}
+
 .btn-logout {
   width: 100%;
   background: #e11d48;
@@ -1149,6 +1200,85 @@ textarea { resize: vertical; min-height: 80px; }
 
 .help-text { font-size: 0.76rem; color: var(--color-ink-faint); }
 
+/* ---------------------------------------------------------------------
+   Formulaire de dossier — bloc « Courrier ».
+   Les quatre options sont presentees sous forme de cartes cliquables
+   (car la case a cocher seule est trop petite pour etre lue ou atteinte
+   confortablement). Chaque carte est un <label> : le clic porte donc sur
+   TOUTE la surface, le focus clavier reste natif (aucun JavaScript), et
+   l'etat coche est materialise par le navigateur.
+
+   La grille s'adapte a la largeur : 2 colonnes sur desktop, 1 colonne sur
+   mobile (les libelles restent alors sur une seule ligne).
+   --------------------------------------------------------------------- */
+.courrier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.courrier-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.courrier-option:hover {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface-alt);
+}
+/* La carte entiere change d'aspect quand elle est cochee : le libelle
+   devient plus contrasté et un fond légèrement teinté, sans dépendre de la
+   couleur de la case (qui varie selon le navigateur et le thème). */
+.courrier-option:has(input:checked) {
+  border-color: var(--color-cabinet-light);
+  background: #f7faff;
+  color: var(--color-cabinet);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--color-cabinet-light);
+}
+.courrier-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--color-primary, #0d6efd);
+  cursor: pointer;
+}
+/* Focus visible uniquement au clavier (le survol de la souris ne doit pas
+   afficher d'anneau de focus). */
+.courrier-option:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary, #0d6efd);
+  outline-offset: 2px;
+}
+/* Case desactivee (dossier verrouille) : on conserve une restitution
+   lisible au lieu d'une opacite qui-la rendrait illisible. */
+.courrier-option:has(input:disabled) {
+  cursor: not-allowed;
+  background: var(--color-surface-alt);
+  color: var(--color-ink-soft);
+}
+.courrier-option:has(input:disabled):hover {
+  border-color: var(--color-line);
+  background: var(--color-surface-alt);
+}
+.courrier-option input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .courrier-grid { grid-template-columns: 1fr; }
+}
+
 .settings-layout {
   display: grid;
   grid-template-columns: 1.05fr 1.35fr;
@@ -1299,6 +1429,140 @@ table.data-table {
   width: min(420px, 100%);
   margin-top: 8px;
   accent-color: var(--color-cabinet-light);
+}
+
+/* ---------------------------------------------------------------------
+   Aperçu d'une pièce jointe (modale)
+   --------------------------------------------------------------------- */
+.attachment-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(22, 39, 61, 0.58);
+}
+.attachment-preview-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 1000px);
+  max-height: calc(100vh - 48px);
+  background: var(--color-surface);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.attachment-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-line);
+}
+.attachment-preview-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+.attachment-preview-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.attachment-preview-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-ink, #16273d);
+}
+.attachment-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 20px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--color-line);
+}
+.attachment-preview-name { font-weight: 600; overflow-wrap: anywhere; }
+.attachment-preview-body {
+  flex: 1 1 auto;
+  min-height: 220px;
+  padding: 16px 20px;
+  background: var(--color-surface-alt, #f6f8fb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.attachment-preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: var(--shadow-sm, 0 1px 4px rgba(16, 32, 55, 0.12));
+}
+.attachment-preview-frame {
+  width: 100%;
+  height: 70vh;
+  min-height: 380px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: #fff;
+}
+.attachment-preview-audio { width: min(560px, 100%); accent-color: var(--color-cabinet-light); }
+.attachment-preview-unavailable { text-align: center; max-width: 520px; padding: 12px; }
+.attachment-preview-unavailable-icon { font-size: 2.6rem; line-height: 1; }
+.attachment-preview-unavailable-title { margin: 12px 0 6px; font-weight: 600; }
+.attachment-preview-unavailable p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.attachment-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-line);
+}
+.attachment-preview-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+/* `display` l'emporte sur l'attribut `hidden` : on le rétablit explicitement. */
+.attachment-preview-actions .btn[hidden] { display: none; }
+/* Popup e-mail client (dossier_view : clic sur le mail du dossier). */
+.client-mail-link { font-weight: 600; }
+.client-mail-modal { position: fixed; inset: 0; z-index: 1200; display: none; align-items: flex-start; justify-content: center; padding: 40px 16px; background: rgba(1, 43, 94, .5); overflow-y: auto; }
+.client-mail-dialog { width: min(100%, 620px); background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(1,43,94,.35); padding: 22px 24px; }
+.client-mail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.client-mail-head h2 { margin: 0; font-size: 1.2rem; }
+.client-mail-close { border: 0; background: transparent; font-size: 1.6rem; line-height: 1; cursor: pointer; color: #49677B; }
+.client-mail-close:hover { color: #012B5E; }
+.client-mail-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.client-mail-to { font-weight: 700; color: #012B5E; }
+.client-mail-count { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #FBF0D8; color: #A8730A; border: 1px solid #EBD79C; }
+.client-mail-count.ok { background: #E3F0E3; color: #2E6B43; border-color: #B9D9BB; }
+.client-mail-missing { margin: 0 0 12px; padding: 10px 14px 10px 34px; border-radius: 10px; background: #FBF0D8; border: 1px solid #EBD79C; color: #6b4e06; font-size: .9rem; }
+.client-mail-missing li { margin: 2px 0; }
+.client-mail-warn { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: #F7E3E0; border: 1px solid #E7BAB3; color: #9C3B34; font-size: .85rem; }
+.client-mail-dialog .form-group { margin-bottom: 12px; }
+.client-mail-dialog label { display: block; font-size: .82rem; font-weight: 700; margin-bottom: 5px; color: #012B5E; }
+.client-mail-dialog input[type="text"], .client-mail-dialog textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #d3e5e9; border-radius: 9px; font-size: .9rem; font-family: inherit; }
+.client-mail-dialog input:focus, .client-mail-dialog textarea:focus { outline: none; border-color: #0A9FAD; box-shadow: 0 0 0 3px rgba(10,159,173,.14); }
+.client-mail-dialog textarea { resize: vertical; min-height: 220px; line-height: 1.55; }
+.client-mail-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+
+@media (max-width: 720px) {
+  .attachment-preview-modal { padding: 10px; }
+  .attachment-preview-dialog { max-height: calc(100vh - 20px); }
+  .attachment-preview-body { padding: 12px; }
+  .attachment-preview-frame { height: 62vh; min-height: 260px; }
+  .attachment-preview-image { max-height: 58vh; }
+  .attachment-preview-actions { flex-wrap: wrap; }
+  .attachment-preview-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 
@@ -1774,6 +2038,33 @@ table.data-table {
 .settings-card-wide { grid-column: 1 / -1; }
 .settings-card-warm { background: linear-gradient(135deg, #fffaf0, var(--color-surface)); border-color: #f1dfb5; }
 .settings-card-password { background: linear-gradient(145deg, #fff, #f7faff); }
+/* Carte SMTP : aucun texte d'aide, mise en page compacte et moderne. */
+.smtp-card { background: linear-gradient(160deg, #ffffff 0%, #f2f8fa 100%); border-color: #cfe3e8; overflow: hidden; }
+.smtp-head { align-items: center; }
+.smtp-head .settings-card-icon { width: 42px; height: 42px; border-radius: 11px; background: linear-gradient(135deg, #0A9FAD, #012B5E); color: #fff; }
+.smtp-head .mini-title { text-transform: uppercase; font-size: .72rem; letter-spacing: .1em; color: #0A9FAD; font-weight: 700; }
+.smtp-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 999px; font-size: .78rem; font-weight: 700; border: 1px solid; white-space: nowrap; }
+.smtp-badge.ok { background: #e6f6ec; color: #1e7a3c; border-color: #bfe6cb; }
+.smtp-badge.ko { background: #fdecea; color: #9C3B34; border-color: #f3c1bb; }
+.smtp-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.smtp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
+.smtp-grid .form-group { margin: 0; }
+.smtp-grid label { font-size: .8rem; font-weight: 700; }
+.smtp-grid input, .smtp-grid select { width: 100%; padding: 10px 12px; border: 1.5px solid #d3e5e9; border-radius: 9px; font-size: .9rem; background: #fff; transition: border-color .15s, box-shadow .15s; }
+.smtp-grid input::placeholder { color: #9db8c0; }
+.smtp-grid input:focus, .smtp-grid select:focus { outline: none; border-color: #0A9FAD; box-shadow: 0 0 0 3px rgba(10,159,173,.14); }
+.smtp-pass-wrap { position: relative; }
+.smtp-pass-wrap input { padding-right: 40px; }
+.smtp-pass-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; cursor: pointer; font-size: 1rem; line-height: 1; padding: 5px; color: #49677B; }
+.smtp-pass-toggle:hover { color: #012B5E; }
+.smtp-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 17px; }
+.smtp-actions .btn { padding: 10px 22px; border-radius: 9px; font-weight: 700; }
+.smtp-actions .btn-primary { background: linear-gradient(135deg, #0A9FAD, #087F8C); border-color: transparent; box-shadow: 0 4px 14px rgba(10,159,173,.32); }
+.smtp-actions .btn-primary:hover { background: linear-gradient(135deg, #087F8C, #066a75); }
+.smtp-actions .btn-outline { background: #fff; border-color: #0A9FAD; color: #012B5E; }
+.smtp-actions .btn-outline:hover { background: #e3f7f8; }
+@media (max-width: 900px) { .smtp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .smtp-grid { grid-template-columns: minmax(0, 1fr); } .smtp-badge { margin-left: 0; } }
 /* Les cartes occupent toute la ligne : on limite la largeur du formulaire pour
     que les champs restent alignés et confortables. Protection : 3 colonnes
     équilibrées (min 280px), Performance : 2 champs côte à côte. */
@@ -1793,11 +2084,18 @@ table.data-table {
 .settings-form-row { display: flex; align-items: flex-start; gap: 18px; }
 .settings-form-row .form-group { flex: 1; max-width: 420px; }
 .settings-form-row .btn { flex-shrink: 0; height: 40px; margin-top: 24px; }
+/* Bloc « Vider le cache » : séparé des préférences de navigation par un
+   simple filet, pour que les deux Parties de la carte Performance se
+   distinguent sans nouveau composant. */
+.perf-cache-block { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--color-border, #e5e9ee); }
+.perf-cache-block .settings-form-row .form-group { max-width: 640px; }
+.perf-cache-block .settings-form-row .btn { margin-top: 24px; }
 @media (max-width: 720px) {
   .settings-card-wide { grid-column: auto; }
   .settings-form-row { align-items: stretch; flex-direction: column; }
   .settings-form-row .form-group { max-width: none; }
   .settings-form-row .btn { margin-top: 0; }
+  .perf-cache-block .settings-form-row .btn { margin-top: 0; }
 }
 @media (max-width: 480px) {
   .profile-hero { align-items: flex-start; flex-wrap: wrap; padding: 20px; }
@@ -1822,6 +2120,8 @@ table.data-table {
 .badge-default { background: #EEE; color: #555; }
 .badge-role-admin { background: var(--color-accent-bg); color: var(--color-accent-dark); }
 .badge-role-vendeur { background: #E4E9F2; color: var(--color-cabinet); }
+/* Rôle « rh » : couleur dédiée, dans la charte du tableau de bord RH. */
+.badge-role-rh { background: #E7F4EC; color: #1E7A46; }
 
 /* ---------------------------------------------------------------------
    Filtres / barre d'outils de liste
@@ -2583,6 +2883,61 @@ body.login {
 .filter-card .w-100 { width: 100%; }
 .filter-card input[type=number] { height: 42px; }
 .filter-card .btn.w-100 { height: 42px; }
+
+/* --- Normalisation des cartes de filtres RH ------------------------------
+   Les champs utilisaient des classes differentes selon la page
+   (« form-control », « form-select », un <input type=number> ou un <button>)
+   et chacun avait sa propre hauteur implicite : le bouton « Filtrer » etait
+   plus haut que les champs situes a cote, et la ligne de filtres paraissait
+   bancale. On impose ici une hauteur unique (42px) a TOUS les controles d'une
+   carte de filtres, quelle que soit leur classe, plus un rendu homogene des
+   libelles. */
+.filter-card .form-control,
+.filter-card .form-select,
+.filter-card input[type=text],
+.filter-card input[type=number],
+.filter-card input[type=date],
+.filter-card select,
+.filter-card button,
+.filter-card .btn {
+  height: 42px;
+}
+.filter-card .form-control,
+.filter-card .form-select {
+  display: block;
+  width: 100%;
+}
+.filter-card .form-label {
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+}
+/* Le bouton « Filtrer » ne doit jamais etre ecrase par la colonne qui le
+   contient : on lui donne une largeur de reference et on l'aligne en bas. */
+.filter-card .filter-btn-col {
+  flex: 0 0 auto;
+  width: 130px;
+  min-width: 130px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.filter-card .filter-btn-col .btn { width: 100%; justify-content: center; }
+/* Bloc « reinitialiser » aligne sur la meme ligne que les filtres. */
+.filter-card .filter-reset {
+  display: inline-flex;
+  align-items: center;
+  height: 42px;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .filter-card .filter-btn-col {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+}
 
 .form-card {
   background: var(--color-surface);
@@ -3856,6 +4211,35 @@ table.data-table,
   box-shadow: inset 3px 0 0 var(--color-cabinet);
 }
 
+/* Ligne sélectionnée (liste des dossiers) : la surbrillance porte sur TOUTE
+   la ligne, cellules de la case à cocher comprise. Les fonds du tableau étant
+   posés sur les <td> (zébrage et survol ci-dessus), la règle s'applique donc
+   aux cellules — et non à la seule balise <tr> — pour rester visible quelle
+   que soit la parité de la ligne. Les couleurs proviennent des variables
+   existantes : aucun nouveau visuel n'est introduit. La classe est ajoutée /
+   retirée par le JavaScript de sélection (voir initBulkSelection dans
+   assets/js/app.js) ; le survol d'une ligne sélectionnée conserve la même
+   surbrillance pour ne pas la faire disparaître au passage de la souris. */
+.data-table tbody tr.row-selected td,
+.content-card .table-wrap tbody tr.row-selected td {
+  background: var(--color-accent-bg);
+  color: var(--color-ink);
+  font-weight: 700;
+}
+.data-table tbody tr.row-selected td a,
+.content-card .table-wrap tbody tr.row-selected td a {
+  color: var(--color-cabinet);
+  font-weight: 700;
+}
+.data-table tbody tr.row-selected:hover td,
+.content-card .table-wrap tbody tr.row-selected:hover td {
+  background: var(--color-accent-bg);
+}
+.data-table tbody tr.row-selected td:first-child,
+.content-card .table-wrap tbody tr.row-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-cabinet);
+}
+
 /* Cellules marquées text-right / text-center : la règle s'applique aussi
    à l'en-tête correspondant pour un alignement parfait. */
 .data-table th.text-right,
@@ -3961,12 +4345,21 @@ table.data-table tbody td:not(:last-child),
 .notif-page .filter-field--action label { margin-top: 10px; }
 .notif-page .filter-actions { display: flex; gap: 10px; margin-top: 10px; }
 .notif-page .table-card { overflow: hidden; box-shadow: var(--shadow-sm, 0 1px 2px rgba(11,29,45,.08)); }
+.notif-page .notif-bulk-actions { justify-content: space-between; gap: 12px; margin: 0 0 14px; }
+.notif-page .notif-bulk-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.notif-page .notif-bulk-buttons form { display: inline-flex; margin: 0; }
+.notif-page .selection-cell { width: 42px; text-align: center; }
+.notif-page .selection-cell input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 @media (max-width: 720px) {
   .notif-page { padding: 16px; }
   .notif-page .filter-bar { flex-direction: column; align-items: stretch; }
   .notif-page .filter-field .form-control { min-width: 0; width: 100%; }
   .notif-page .filter-actions { margin-top: 14px; }
   .notif-page .filter-actions .btn { flex: 1; }
+  .notif-page .notif-bulk-actions { align-items: flex-start; flex-direction: column; }
+  .notif-page .notif-bulk-buttons { width: 100%; }
+  .notif-page .notif-bulk-buttons form { flex: 1; }
+  .notif-page .notif-bulk-buttons .btn { width: 100%; }
 }
 
 .notif-page table.data-table thead th,
@@ -3997,8 +4390,8 @@ table.data-table tbody td:not(:last-child),
 /* La cellule « État » (« Marquer comme lue ») reste sur une seule ligne :
    c'est la colonne qui prend la largeur nécessaire, jamais le libellé qui se
    coupe lettre par lettre. */
-.notif-page table.data-table td:nth-child(6),
-.notif-page table.data-table td:nth-child(6) .btn { white-space: nowrap; }
+.notif-page table.data-table td:nth-child(7),
+.notif-page table.data-table td:nth-child(7) .btn { white-space: nowrap; }
 
 /* Contenus longs : l'adresse IP et le libellé d'action restent sur une seule
    ligne (une IP coupée en deux ou un libellé « MODIFICA/TION » sont
@@ -4024,12 +4417,12 @@ table.data-table tbody td:not(:last-child),
 /* Colonnes « État » et « Action » : même axe vertical. Le bouton « Marquer
    comme lue » et les icônes sont centrés l'un par rapport à l'autre au lieu
    d'être collés en haut de la cellule. */
-.notif-page table.data-table tbody td:nth-child(6),
-.notif-page table.data-table tbody td:nth-child(7) { vertical-align: middle; }
-.notif-page table.data-table tbody td:nth-child(6) .btn,
-.notif-page table.data-table tbody td:nth-child(6) .badge { vertical-align: middle; min-height: 30px; }
-.notif-page table.data-table tbody td:nth-child(6) .badge { display: inline-flex; align-items: center; }
-.notif-page table.data-table tbody td:nth-child(6) form.notif-read-form { display: inline-flex; margin: 0; vertical-align: middle; }
+.notif-page table.data-table tbody td:nth-child(7),
+.notif-page table.data-table tbody td:nth-child(8) { vertical-align: middle; }
+.notif-page table.data-table tbody td:nth-child(7) .btn,
+.notif-page table.data-table tbody td:nth-child(7) .badge { vertical-align: middle; min-height: 30px; }
+.notif-page table.data-table tbody td:nth-child(7) .badge { display: inline-flex; align-items: center; }
+.notif-page table.data-table tbody td:nth-child(7) form.notif-read-form { display: inline-flex; margin: 0; vertical-align: middle; }
 
 /* Portable / grand écran intermédiaire (1181–1440 px) : la barre latérale et
    les marges laissent moins de place qu'en très grand écran. On resserre
@@ -4089,12 +4482,12 @@ table.data-table tbody td:not(:last-child),
   }
 
   /* Titre + champs modifiés : pleine largeur, en tête de carte. */
-  .notif-page table.data-table tbody td:nth-child(4) {
+  .notif-page table.data-table tbody td:nth-child(5) {
     grid-column: 1 / -1;
     order: -1;
     line-height: 1.5;
   }
-  .notif-page table.data-table tbody td:nth-child(4) > div:first-child { font-weight: 600; }
+  .notif-page table.data-table tbody td:nth-child(5) > div:first-child { font-weight: 600; }
 
   /* Les dates/IP longues peuvent se replier proprement sur écran étroit. */
   .notif-page table.data-table tbody td.nowrap,
@@ -4104,21 +4497,21 @@ table.data-table tbody td:not(:last-child),
      cibles tactiles confortables et bien espacées. Les deux cellules
      s'étirent sur la hauteur de la ligne (align-self: stretch) pour que le
      bouton et les icônes partagent le même axe vertical. */
-  .notif-page table.data-table tbody td:nth-child(6),
-  .notif-page table.data-table tbody td:nth-child(7) {
+  .notif-page table.data-table tbody td:nth-child(7),
+  .notif-page table.data-table tbody td:nth-child(8) {
     display: flex;
     align-items: center;
     align-self: stretch;
     margin-top: 6px;
   }
-  .notif-page table.data-table tbody td:nth-child(6)::before,
-  .notif-page table.data-table tbody td:nth-child(7)::before { content: none; }
-  .notif-page table.data-table tbody td:nth-child(7) {
+  .notif-page table.data-table tbody td:nth-child(7)::before,
+  .notif-page table.data-table tbody td:nth-child(8)::before { content: none; }
+  .notif-page table.data-table tbody td:nth-child(8) {
     justify-content: flex-end;
     gap: 14px;
   }
-  .notif-page table.data-table tbody td:nth-child(7) form { display: inline-flex; margin: 0; }
-  .notif-page table.data-table tbody td:nth-child(7) .notif-actions { gap: 14px; }
+  .notif-page table.data-table tbody td:nth-child(8) form { display: inline-flex; margin: 0; }
+  .notif-page table.data-table tbody td:nth-child(8) .notif-actions { gap: 14px; }
   .notif-page .notif-icon-btn { width: 38px; height: 38px; margin: 0; }
 
   /* Filet d'accent des lignes non lues, adapté aux coins arrondis. */
@@ -4133,16 +4526,16 @@ table.data-table tbody td:not(:last-child),
    (« Marquer comme lue ») et à droite (Voir / Supprimer). */
 @media (min-width: 721px) and (max-width: 1180px) {
   .notif-page table.data-table tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .notif-page table.data-table tbody td:nth-child(6) { grid-column: 1 / 3; }
-  .notif-page table.data-table tbody td:nth-child(7) { grid-column: 3; }
+  .notif-page table.data-table tbody td:nth-child(7) { grid-column: 1 / 3; }
+  .notif-page table.data-table tbody td:nth-child(8) { grid-column: 3; }
 }
 
 /* Très petits écrans : le pied de carte passe sur 2 lignes pleines largeur
    pour que « Marquer comme lue » et les icônes ne soient jamais comprimés. */
 @media (max-width: 400px) {
-  .notif-page table.data-table tbody td:nth-child(6),
-  .notif-page table.data-table tbody td:nth-child(7) { grid-column: 1 / -1; }
-  .notif-page table.data-table tbody td:nth-child(6) .btn {
+  .notif-page table.data-table tbody td:nth-child(7),
+  .notif-page table.data-table tbody td:nth-child(8) { grid-column: 1 / -1; }
+  .notif-page table.data-table tbody td:nth-child(7) .btn {
     width: 100%;
     justify-content: center;
     white-space: nowrap;
@@ -4240,3 +4633,565 @@ table.data-table tbody td:not(:last-child),
   .notif-detail-body { padding: 14px 16px; }
   .notif-detail-head { padding: 16px 16px 12px; }
 }
+/* ==========================================================================
+   MODE SOMBRE — thème clair/sombre piloté par data-theme sur <html>.
+   Le script inline du <head> (includes/header.php / login.php) pose
+   data-theme="dark" avant le premier rendu ; le choix est mémorisé dans
+   localStorage (« gd-theme »), sinon la préférence système s'applique.
+   Presque toutes les composantes consomment les variables de :root : les
+   redéfinir suffit. Les rares fonds codés en dur sont corrigés ensuite.
+   ========================================================================== */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --color-bg: #0A1120;
+  --color-surface: #111C30;
+  --color-surface-alt: #16233C;
+
+  /* Encre : le texte devient clair sur fond sombre */
+  --color-ink: #E7EEF8;
+  --color-ink-soft: #A3B6CE;
+  --color-ink-faint: #7089A6;
+  --color-line: #223354;
+  --color-line-strong: #33486F;
+
+  /* Accent éclairci pour garder le contraste (liens, focuses, pastilles) */
+  --color-accent: #17B8C8;
+  --color-accent-dark: #47D6E4;
+  --color-accent-bg: #0B2C36;
+
+  /* Statuts : texte clair sur pastille teintée sombre */
+  --color-complet: #85D39D;
+  --color-complet-bg: #0F2A1D;
+  --color-complet-line: #1E4A33;
+  --color-noncomplet: #E9C177;
+  --color-noncomplet-bg: #2C2411;
+  --color-noncomplet-line: #4E401C;
+  --color-annule: #F2A199;
+  --color-annule-bg: #321714;
+  --color-annule-line: #5A2924;
+  --color-danger: #F2A199;
+  --color-success: #85D39D;
+
+  /* Ombres : les ombres bleutées disparaissent sur fond sombre */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+
+  /* Aliases du tableau de bord RH */
+  --primary: #8CB4EA;
+  --secondary: #17B8C8;
+  --success: #17B8C8;
+  --muted: #A3B6CE;
+  --text: #E7EEF8;
+  --surface-2: #16233C;
+  --line: #223354;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.40);
+
+  /* Cases à cocher (remplace les fallbacks #0d6efd) + filet divers */
+  --color-primary: #17B8C8;
+  --color-border: #223354;
+}
+
+/* --- Typographie : titres surpres autrefois en bleu marine -------------- */
+[data-theme='dark'] h1,
+[data-theme='dark'] h2,
+[data-theme='dark'] h3,
+[data-theme='dark'] h4 { color: #EEF4FB; }
+[data-theme='dark'] .stat-card .value { color: #EEF4FB; }
+
+/* --- Boutons : le bleu cabine manque de contraste sur fond sombre ------- */
+[data-theme='dark'] .btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #052028;
+}
+[data-theme='dark'] .btn-primary:hover {
+  background: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
+}
+[data-theme='dark'] span.btn-primary { color: #052028 !important; }
+[data-theme='dark'] .btn-secondary,
+[data-theme='dark'] .btn-light { color: #EEF4FB; }
+[data-theme='dark'] .btn-secondary:hover,
+[data-theme='dark'] .btn-light:hover { color: #EEF4FB; }
+[data-theme='dark'] .btn-dark {
+  background: #1D3A63;
+  border-color: #1D3A63;
+  color: #fff;
+}
+[data-theme='dark'] .btn-dark:hover {
+  background: #2A4F86;
+  border-color: #2A4F86;
+  color: #fff;
+}
+
+/* --- Cloche de notification (icône cabine invisible sur fond sombre) ---- */
+[data-theme='dark'] .notif-bell { color: var(--color-ink); }
+
+/* --- Pagination, focus, contrôles natifs -------------------------------- */
+[data-theme='dark'] .pagination .current {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #052028;
+}
+[data-theme='dark'] input:focus,
+[data-theme='dark'] select:focus,
+[data-theme='dark'] textarea:focus {
+  box-shadow: 0 0 0 3px rgba(23, 184, 200, 0.22);
+}
+
+/* --- Voile des modales --------------------------------------------------- */
+[data-theme='dark'] .confirm-modal { background: rgba(3, 9, 22, 0.72); }
+
+/* --- Divers détails codés en dur ---------------------------------------- */
+[data-theme='dark'] .timeline li::before { border-color: var(--color-surface); }
+[data-theme='dark'] .password-strength-bar .segment { background: #26364F; }
+
+/* --- Alertes ------------------------------------------------------------- */
+[data-theme='dark'] .alert-warning {
+  background: #2C2411;
+  border-color: #4E401C;
+  color: #E9C177;
+}
+[data-theme='dark'] .alert-info {
+  background: #13263F;
+  border-color: #28456B;
+  color: #9FD6E4;
+}
+
+/* --- Badges de rôle et divers ------------------------------------------- */
+[data-theme='dark'] .badge-default { background: #26364F; color: #C3D0E2; }
+[data-theme='dark'] .badge-role-vendeur { background: #1E2A44; color: #C9D6EA; }
+[data-theme='dark'] .badge-role-rh { background: #0F2A1D; color: #85D39D; }
+[data-theme='dark'] .badge-muted {
+  background: #1B2740;
+  color: #A3B6CE;
+  border-color: #2C3E5F;
+}
+
+/* --- Carte courrier cochée ---------------------------------------------- */
+[data-theme='dark'] .courrier-option:has(input:checked) {
+  background: #15263E;
+  color: var(--color-ink);
+}
+
+/* --- Notifications (page + menu) ---------------------------------------- */
+[data-theme='dark'] .notif-item { border-bottom-color: #223354; }
+[data-theme='dark'] .notif-row-unread { background: #13263F; }
+[data-theme='dark'] .notif-detail-text { background: #0F1A2E; }
+[data-theme='dark'] .detail-chip {
+  background: #152640;
+  border-color: #2A3F63;
+  color: #9FD6E4;
+}
+
+/* --- Journal de sécurité + pastilles d'action --------------------------- */
+[data-theme='dark'] .security-logs-page thead th { background: #16233C; }
+[data-theme='dark'] .security-logs-page tbody td { background: rgba(255, 255, 255, 0.03); }
+[data-theme='dark'] .security-logs-page tbody tr:hover td { background: rgba(23, 184, 200, 0.08); }
+[data-theme='dark'] .action-pill { background: #142640; color: #8FB6FF; }
+[data-theme='dark'] .action-pill--permission_denied { background: #33171A; color: #FF9A9A; }
+[data-theme='dark'] .action-pill--export,
+[data-theme='dark'] .action-pill--download { background: #0E2A22; color: #57D9AE; }
+
+/* --- Panneaux à fond clair ------------------------------------------------ */
+[data-theme='dark'] .edit-calc-preview { background: #0F1E38; border-color: #28456B; }
+[data-theme='dark'] .chart-card--secondary .chart-badge {
+  background: #0E3138;
+  border-color: #1C5A64;
+  color: #5FD5DF;
+}
+
+/* --- Popup e-mail client -------------------------------------------------- */
+[data-theme='dark'] .client-mail-dialog { background: var(--color-surface); }
+[data-theme='dark'] .client-mail-close { color: var(--color-ink-soft); }
+[data-theme='dark'] .client-mail-count {
+  background: #2C2411;
+  color: #E9C177;
+  border-color: #4E401C;
+}
+[data-theme='dark'] .client-mail-count.ok {
+  background: #0F2A1D;
+  color: #85D39D;
+  border-color: #1E4A33;
+}
+[data-theme='dark'] .client-mail-missing {
+  background: #2C2411;
+  border-color: #4E401C;
+  color: #E9C177;
+}
+[data-theme='dark'] .client-mail-warn {
+  background: #321714;
+  border-color: #5A2924;
+  color: #F2A199;
+}
+[data-theme='dark'] .client-mail-dialog input[type="text"],
+[data-theme='dark'] .client-mail-dialog textarea {
+  background: var(--color-surface);
+  border-color: var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+/* --- Import de salaires (carte « papier kraft ») -------------------------- */
+[data-theme='dark'] .salary-import-panel {
+  background: linear-gradient(135deg, #22190B 0%, var(--color-surface) 58%);
+  border-color: #4A3A1A;
+}
+[data-theme='dark'] .eyebrow { color: #E9C177; }
+[data-theme='dark'] .salary-import-icon,
+[data-theme='dark'] .salary-dropzone-mark {
+  background: #33270F;
+  color: #E9C177;
+}
+[data-theme='dark'] .salary-dropzone {
+  border-color: #5A4520;
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-theme='dark'] .salary-dropzone:hover,
+[data-theme='dark'] .salary-dropzone.is-dragging,
+[data-theme='dark'] .salary-dropzone.has-file {
+  border-color: #C58A27;
+  background: #1E1A12;
+}
+[data-theme='dark'] .salary-dropzone-action {
+  border-color: #6B5425;
+  color: #E9C177;
+}
+
+/* --- Paramètres / carte SMTP --------------------------------------------- */
+[data-theme='dark'] .settings-card-warm {
+  background: linear-gradient(135deg, #22190B, var(--color-surface));
+  border-color: #4A3A1A;
+}
+[data-theme='dark'] .settings-card-password {
+  background: linear-gradient(145deg, #16233C, #111C30);
+}
+[data-theme='dark'] .settings-card-icon { background: #1A2942; color: #9FD6E4; }
+[data-theme='dark'] .settings-card-warm .settings-card-icon {
+  background: #33270F;
+  color: #E9C177;
+}
+[data-theme='dark'] .smtp-card {
+  background: linear-gradient(160deg, #16233C 0%, #111C30 100%);
+  border-color: #223354;
+}
+[data-theme='dark'] .smtp-badge.ok {
+  background: #0F2A1D;
+  color: #7FCE99;
+  border-color: #1E4A33;
+}
+[data-theme='dark'] .smtp-badge.ko {
+  background: #321714;
+  color: #F2A199;
+  border-color: #5A2924;
+}
+[data-theme='dark'] .smtp-grid input,
+[data-theme='dark'] .smtp-grid select {
+  background: var(--color-surface);
+  border-color: var(--color-line-strong);
+  color: var(--color-ink);
+}
+[data-theme='dark'] .smtp-grid input::placeholder { color: var(--color-ink-faint); }
+[data-theme='dark'] .smtp-pass-toggle { color: var(--color-ink-soft); }
+[data-theme='dark'] .smtp-pass-toggle:hover { color: var(--color-ink); }
+[data-theme='dark'] .smtp-actions .btn-outline {
+  background: var(--color-surface);
+  border-color: var(--color-accent);
+  color: var(--color-ink);
+}
+[data-theme='dark'] .smtp-actions .btn-outline:hover { background: var(--color-accent-bg); }
+
+/* --- Cases à cocher : accent harmonisé avec l'accent du thème ------------ */
+[data-theme='dark'] .bulk-actions-bar input[type="checkbox"],
+[data-theme='dark'] .salary-checkbox,
+[data-theme='dark'] .security-form-row input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+/* ==========================================================================
+   BOUTON DE BASCULE CLAIR/SOMBRE
+   Icône soleil ↔ lune : les deux SVG se superposent et s'échangent par une
+   rotation + mise à l'échelle. Variante « floating » sur la page de
+   connexion (haut à droite, sur le dégradé de marque).
+   ========================================================================== */
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.2s ease;
+}
+.theme-toggle:hover {
+  background: var(--color-line);
+  transform: translateY(-1px);
+}
+.theme-toggle:active { transform: translateY(0); }
+.theme-toggle .theme-ico {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 9px;
+  box-sizing: border-box;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.theme-toggle .theme-ico-moon { fill: currentColor; stroke: none; }
+.theme-ico-sun { opacity: 1; transform: none; }
+.theme-ico-moon { opacity: 0; transform: rotate(-90deg) scale(0.35); }
+[data-theme='dark'] .theme-ico-sun { opacity: 0; transform: rotate(90deg) scale(0.35); }
+[data-theme='dark'] .theme-ico-moon { opacity: 1; transform: none; }
+
+/* Variante flottante — page de connexion */
+.theme-toggle--floating {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 60;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(1, 12, 32, 0.35);
+}
+.theme-toggle--floating:hover { background: rgba(255, 255, 255, 0.26); }
+.theme-toggle--floating .theme-ico { padding: 13px; }
+
+/* ==========================================================================
+   RÉVÉLATION EN ONDE DU THÈME (View Transitions API)
+   Au clic, le nouveau thème se propage en cercle depuis le bouton
+   (--theme-origin-x/y posés par le script inline du <head>). Hors navigateurs
+   compatibles, ou si l'utilisateur limite les animations, la bascule reste
+   instantanée (le script n'appelle pas startViewTransition).
+   ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) {
+  z-index: 2;
+  clip-path: circle(0px at var(--theme-origin-x, 50%) var(--theme-origin-y, 50%));
+  animation: theme-reveal 0.5s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+@keyframes theme-reveal {
+  to {
+    clip-path: circle(150vmax at var(--theme-origin-x, 50%) var(--theme-origin-y, 50%));
+  }
+}
+
+/* ==========================================================================
+   CHAT INTERNE — habillage sombre « MIDNIGHT GLASS » + lisibilité totale
+   Le widget pose ses couleurs dans un <style> inline de chat_widget.php
+   (panneau #fff, bulles #eceef2, titres sans couleur → héritage de --color-ink
+   clair). Sans ce bloc, noms de contacts, titre de conversation et champ de
+   saisie devenaient ILLISIBLES en mode sombre. Ici, TOUT est explicite :
+   aucune couleur de texte n'est laissée à l'héritage.
+   Specificité : chaque sélecteur est préfixé [data-theme='dark'] pour battre
+   les règles inline (qui sont chargées après cette feuille).
+   ========================================================================== */
+
+/* Panneau : verre dépoli « minuit », halo discret de l'accent de marque. */
+[data-theme='dark'] #chatPanel {
+  background: rgba(15, 26, 46, .94);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(146, 178, 216, .18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 44px rgba(23, 184, 200, .10);
+}
+
+/* Bouton flottant : dégradé bleu-nuit + halo lumineux. */
+[data-theme='dark'] #chatBtn {
+  background: linear-gradient(135deg, #1E6BEB 0%, #1552C7 100%);
+  box-shadow: 0 8px 26px rgba(30, 107, 235, .50), 0 0 0 1px rgba(146, 178, 216, .25);
+}
+[data-theme='dark'] #chatBtn:hover {
+  background: linear-gradient(135deg, #2A78F5 0%, #1A5AD8 100%);
+}
+[data-theme='dark'] #chatPresence,
+[data-theme='dark'] #chatBadge { border-color: #0A1120; }
+
+/* En-têtes : bleu nuit dégradé, texte BLANC explicite (titre + fermeture). */
+[data-theme='dark'] .chat-head {
+  background: linear-gradient(135deg, #16305A 0%, #122548 100%);
+  color: #FFFFFF;
+  border-bottom: 1px solid rgba(146, 178, 216, .16);
+}
+[data-theme='dark'] .chat-head strong,
+[data-theme='dark'] .chat-head button { color: #FFFFFF; }
+[data-theme='dark'] .chat-conv-head {
+  background: #101D33;
+  color: #E7EEF8;
+  border-bottom-color: #223354;
+}
+[data-theme='dark'] .chat-conv-head strong { color: #E7EEF8; }
+[data-theme='dark'] .chat-conv-head .back {
+  color: #5FD5DF;
+  text-shadow: 0 0 10px rgba(95, 213, 223, .45);
+}
+
+/* Liste de contacts : noms/rôles en couleurs explicites (le bug d'origine). */
+[data-theme='dark'] .chat-contact {
+  color: #E7EEF8;
+  border-bottom-color: #1C2C4A;
+}
+[data-theme='dark'] .chat-contact:hover { background: rgba(23, 184, 200, .08); }
+[data-theme='dark'] .chat-contact.active {
+  background: rgba(23, 184, 200, .14);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+[data-theme='dark'] .chat-contact .cc-name { color: #E7EEF8; }
+[data-theme='dark'] .chat-contact .cc-role { color: #8FA6C4; }
+[data-theme='dark'] .chat-avatar {
+  background: #1B2B47;
+  color: #9FD6E4;
+  border: 1px solid #2C4065;
+}
+[data-theme='dark'] .chat-dot { border-color: #111C30; }
+[data-theme='dark'] .chat-dot.online {
+  background: #35D383;
+  box-shadow: 0 0 7px #35D383;
+}
+[data-theme='dark'] .chat-empty { color: #8FA6C4; }
+
+/* Conversation : « ciel de nuit » — dégradé radial turquoise/bleu très doux. */
+[data-theme='dark'] .chat-msgs {
+  background:
+    radial-gradient(130% 90% at 12% 0%, rgba(23, 184, 200, .10) 0%, transparent 45%),
+    radial-gradient(120% 100% at 95% 100%, rgba(37, 99, 235, .14) 0%, transparent 50%),
+    #0C1628;
+}
+[data-theme='dark'] .chat-msg { color: #E7EEF8; }
+
+/* Bulles ENVOYÉES : dégradé bleu-nuit + reflet verre + halo lumineux. */
+[data-theme='dark'] .chat-msg.mine {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .16) 0%, transparent 42%),
+    linear-gradient(135deg, #1E6BEB 0%, #1552C7 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(30, 107, 235, .38);
+}
+[data-theme='dark'] .chat-msg.mine .t { color: rgba(255, 255, 255, .78); }
+[data-theme='dark'] .chat-msg.mine .ticks { color: rgba(255, 255, 255, .8); }
+[data-theme='dark'] .chat-msg.mine.seen .ticks {
+  color: #57E99B;
+  filter: drop-shadow(0 0 3px rgba(87, 233, 155, .65));
+}
+
+/* Bulles REÇUES : surface sombre, texte clair, auteur turquoise explicite. */
+[data-theme='dark'] .chat-msg.theirs {
+  background: #1A2B47;
+  color: #EAF1FB;
+  border-color: rgba(146, 178, 216, .22);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .30);
+}
+[data-theme='dark'] .chat-msg.theirs .who { color: #5FD5DF; }
+[data-theme='dark'] .chat-msg.theirs .t { color: #A9BCD8; }
+[data-theme='dark'] .chat-msg .who { color: #9FD6E4; }
+[data-theme='dark'] .chat-msg .t { color: rgba(231, 238, 248, .75); }
+
+/* Barre de saisie : fond sombre, texte clair, anneau focus turquoise. */
+[data-theme='dark'] .chat-form {
+  background: #0F1B30;
+  border-top-color: #223354;
+}
+[data-theme='dark'] .chat-form input {
+  background: #0B1426;
+  border-color: #2A3F63;
+  color: #E7EEF8;
+  caret-color: var(--color-accent);
+  color-scheme: dark;
+}
+[data-theme='dark'] .chat-form input::placeholder { color: #7E93B5; }
+[data-theme='dark'] .chat-form input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(23, 184, 200, .20);
+}
+[data-theme='dark'] .chat-form button {
+  background: linear-gradient(135deg, #1E6BEB 0%, #1552C7 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(30, 107, 235, .40);
+}
+
+/* Barres de défilement discrètes (liste + conversation). */
+[data-theme='dark'] .chat-list,
+[data-theme='dark'] .chat-msgs {
+  scrollbar-width: thin;
+  scrollbar-color: #2A3F63 transparent;
+}
+[data-theme='dark'] .chat-list::-webkit-scrollbar,
+[data-theme='dark'] .chat-msgs::-webkit-scrollbar { width: 8px; }
+[data-theme='dark'] .chat-list::-webkit-scrollbar-thumb,
+[data-theme='dark'] .chat-msgs::-webkit-scrollbar-thumb {
+  background: #2A3F63;
+  border-radius: 8px;
+}
+[data-theme='dark'] .chat-list::-webkit-scrollbar-track,
+[data-theme='dark'] .chat-msgs::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   ANIMATION D'ENTRÉE DES BULLES (clé du côté « vivant » du chat)
+   Nouvelle bulle = apparition élastique (léger surélévation + fondu).
+   L'ouverture d'une conversation remplit tout le fil d'un coup : les bulles
+   se posent alors en cascade douce. Respecte prefers-reduced-motion.
+   ========================================================================== */
+.chat-msg { animation: chat-bubble-in .22s cubic-bezier(.2, .9, .3, 1.15) both; }
+@keyframes chat-bubble-in {
+  from { opacity: 0; transform: translateY(7px) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg { animation: none; }
+}
+
+/* ==========================================================================
+   CONTRASTES RESTANTS — textes encore en bleu marine (charte « cabinet »)
+   Ces règles utilisent var(--color-cabinet[-dark]) en COULEUR DE TEXTE : ce
+   marine quasi noir était parfaitement lisible en clair, mais devenait
+   ILLISIBLE (fond sombre + texte quasi noir) en mode sombre. Chacune est
+   préfixée [data-theme='dark'] et surclasse la règle générale par
+   spécificité supérieure.
+   ========================================================================== */
+[data-theme='dark'] .cards-summary b { color: #EEF4FB; }
+[data-theme='dark'] .edit-calc-preview strong { color: #47D6E4; }
+[data-theme='dark'] .form-readonly[readonly] { color: #A3B6CE; }
+[data-theme='dark'] .security-stat-card .security-stat-value { color: #EEF4FB; }
+[data-theme='dark'] .security-block-head h3 { color: #EEF4FB; }
+[data-theme='dark'] .data-table tbody tr.row-selected td a,
+[data-theme='dark'] .content-card .table-wrap tbody tr.row-selected td a {
+  color: #47D6E4;
+}
+
+/* Barre « Tout sélectionner » (rh_salaries) : l'attribut style= inline fige
+   un fond clair #f8f9fa et un libellé #495057 → !important obligatoire pour
+   reprendre la main en mode sombre (fond sombre + texte clair). */
+[data-theme='dark'] .bulk-actions-bar {
+  background: #16233C !important;
+  border-color: #223354 !important;
+}
+[data-theme='dark'] .bulk-actions-bar label { color: #E7EEF8 !important; }
+
+/* Notes fines (page de téléchargement sécurisé) : couleur pilotée par le
+   thème (remplace le #666 codé en dur, trop faible sur fond sombre). */
+.dl-fine { font-size: 12px; color: var(--color-ink-soft); }
+

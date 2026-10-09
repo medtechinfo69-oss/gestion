@@ -125,9 +125,21 @@ class SecurityDashboard
 
         // Superviseur can access employees in their team
         if ($this->currentUser['role'] === 'superviseur') {
-            $stmt = $this->db->prepare('SELECT COUNT(*) FROM employees WHERE id = :eid AND EXISTS (SELECT 1 FROM dossiers d JOIN users u ON u.id = d.vendeur_id WHERE d.employee_id = :eid AND u.superviseur_id = :sid)');
-            $stmt->execute(['eid' => $employeeId, 'sid' => $this->currentUser['id']]);
-            return $stmt->fetchColumn() > 0;
+            // Marqueurs NOMMES DISTINTS : avec ATTR_EMULATE_PREPARES = false,
+            // reutiliser :eid dans la meme requete leve « SQLSTATE[HY093]
+            // Invalid parameter number ».
+            try {
+                $stmt = $this->db->prepare('SELECT COUNT(*) FROM employees WHERE id = :eid AND EXISTS (SELECT 1 FROM dossiers d JOIN users u ON u.id = d.vendeur_id WHERE d.employee_id = :eid2 AND u.superviseur_id = :sid)');
+                $stmt->execute(['eid' => $employeeId, 'eid2' => $employeeId, 'sid' => $this->currentUser['id']]);
+                return $stmt->fetchColumn() > 0;
+            } catch (Throwable $e) {
+                // Cette requete reference des colonnes absentes du schema actuel
+                // (dossiers.employee_id, users.superviseur_id). Methode non
+                // appelee par le code pour l'instant : on refuse par defaut
+                // plutot que de laisser une exception SQL remonter en page.
+                error_log('canAccessEmployee: ' . $e->getMessage());
+                return false;
+            }
         }
 
         return false;

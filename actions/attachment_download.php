@@ -19,9 +19,20 @@ if (!$attachment) {
     redirect('dossiers.php');
 }
 
-$isInlineAudio = isset($_GET['inline']) && $_GET['inline'] === '1'
-    && str_starts_with((string) $attachment['type_mime'], 'audio/');
-if (is_superviseur() && !$isInlineAudio) {
+$mime = strtolower(trim((string) $attachment['type_mime']));
+
+// Deux modes de lecture sont acceptés :
+//   - inline=1  : utilisé depuis toujours par le lecteur audio intégré ;
+//   - preview=1 : nouvel aperçu dans la modale de la page dossier.
+// Dans les deux cas le fichier n'est servi qu'en mode « inline » s'il fait
+// partie des types affichables par le navigateur (voir attachment_preview_kind).
+$wantInline = (isset($_GET['inline']) && $_GET['inline'] === '1')
+    || (isset($_GET['preview']) && $_GET['preview'] === '1');
+$isInline = $wantInline && attachment_is_previewable($mime);
+
+// Un superviseur ne peut pas télécharger de pièce jointe ; la consultation
+// « en ligne » (aperçu / lecteur audio) reste autorisée, comme auparavant.
+if (is_superviseur() && !$isInline) {
     http_response_code(403);
     exit('Téléchargement interdit pour les superviseurs.');
 }
@@ -43,7 +54,12 @@ if (!is_file($path)) {
 
 header('Content-Description: File Transfer');
 header('Content-Type: ' . $attachment['type_mime']);
-if ($isInlineAudio) {
+if ($isInline) {
+    // Aucun en-tête CSP supplémentaire ici : includes/init.php en envoie déjà
+    // un, et deux politiques sont intersectées par le navigateur — un
+    // « script-src 'none » casserait le lecteur PDF (pdf.js sous Firefox).
+    // La protection repose sur la liste blanche des types servis en inline
+    // (attachment_preview_kind) et sur X-Content-Type-Options: nosniff.
     header('Content-Disposition: inline; filename="' . basename($attachment['nom_original']) . '"');
 } else {
     header('Content-Disposition: attachment; filename="' . basename($attachment['nom_original']) . '"');
