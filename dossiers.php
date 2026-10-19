@@ -45,7 +45,18 @@ $sortableColumns = [
     'etat_dossier' => 'd.etat_dossier', 'compagnie' => 'd.compagnie', 'created_at' => 'd.created_at',
     'date_injection' => 'd.date_injection', 'date_resiliation' => 'd.date_resiliation',
     'type_resiliation' => 'd.type_resiliation',
+    'date_dossier_complet' => 'd.date_dossier_complet',
 ];
+// Tri « DL résiliation » : la colonne n'existe que sur les bases migrées.
+// Sans elle, on retombe sur le tri par date de résiliation (aucune erreur
+// SQL sur l'hébergement avant migration).
+$hasDlCol = false;
+try {
+    foreach ($db->query('SHOW COLUMNS FROM `dossiers`')->fetchAll(PDO::FETCH_ASSOC) as $colRow) {
+        if (($colRow['Field'] ?? '') === 'dl_resiliation') { $hasDlCol = true; break; }
+    }
+} catch (Throwable $e) { $hasDlCol = false; }
+$sortableColumns['dl_resiliation'] = $hasDlCol ? 'd.dl_resiliation' : 'd.date_resiliation';
 $sort = $_GET['sort'] ?? 'date_vente';
 $sort = array_key_exists($sort, $sortableColumns) ? $sort : 'date_vente';
 $dir = (isset($_GET['dir']) && strtolower($_GET['dir']) === 'asc') ? 'ASC' : 'DESC';
@@ -240,8 +251,23 @@ require __DIR__ . '/includes/header.php';
     vertical-align: middle;
   }
 
-  /* Filtres : même traitement que la zone de filtres de l'historique RH
-     (hauteur uniforme 42px + liste déroulante confortable avec défilement). */
+  /* Filtres dossiers : une seule ligne, jamais de retour à la ligne.
+     Défilement horizontal si l'écran est trop étroit. */
+  .toolbar--single-line {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: visible;
+    align-items: flex-end;
+    scrollbar-width: thin;
+  }
+  .toolbar--single-line .form-group {
+    flex: 0 0 auto;
+  }
+  .toolbar--single-line .form-group.toolbar-action {
+    flex: 0 0 auto;
+    align-self: flex-end;
+    padding-bottom: 0;
+  }
   .toolbar select,
   .toolbar input[type=search],
   .toolbar input[type=date] {
@@ -252,8 +278,10 @@ require __DIR__ . '/includes/header.php';
     height: 42px;
     display: inline-flex;
     align-items: center;
+    gap: 7px;
     white-space: nowrap;
     justify-content: center;
+    flex-shrink: 0;
   }
   .toolbar select option {
     padding: 6px 8px;
@@ -264,7 +292,7 @@ require __DIR__ . '/includes/header.php';
 </style>
 
 <div class="card">
-  <form class="toolbar" method="get" action="">
+  <form class="toolbar toolbar--single-line" method="get" action="">
     <div class="form-group">
       <label for="q">Recherche</label>
       <input type="search" id="q" name="q" placeholder="Tous les champs : nom, vendeur, compagnie, mail, produit…" value="<?= e($search) ?>">
@@ -325,7 +353,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <?php if ($search || $etatFilter || $etatContratFilter || $vendeurFilter || $compagnieFilter || $dateFrom || $dateTo || $dateFromInjection): ?>
     <div class="form-group toolbar-action">
-      <a href="<?= e(APP_URL) ?>/dossiers.php" class="btn btn-outline btn-sm">Réinitialiser</a>
+      <a href="<?= e(APP_URL) ?>/dossiers.php" class="btn btn-outline btn-sm btn-reset" title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></a>
     </div>
     <?php endif; ?>
   </form>
@@ -344,10 +372,11 @@ require __DIR__ . '/includes/header.php';
           <th>Vendeur</th><th>Origine</th>
           <th><?= sort_link('date_vente', 'Date vente', $sort, $dir) ?></th><th><?= sort_link('nom', 'Nom', $sort, $dir) ?></th><th>Prénom</th>
           <?php if (!$hideSupervisorColumns): ?><th><?= sort_link('compagnie', 'Compagnie', $sort, $dir) ?></th><?php endif; ?>
-          <th class="col-etat">Etat du dossier</th>
-          <th><?= sort_link('type_resiliation', 'Type de résiliation', $sort, $dir) ?></th>
-          <th><?= sort_link('date_resiliation', 'Date de résiliation', $sort, $dir) ?></th>
-          <th class="col-etat">Etat du contrat</th>
+          <th class="col-etat">Etat dossier</th>
+          <th><?= sort_link('type_resiliation', 'Type résiliation', $sort, $dir) ?></th>
+          <th><?= sort_link('dl_resiliation', 'DL résiliation', $sort, $dir) ?></th>
+          <th><?= sort_link('date_dossier_complet', 'Date validation', $sort, $dir) ?></th>
+          <th class="col-etat">Etat contrat</th>
           <th></th>
         </tr>
       </thead>
@@ -375,7 +404,9 @@ require __DIR__ . '/includes/header.php';
           <?php endif; ?>
           <td class="col-etat"><?= badge_etat(truncate_chars($d['etat_dossier'])) ?></td>
           <td title="<?= e($d['type_resiliation'] ?? '') ?>"><?= e(truncate_chars($d['type_resiliation'] ?? '')) ?: '<span class="muted">—</span>' ?></td>
-          <td class="nowrap"><?= !empty($d['date_resiliation']) ? format_date($d['date_resiliation']) : '<span class="muted">—</span>' ?></td>
+          <?php $dlRow = dl_resiliation($d['date_resiliation'] ?? null, $d['type_resiliation'] ?? null, $d['dl_resiliation'] ?? null); ?>
+          <td class="nowrap"><?= $dlRow !== null ? e($dlRow) : '<span class="muted">—</span>' ?></td>
+          <td class="nowrap"><?= !empty($d['date_dossier_complet']) ? format_date($d['date_dossier_complet']) : '<span class="muted">—</span>' ?></td>
           <td class="col-etat"><?= badge_etat_contrat(truncate_chars($d['etat_contrat'])) ?></td>
           <td class="nowrap">
             <span class="row-actions">

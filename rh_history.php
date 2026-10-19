@@ -241,7 +241,7 @@ require __DIR__ . '/includes/header.php';
         <div class="sf-actions">
           <button type="submit" class="btn btn-light">Afficher</button>
           <?php if ($eid > 0 || $month > 0 || $year > 0): ?>
-            <a class="btn btn-outline filter-reset" href="rh_history.php" title="Effacer les filtres">Réinitialiser</a>
+            <a class="btn btn-outline btn-reset" href="rh_history.php" title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></a>
           <?php endif; ?>
         </div>
       </form>

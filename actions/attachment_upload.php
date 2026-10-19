@@ -99,11 +99,26 @@ try {
         'mime' => $realMime, 'taille' => $file['size'], 'u' => $user['id'],
     ]);
     log_dossier_history($db, $dossierId, $user['id'], 'ajout_piece_jointe', null, null, $originalName);
-    if (is_superviseur()) {
+    // Notifications croisées : vendeur qui ajoute -> superviseurs + admin ;
+    // superviseur/admin qui ajoute sur le dossier d'un vendeur -> ce vendeur + admin.
+    $ownerId = (int) ($dossier['vendeur_id'] ?? 0);
+    if (is_vendeur_user()) {
+        $whoUp = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un vendeur');
+        notify_vendeur_action($db, 'upload', 'piece_jointe', $dossierId,
+            $whoUp . ' (vendeur) a ajoute une piece jointe au dossier #' . $dossierId . ' (' . $originalName . ')',
+            'Piece jointe « ' . $originalName . ' » ajoutee au dossier #' . $dossierId . ' par ' . $whoUp . ' (vendeur).',
+            $dossierId, $ownerId);
+    } elseif (is_superviseur() || is_admin()) {
         $whoUp = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur');
         notify_superviseur_action($db, 'upload', 'piece_jointe', $dossierId,
             $whoUp . ' a ajoute une piece jointe au dossier #' . $dossierId . ' (' . $originalName . ')',
             'Piece jointe « ' . $originalName . ' » ajoutee au dossier #' . $dossierId . ' par ' . $whoUp . '.');
+        if ($ownerId > 0 && $ownerId !== (int) ($user['id'] ?? 0)) {
+            notify_vendeur_owner($db, $ownerId, 'upload', 'piece_jointe', $dossierId,
+                $whoUp . ' a ajouté une pièce jointe à votre dossier #' . $dossierId . ' (' . $originalName . ')',
+                'Piece jointe « ' . $originalName . ' » ajoutee à votre dossier #' . $dossierId . ' par ' . $whoUp . '.',
+                $dossierId);
+        }
     }
     // Aucun envoi d'e-mail n'est demandé pour les pièces jointes.
 } catch (PDOException $e) {

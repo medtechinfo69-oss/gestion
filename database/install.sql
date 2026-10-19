@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS `dossiers` (
     `mutuelle_a_resilier`               VARCHAR(255) NULL,
     `date_resiliation`                  DATE NULL,
     `type_resiliation`                  VARCHAR(100) NULL,
+    `dl_resiliation`                    DATE NULL,
     `created_by`                        INT UNSIGNED NOT NULL,
     `updated_by`                        INT UNSIGNED NULL,
     `created_at`                        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -455,9 +456,13 @@ CREATE TABLE IF NOT EXISTS `admin_notifications` (
     `actor_id`       INT UNSIGNED NULL,
     `actor_username` VARCHAR(60) NOT NULL DEFAULT '',
     `actor_role`     VARCHAR(20) NOT NULL DEFAULT 'superviseur',
+    `target_role`    VARCHAR(20) NOT NULL DEFAULT 'admin',
+    `target_user_id` INT UNSIGNED NULL,
     `action`         VARCHAR(30) NOT NULL,
     `entity`         VARCHAR(30) NOT NULL,
     `entity_id`      VARCHAR(60) NULL,
+    `dossier_id`     INT UNSIGNED NULL,
+    `vendeur_id`     INT UNSIGNED NULL,
     `title`          VARCHAR(255) NOT NULL,
     `detail`         TEXT NULL,
     `ip_address`     VARCHAR(45) NULL,
@@ -468,7 +473,8 @@ CREATE TABLE IF NOT EXISTS `admin_notifications` (
     PRIMARY KEY (`id`),
     KEY `idx_notif_unread` (`is_read`, `created_at`),
     KEY `idx_notif_actor`  (`actor_id`, `created_at`),
-    KEY `idx_notif_entity` (`entity`, `created_at`)
+    KEY `idx_notif_entity` (`entity`, `created_at`),
+    KEY `idx_notif_audience` (`target_role`, `target_user_id`, `is_read`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- =====================================================================
 -- SECTION 6 : EXPORTS SECURISES PAR E-MAIL

@@ -459,11 +459,15 @@ require __DIR__ . '/includes/header.php';
         </div>
         <?php
         // -----------------------------------------------------------------
-        // Nouveaux champs facultatifs de résiliation de la mutuelle.
-        // Visibles uniquement par l'administrateur (même bloc que Courrier /
-        // État du contrat / Motif d'annulation) : le vendeur et le
-        // superviseur ne les renseignent pas à la création.
+        // Champs de résiliation de la mutuelle — visibles pour TOUS les
+        // rôles (admin, superviseur, vendeur) à la création comme en
+        // modification. Courrier / État du contrat / Contrôle qualité /
+        // Motif d'annulation restent, eux, réservés à l'admin (bloc
+        // fermé ci-dessus) : actions/dossier_save.php applique pour le
+        // superviseur et le vendeur les valeurs par défaut (dossier
+        // incomplet, contrat « Actif », pas de contrôle qualité).
         // ----------------------------------------------------------------- ?>
+        <?php endif; ?>
         <div class="form-group span-full">
           <label for="mutuelle_a_resilier">Mutuelle à résilier</label>
           <input type="text" id="mutuelle_a_resilier" name="mutuelle_a_resilier" value="<?= e($v('mutuelle_a_resilier')) ?>" maxlength="255" placeholder="ex : Harmonie Mutuelle, Alan…" class="<?= isset($formErrors['mutuelle_a_resilier']) ? 'input-error' : '' ?>">
@@ -484,7 +488,35 @@ require __DIR__ . '/includes/header.php';
           </select>
           <?php if (isset($formErrors['type_resiliation'])): ?><div class="field-error"><?= e($formErrors['type_resiliation']) ?></div><?php endif; ?>
         </div>
-        <?php endif; ?>
+        <?php
+        // -----------------------------------------------------------------
+        // « DL résiliation » :
+        //   * Infra-annuelle / À échéance : champ calculé en lecture seule
+        //     (déduit de la « Date de résiliation », voir le script) ;
+        //   * Hausse tarifaire / Autres   : champ DATE saisissable
+        //     manuellement par l'utilisateur (colonne dl_resiliation).
+        // -----------------------------------------------------------------
+        $dlManuelTypes = ['Hausse tarifaire', 'Autres'];
+        $dlIsManual = in_array((string) $v('type_resiliation'), $dlManuelTypes, true);
+        $dlStored = (string) $v('dl_resiliation');
+        // Valeur affichée : manuelle (Y-m-d) si type manuel, sinon calcul.
+        $dlDisplay = $dlStored;
+        if (!$dlIsManual) {
+            $dlCalc = dl_resiliation($v('date_resiliation') ?: null, $v('type_resiliation') ?: null);
+            if ($dlCalc !== null) {
+                $p = explode('/', $dlCalc);
+                $dlDisplay = (count($p) === 3) ? ($p[2] . '-' . $p[1] . '-' . $p[0]) : '';
+            } else {
+                $dlDisplay = '';
+            }
+        }
+        ?>
+        <div class="form-group">
+          <label for="dl_resiliation">DL résiliation<?= $dlIsManual ? '' : ' (auto)' ?></label>
+          <input type="date" id="dl_resiliation" name="dl_resiliation" value="<?= e(substr($dlDisplay, 0, 10)) ?>" <?= $dlIsManual ? '' : 'readonly aria-readonly="true" class="form-readonly"' ?> <?= $dlIsManual ? '' : 'tabindex="-1"' ?> placeholder="<?= $dlIsManual ? 'JJ/MM/AAAA' : 'Calculé automatiquement' ?>">
+          <?php if (isset($formErrors['dl_resiliation'])): ?><div class="field-error"><?= e($formErrors['dl_resiliation']) ?></div><?php endif; ?>
+          <div class="help-text" data-dl-help><?= $dlIsManual ? 'Saisissez la date limite manuellement.' : 'Calculée automatiquement (modifiable en choisissant « Hausse tarifaire » ou « Autres »).' ?></div>
+        </div>
         </div>
         <div class="form-group span-full">
           <label for="commentaire">Commentaire dossier</label>
@@ -506,12 +538,71 @@ require __DIR__ . '/includes/header.php';
     (function(){
       var etatContrat = document.getElementById('etat_contrat');
       var motifGroup = document.getElementById('motif-annulation-group');
-      if (!etatContrat || !motifGroup) return;
-      function toggleMotif() {
-        motifGroup.style.display = etatContrat.value !== 'Actif' ? '' : 'none';
+      if (etatContrat && motifGroup) {
+        var toggleMotif = function() {
+          motifGroup.style.display = etatContrat.value !== 'Actif' ? '' : 'none';
+        };
+        etatContrat.addEventListener('change', toggleMotif);
+        toggleMotif();
       }
-      etatContrat.addEventListener('change', toggleMotif);
-      toggleMotif();
+
+      // « DL résiliation » :
+      //   * Infra-annuelle / À échéance : calculé en lecture seule
+      //     (date de résiliation moins 1 mois / 2 mois et 5 jours) ;
+      //   * Hausse tarifaire / Autres   : saisie MANUELLE (champ date
+      //     modifiable, valeur conservée telle quelle).
+      var dateResiliation = document.getElementById('date_resiliation');
+      var typeResiliation = document.getElementById('type_resiliation');
+      var dlResiliation = document.getElementById('dl_resiliation');
+      var dlHelp = document.querySelector('[data-dl-help]');
+      var dlLabel = dlResiliation ? dlResiliation.closest('.form-group').querySelector('label') : null;
+      if (dateResiliation && typeResiliation && dlResiliation) {
+        var offsetParType = {
+          'Infra-annuelle': { months: 1, days: 5 },
+          'À échéance': { months: 2, days: 5 }
+        };
+        var manualTypes = ['Hausse tarifaire', 'Autres'];
+        var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+        var toInputValue = function(d) {
+          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        };
+        var isManual = function() { return manualTypes.indexOf(typeResiliation.value) !== -1; };
+        var updateDlResiliation = function() {
+          var manual = isManual();
+          if (manual) {
+            // Saisie libre : on ne touche jamais à la valeur de l'utilisateur.
+            dlResiliation.removeAttribute('readonly');
+            dlResiliation.removeAttribute('aria-readonly');
+            dlResiliation.removeAttribute('tabindex');
+            dlResiliation.classList.remove('form-readonly');
+            dlResiliation.setAttribute('placeholder', 'JJ/MM/AAAA');
+            if (dlHelp) { dlHelp.textContent = 'Saisissez la date limite manuellement.'; }
+            if (dlLabel) { dlLabel.textContent = 'DL résiliation'; }
+            return;
+          }
+          var offset = offsetParType[typeResiliation.value];
+          if (!dateResiliation.value || !offset) {
+            dlResiliation.value = '';
+          } else {
+            var parts = dateResiliation.value.split('-');
+            var base = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            base.setMonth(base.getMonth() - offset.months);
+            base.setDate(base.getDate() - offset.days);
+            dlResiliation.value = toInputValue(base);
+          }
+          dlResiliation.setAttribute('readonly', 'readonly');
+          dlResiliation.setAttribute('aria-readonly', 'true');
+          dlResiliation.setAttribute('tabindex', '-1');
+          dlResiliation.classList.add('form-readonly');
+          dlResiliation.setAttribute('placeholder', 'Calculé automatiquement');
+          if (dlHelp) { dlHelp.textContent = 'Calculée automatiquement (modifiable en choisissant « Hausse tarifaire » ou « Autres »).'; }
+          if (dlLabel) { dlLabel.textContent = 'DL résiliation (auto)'; }
+        };
+        dateResiliation.addEventListener('change', updateDlResiliation);
+        dateResiliation.addEventListener('input', updateDlResiliation);
+        typeResiliation.addEventListener('change', updateDlResiliation);
+        updateDlResiliation();
+      }
     })();
     </script>
     <?php endif; ?>

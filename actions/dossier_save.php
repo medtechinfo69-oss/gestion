@@ -151,9 +151,18 @@ if (is_role_superviseur() && $isEdit) {
     if ($changedLabels) {
         $notifDetail .= ' Champs modifiés : ' . implode(', ', array_values(array_unique($changedLabels))) . '.';
     }
+    $whoSup = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur');
     notify_superviseur_action($db, 'update', 'dossier', $id,
-        (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur') . ' a modifié le dossier #' . $id,
+        $whoSup . ' a modifié le dossier #' . $id,
         $notifDetail);
+    // Notifie le vendeur propriétaire (chemin « section supervision » : retour
+    // anticipé, donc l'alerte vendeur doit être envoyée ICI aussi).
+    $ownerIdSup = (int) ($existing['vendeur_id'] ?? 0);
+    if ($ownerIdSup > 0 && $ownerIdSup !== (int) ($user['id'] ?? 0)) {
+        notify_vendeur_owner($db, $ownerIdSup, 'update', 'dossier', $id,
+            $whoSup . ' a modifié votre dossier #' . $id,
+            $notifDetail, $id);
+    }
 
     set_flash('success', 'Dossier mis à jour avec succès.');
     redirect('dossier_view.php?id=' . $id);
@@ -185,10 +194,30 @@ if ($result['errors']) {
 
 $data = $result['data'];
 
+// Migration douce : la colonne dl_resiliation peut ne pas exister encore sur
+// une base existante / hébergée (avant import de install.sql ou exécution de
+// repair_schema.php). On l'ajoute à la volée pour ne jamais planter le save.
+try {
+    $hasDlCol = false;
+    foreach ($db->query('SHOW COLUMNS FROM `dossiers`')->fetchAll(PDO::FETCH_ASSOC) as $colRow) {
+        if (($colRow['Field'] ?? '') === 'dl_resiliation') { $hasDlCol = true; break; }
+    }
+    if (!$hasDlCol) {
+        $db->exec('ALTER TABLE `dossiers` ADD COLUMN `dl_resiliation` DATE NULL');
+        $hasDlCol = true;
+    }
+} catch (Throwable $e) {
+    $hasDlCol = false;
+}
+if (!$hasDlCol) {
+    unset($data['dl_resiliation']);
+}
+
 try {
     $db->beginTransaction();
 
     if ($isEdit) {
+        $dlSet = $hasDlCol ? ', dl_resiliation = :dl_resiliation' : '';
         $sql = 'UPDATE dossiers SET
                     vendeur_id = :vendeur_id, ta_origine = :ta_origine, p_prod = :p_prod, date_vente = :date_vente,
                     civilite = :civilite, nom = :nom, prenom = :prenom, mail = :mail, telfix = :telfix,
@@ -201,7 +230,7 @@ try {
                     date_contrat_non_actif = :date_contrat_non_actif, commentaire = :commentaire,
                     motif_annulation = :motif_annulation,
                     mutuelle_a_resilier = :mutuelle_a_resilier, date_resiliation = :date_resiliation,
-                    type_resiliation = :type_resiliation, updated_by = :updated_by
+                    type_resiliation = :type_resiliation' . $dlSet . ', updated_by = :updated_by
                 WHERE id = :id';
         $stmt = $db->prepare($sql);
         $data['updated_by'] = $user['id'];
@@ -232,18 +261,20 @@ try {
 
         set_flash('success', 'Dossier mis à jour avec succès.');
     } else {
+        $dlCols = $hasDlCol ? ', dl_resiliation' : '';
+        $dlVals = $hasDlCol ? ', :dl_resiliation' : '';
         $sql = 'INSERT INTO dossiers
                     (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
                      nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville,
                      type_signature, ca_mois, ca_annuel, date_effet, date_injection, produit, compagnie, courrier, etat_dossier,
                      date_dossier_complet, etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation,
-                     mutuelle_a_resilier, date_resiliation, type_resiliation, created_by)
+                     mutuelle_a_resilier, date_resiliation, type_resiliation' . $dlCols . ', created_by)
                 VALUES
                     (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
                      :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville,
                      :type_signature, :ca_mois, :ca_annuel, :date_effet, :date_injection, :produit, :compagnie, :courrier, :etat_dossier,
                      :date_dossier_complet, :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation,
-                     :mutuelle_a_resilier, :date_resiliation, :type_resiliation, :created_by)';
+                     :mutuelle_a_resilier, :date_resiliation, :type_resiliation' . $dlVals . ', :created_by)';
         $stmt = $db->prepare($sql);
         $data['date_dossier_complet'] = $data['etat_dossier'] === 'Dossier complet' ? date('Y-m-d') : null;
         $data['date_contrat_non_actif'] = $data['etat_contrat'] !== 'Actif' ? date('Y-m-d') : null;
@@ -257,21 +288,48 @@ try {
 
     $db->commit();
 
-    if (is_superviseur()) {
-        $who = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un superviseur');
-        $label = trim((string) (($data['prenom'] ?? '') . ' ' . ($data['nom'] ?? '')));
-        if ($isEdit) {
-            $updateDetail = 'Dossier #' . $id . ' modifié par ' . $who . '.';
-            if (!empty($generalChanged)) {
-                $updateDetail .= ' Champs modifiés : ' . implode(', ', array_values(array_unique($generalChanged))) . '.';
-            }
+    // Notifications croisées vendeur <-> superviseur (en plus du journal admin) :
+    //  - vendeur qui crée            -> superviseurs + admin ;
+    //  - superviseur/admin qui crée  -> vendeur propriétaire + admin ;
+    //  - superviseur/admin qui édite -> vendeur propriétaire + admin.
+    $who = (string) ($user['nom_complet'] ?? $user['username'] ?? 'Un utilisateur');
+    $label = trim((string) (($data['prenom'] ?? '') . ' ' . ($data['nom'] ?? '')));
+    $ownerId = $isEdit
+        ? (int) ($existing['vendeur_id'] ?? ($data['vendeur_id'] ?? 0))
+        : (int) ($data['vendeur_id'] ?? ($user['id'] ?? 0));
+    if ($isEdit) {
+        $updateDetail = 'Dossier #' . $id . ' modifié par ' . $who . '.';
+        if (!empty($generalChanged)) {
+            $updateDetail .= ' Champs modifiés : ' . implode(', ', array_values(array_unique($generalChanged))) . '.';
+        }
+        if (is_vendeur_user()) {
+            notify_vendeur_action($db, 'update', 'dossier', $id,
+                $who . ' (vendeur) a modifié le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
+                $updateDetail, $id, $ownerId);
+        } elseif (is_superviseur() || is_admin()) {
             notify_superviseur_action($db, 'update', 'dossier', $id,
                 $who . ' a modifié le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
                 $updateDetail);
-        } else {
+            if ($ownerId > 0 && $ownerId !== (int) ($user['id'] ?? 0)) {
+                notify_vendeur_owner($db, $ownerId, 'update', 'dossier', $id,
+                    $who . ' a modifié votre dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
+                    $updateDetail, $id);
+            }
+        }
+    } else {
+        if (is_vendeur_user()) {
+            notify_vendeur_action($db, 'create', 'dossier', $id,
+                $who . ' (vendeur) a créé le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
+                'Dossier #' . $id . ' créé par ' . $who . ' (vendeur).', $id, $ownerId);
+        } elseif (is_superviseur() || is_admin()) {
             notify_superviseur_action($db, 'create', 'dossier', $id,
                 $who . ' a créé le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : ''),
                 'Dossier #' . $id . ' créé par ' . $who . '.');
+            if ($ownerId > 0 && $ownerId !== (int) ($user['id'] ?? 0)) {
+                notify_vendeur_owner($db, $ownerId, 'create', 'dossier', $id,
+                    $who . ' a créé le dossier #' . $id . ($label !== '' ? ' (' . $label . ')' : '') . ' pour vous',
+                    'Dossier #' . $id . ' créé par ' . $who . ' et rattaché à votre compte.', $id);
+            }
         }
     }
 

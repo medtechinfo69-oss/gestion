@@ -551,9 +551,11 @@ function repair_schema_all(PDO $db, bool $verbose = true, bool $dedupeBusiness =
     }
 
     // 7) dossiers : nouveaux champs « Mutuelle à résilier », « Date de
-    //    résiliation » et « Type de résiliation » (formulaire dossier_form.php).
+    //    résiliation », « Type de résiliation » et « DL résiliation »
+    //    (formulaire dossier_form.php ; la DL est saisie manuellement pour
+    //    « Hausse tarifaire » / « Autres »).
     //    Idempotent : chaque colonne est ajoutée uniquement si elle n'existe
-    //    pas encore. Les trois sont NULLables — aucun dossier existant n'est
+    //    pas encore. Les quatre sont NULLables — aucun dossier existant n'est
     //    modifié.
     if ($verbose) { echo "--- 7. dossiers : champs de résiliation (mutuelle) ---\n"; }
     try {
@@ -562,6 +564,7 @@ function repair_schema_all(PDO $db, bool $verbose = true, bool $dedupeBusiness =
                 'mutuelle_a_resilier' => 'VARCHAR(255) NULL',
                 'date_resiliation'    => 'DATE NULL',
                 'type_resiliation'    => 'VARCHAR(100) NULL',
+                'dl_resiliation'      => 'DATE NULL',
             ];
             $existingCols = [];
             foreach ($db->query("SHOW COLUMNS FROM `dossiers`")->fetchAll(PDO::FETCH_ASSOC) as $c) {

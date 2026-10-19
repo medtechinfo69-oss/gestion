@@ -329,18 +329,34 @@ function import_insert_row(PDO $db, array $data, int $userId, bool $skipBusiness
     $data['mutuelle_a_resilier'] = $data['mutuelle_a_resilier'] ?? null;
     $data['date_resiliation'] = $data['date_resiliation'] ?? null;
     $data['type_resiliation'] = $data['type_resiliation'] ?? null;
+    $data['dl_resiliation'] = $data['dl_resiliation'] ?? null;
+    // Migration douce : sur une base non migrée la colonne dl_resiliation
+    // n'existe pas encore (import hébergement avant repair_schema.php).
+    $hasDlCol = false;
+    try {
+        foreach ($db->query('SHOW COLUMNS FROM `dossiers`')->fetchAll(PDO::FETCH_ASSOC) as $colRow) {
+            if (($colRow['Field'] ?? '') === 'dl_resiliation') { $hasDlCol = true; break; }
+        }
+        if (!$hasDlCol) {
+            $db->exec('ALTER TABLE `dossiers` ADD COLUMN `dl_resiliation` DATE NULL');
+            $hasDlCol = true;
+        }
+    } catch (Throwable $e) { $hasDlCol = false; }
+    if (!$hasDlCol) { unset($data['dl_resiliation']); }
+    $dlCols = $hasDlCol ? ', dl_resiliation' : '';
+    $dlVals = $hasDlCol ? ', :dl_resiliation' : '';
     $sql = 'INSERT INTO dossiers
         (vendeur_id, ta_origine, p_prod, date_vente, civilite, nom, prenom, mail, telfix, portable,
          nombre_personnes, date_naissance_assure, age_assure_principal, adresse, cp, ville, type_signature,
          ca_mois, ca_annuel, date_effet, date_injection, produit, compagnie, courrier, etat_dossier, date_dossier_complet,
          etat_contrat, controle_qualite, date_contrat_non_actif, commentaire, motif_annulation,
-         mutuelle_a_resilier, date_resiliation, type_resiliation, created_by)
+         mutuelle_a_resilier, date_resiliation, type_resiliation' . $dlCols . ', created_by)
         VALUES
         (:vendeur_id, :ta_origine, :p_prod, :date_vente, :civilite, :nom, :prenom, :mail, :telfix, :portable,
          :nombre_personnes, :date_naissance_assure, :age_assure_principal, :adresse, :cp, :ville, :type_signature,
          :ca_mois, :ca_annuel, :date_effet, :date_injection, :produit, :compagnie, :courrier, :etat_dossier, :date_dossier_complet,
          :etat_contrat, :controle_qualite, :date_contrat_non_actif, :commentaire, :motif_annulation,
-         :mutuelle_a_resilier, :date_resiliation, :type_resiliation, :created_by)';
+         :mutuelle_a_resilier, :date_resiliation, :type_resiliation' . $dlVals . ', :created_by)';
     $data['created_by'] = $userId;
     $db->prepare($sql)->execute($data);
     // Keep creation history logging even for imports
@@ -633,13 +649,14 @@ try {
             'date_dossier_complet' => $dateValidationRaw !== '' ? $dateValidationRaw : null,
             'date_contrat_non_actif' => $dateAnnulationRaw !== '' ? $dateAnnulationRaw : null,
             'motif_annulation' => $motifAnnulationRaw,
-            // Trois champs de résiliation (formulaire dossier_form.php) :
+            // Quatre champs de résiliation (formulaire dossier_form.php) :
             // relus au réimport pour ne pas perdre les valeurs à chaque
             // cycle export → import (même règle que les colonnes de
             // supervision ci-dessus).
             'mutuelle_a_resilier' => import_cell($row, $indexes, ['Mutuelle à résilier', 'Mutuelle a resilier']),
             'date_resiliation' => import_date_value(import_cell($row, $indexes, ['Date de résiliation', 'Date resiliation'])),
             'type_resiliation' => import_cell($row, $indexes, ['Type de résiliation', 'Type resiliation']),
+            'dl_resiliation' => import_date_value(import_cell($row, $indexes, ['DL résiliation (manuelle)', 'DL resiliation', 'DL résiliation', 'DL resiliation'])),
         ];
 
         $result = validate_dossier_input($post, $db, null, true);

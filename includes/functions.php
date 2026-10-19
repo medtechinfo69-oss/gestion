@@ -869,11 +869,53 @@ function controles_qualite_valides(): array
 function types_resiliation_valides(): array
 {
     return [
-        'Résiliation infra-annuelle',
-        'Résiliation à échéance',
-        'Résiliation pour hausse tarifaire',
+        'Infra-annuelle',
+        'À échéance',
+        'Hausse tarifaire',
         'Autres',
     ];
+}
+
+/**
+ * « DL résiliation » : date limite affichée (dossier_view.php, dossier_form.php,
+ * dossiers.php).
+ *   * Infra-annuelle / À échéance : calculée (date de résiliation moins
+ *     1 mois / 2 mois et 5 jours) ;
+ *   * Hausse tarifaire / Autres   : saisie MANUELLE par l'utilisateur
+ *     (colonne dossiers.dl_resiliation), aucun calcul.
+ * Retourne une date au format JJ/MM/AAAA ou NULL si non renseignée.
+ */
+function dl_resiliation(?string $dateResiliation, ?string $typeResiliation, ?string $dlManuel = null): ?string
+{
+    $manualTypes = ['Hausse tarifaire', 'Autres'];
+    if (in_array($typeResiliation, $manualTypes, true)) {
+        $manual = trim((string) $dlManuel);
+        if ($manual === '' || $manual === '0000-00-00') {
+            return null;
+        }
+        // Stockée en Y-m-d, affichée en JJ/MM/AAAA.
+        $formatted = format_date(substr($manual, 0, 10));
+        return $formatted !== '—' ? $formatted : null;
+    }
+    if ($dateResiliation === null || $dateResiliation === '' || $typeResiliation === null || $typeResiliation === '') {
+        return null;
+    }
+    $offsets = [
+        'Infra-annuelle' => ['months' => 1, 'days' => 5],
+        'À échéance'     => ['months' => 2, 'days' => 5],
+    ];
+    if (!isset($offsets[$typeResiliation])) {
+        return null;
+    }
+    $date = DateTime::createFromFormat('Y-m-d', substr($dateResiliation, 0, 10));
+    if (!$date instanceof DateTime) {
+        return null;
+    }
+    $date->setTime(0, 0);
+    $offset = $offsets[$typeResiliation];
+    $date->modify('-' . $offset['months'] . ' months');
+    $date->modify('-' . $offset['days'] . ' days');
+    return $date->format('d/m/Y');
 }
 
 function courrier_values(?string $json): array
@@ -1018,7 +1060,7 @@ function dossier_field_label(string $field): string
         'etat_contrat' => 'Etat du contrat', 'date_contrat_non_actif' => "Date d'annulation",
         'controle_qualite' => 'Contrôle qualité', 'motif_annulation' => "Motif d'annulation",
         'mutuelle_a_resilier' => 'Mutuelle à résilier', 'date_resiliation' => 'Date de résiliation',
-        'type_resiliation' => 'Type de résiliation',
+        'type_resiliation' => 'Type de résiliation', 'dl_resiliation' => 'DL résiliation',
         'date_courrier_supervision' => 'Date courrier (superv.)',
         'date_etat_contrat_supervision' => 'Date état contrat (superv.)',
         'date_controle_qualite_supervision' => 'Date contrôle qualité (superv.)',
@@ -1305,13 +1347,17 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     }
 
     // -----------------------------------------------------------------
-    // Nouveaux champs « Mutuelle à résilier », « Date de résiliation »
-    // et « Type de résiliation ». Les trois sont FACULTATIFS (un dossier
-    // actif n'a rien à renseigner ici).
+    // Nouveaux champs « Mutuelle à résilier », « Date de résiliation »,
+    // « Type de résiliation » et « DL résiliation ». Les quatre sont
+    // FACULTATIFS (un dossier actif n'a rien à renseigner ici).
     //   * mutuelle_a_resilier : texte libre, 255 caractères max ;
     //   * date_resiliation    : date SQL valide (parse_date_fr) ;
-    //   * type_resiliation     : valeur exacte de types_resiliation_valides()
-    //     (liste déroulante), sinon erreur affichée sous le champ.
+    //   * type_resiliation    : valeur exacte de types_resiliation_valides()
+    //     (liste déroulante), sinon erreur affichée sous le champ ;
+    //   * dl_resiliation      : date saisie MANUELLEMENT uniquement quand le
+    //     type vaut « Hausse tarifaire » ou « Autres » (champ date activé
+    //     dans dossier_form.php). Pour « Infra-annuelle » / « À échéance »
+    //     elle est calculée automatiquement et la valeur saisie est ignorée.
     // -----------------------------------------------------------------
     $data['mutuelle_a_resilier'] = clean_str($post['mutuelle_a_resilier'] ?? '');
     if (mb_strlen($data['mutuelle_a_resilier']) > 255) {
@@ -1343,6 +1389,19 @@ function validate_dossier_input(array $post, PDO $db, ?int $excludeId = null, bo
     if ($data['type_resiliation'] === '') {
         $data['type_resiliation'] = null;
     }
+
+    // DL saisie manuellement : uniquement pour « Hausse tarifaire » / « Autres ».
+    // Pour les types calculés, la valeur est forcée à NULL (le calcul reprend
+    // la main côté affichage via dl_resiliation()).
+    $dlResiliationRaw = trim((string) ($post['dl_resiliation'] ?? ''));
+    $parsedDlResiliation = $dlResiliationRaw === '' ? null : parse_date_fr($dlResiliationRaw);
+    if ($dlResiliationRaw !== '' && !$parsedDlResiliation) {
+        if (!$allowImportCompatibility) {
+            $errors['dl_resiliation'] = 'DL résiliation invalide.';
+        }
+    }
+    $isManualDlType = in_array($data['type_resiliation'], ['Hausse tarifaire', 'Autres'], true);
+    $data['dl_resiliation'] = $isManualDlType ? $parsedDlResiliation : null;
 
     return ['errors' => $errors, 'data' => $data];
 }

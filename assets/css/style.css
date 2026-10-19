@@ -2811,8 +2811,12 @@ body.login {
   .confirm-actions { flex-direction: column-reverse; }
   .confirm-actions .btn { width: 100%; justify-content: center; }
   .toolbar { padding: 14px; gap: 12px; }
-  .toolbar .form-group, .toolbar .form-group.toolbar-action { min-width: 100%; }
-  .toolbar-action .btn { width: 100%; justify-content: center; }
+  .toolbar:not(.toolbar--single-line) .form-group, .toolbar:not(.toolbar--single-line) .form-group.toolbar-action { min-width: 100%; }
+  .toolbar-action .btn:not(.btn-reset) { width: 100%; justify-content: center; }
+  /* dossiers.php : la barre reste sur une seule ligne même sur mobile
+     (défilement horizontal au lieu d'empilement). */
+  .toolbar--single-line { flex-wrap: nowrap; overflow-x: auto; }
+  .toolbar--single-line .form-group, .toolbar--single-line .form-group.toolbar-action { min-width: max-content; flex: 0 0 auto; }
   .dossiers-totals { justify-content: flex-start; gap: 8px 20px; padding: 14px 15px 2px; }
   .bulk-actions { align-items: stretch; padding: 12px 15px; }
   .bulk-actions > .flex { width: 100%; }
@@ -4571,6 +4575,48 @@ table.data-table tbody td:not(:last-child),
   display: block;
   flex-shrink: 0;
 }
+/* Boutons « Réinitialiser » des filtres : icône seule mais TRÈS visible.
+   Carré 42px, fond blanc, bordure épaisse, icône encre épaisse + ombre. */
+.btn-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px !important;
+  min-width: 42px;
+  max-width: 42px;
+  flex: 0 0 auto !important;
+  height: 42px;
+  padding: 0 !important;
+  border-radius: 10px;
+  border: 2px solid var(--color-cabinet, #012B5E);
+  background: #fff;
+  color: var(--color-cabinet, #012B5E);
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(1,43,94,.25);
+  cursor: pointer;
+}
+.btn-reset svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+}
+.btn-reset:hover {
+  background: var(--color-cabinet, #012B5E);
+  border-color: var(--color-cabinet, #012B5E);
+  color: #fff;
+  text-decoration: none;
+}
+.btn-reset.btn-sm {
+  width: 40px !important;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  padding: 0 !important;
+}
+.salary-filter-card .btn-reset,
+.filter-card .btn-reset { width: 36px !important; min-width: 36px; max-width: 36px; height: 36px; }
 @media (max-width: 560px) {
   /* Mobile : cibles tactiles confortables + espacement aéré entre les 2 icônes. */
   .row-actions { gap: 12px; }

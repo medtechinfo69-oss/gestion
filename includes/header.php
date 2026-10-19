@@ -345,6 +345,43 @@ $user = current_user();
             </div>
           </div>
         <?php endif; ?>
+        <?php if (is_role_superviseur() || is_vendeur_user()): ?>
+          <?php
+          $roleNotifUnread = role_notifications_unread_count($db);
+          $roleNotifLatest = role_notifications_latest($db, 8);
+          $roleNotifPageUrl = e(APP_URL) . '/mes_notifications.php';
+          $roleNotifTitle = is_role_superviseur() ? 'Activité des vendeurs' : 'Mes notifications';
+          $roleNotifEmpty = is_role_superviseur() ? 'Aucune activité de vendeur pour le moment.' : 'Aucune notification pour le moment.';
+          ?>
+          <div class="notif-wrap">
+            <a href="<?= $roleNotifPageUrl ?>" class="notif-bell" title="<?= e($roleNotifTitle) ?>" aria-label="<?= e($roleNotifTitle) ?>">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2zm6-6v-5a6 6 0 0 0-4.5-5.8V4.5a1.5 1.5 0 0 0-3 0v.7A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z" /></svg>
+              <?php if ($roleNotifUnread > 0): ?>
+                <span class="notif-count"><?= $roleNotifUnread > 99 ? '99+' : (int) $roleNotifUnread ?></span>
+              <?php endif; ?>
+            </a>
+            <div class="notif-dropdown">
+              <div class="notif-dropdown-head">
+                <strong><?= e($roleNotifTitle) ?></strong>
+                <?php if ($roleNotifUnread > 0): ?><span class="badge badge-noncomplet"><?= (int) $roleNotifUnread ?> non lue<?= $roleNotifUnread > 1 ? 's' : '' ?></span><?php endif; ?>
+              </div>
+              <?php if (!$roleNotifLatest): ?>
+                <div class="notif-empty"><?= e($roleNotifEmpty) ?></div>
+              <?php else: ?>
+                <?php foreach ($roleNotifLatest as $notif): ?>
+                  <a class="notif-item<?= empty($notif['is_read']) ? ' notif-unread' : '' ?>" href="<?= $roleNotifPageUrl ?>">
+                    <span class="notif-ico"><?= admin_notification_icon((string) ($notif['action'] ?? '')) ?></span>
+                    <span class="notif-body">
+                      <span class="notif-title"><?= e((string) ($notif['title'] ?? '')) ?></span>
+                      <span class="notif-meta"><?= e((string) ($notif['actor_username'] ?? '')) ?> &middot; <?= e(format_datetime_tn($notif['created_at'] ?? null)) ?></span>
+                    </span>
+                  </a>
+                <?php endforeach; ?>
+              <?php endif; ?>
+              <a class="notif-all" href="<?= $roleNotifPageUrl ?>">Tout voir &rarr;</a>
+            </div>
+          </div>
+        <?php endif; ?>
         <div id="topbar-actions">
           <?php /* Bascule clair/sombre « Le Tiroir » du thème — pilotée par le
                   script inline du <head> (mémorisée en localStorage). */ ?>

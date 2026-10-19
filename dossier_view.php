@@ -170,6 +170,8 @@ require __DIR__ . '/includes/header.php';
       <div class="detail-item"><div class="k">Mutuelle à résilier</div><div class="v"><?= e($dossier['mutuelle_a_resilier'] ?? '') ?: '—' ?></div></div>
       <div class="detail-item"><div class="k">Date de résiliation</div><div class="v"><?= !empty($dossier['date_resiliation']) ? format_date($dossier['date_resiliation']) : '—' ?></div></div>
       <div class="detail-item"><div class="k">Type de résiliation</div><div class="v"><?= e($dossier['type_resiliation'] ?? '') ?: '—' ?></div></div>
+      <?php $dlResiliation = dl_resiliation($dossier['date_resiliation'] ?? null, $dossier['type_resiliation'] ?? null, $dossier['dl_resiliation'] ?? null); ?>
+      <div class="detail-item"><div class="k">DL résiliation</div><div class="v"><?= $dlResiliation !== null ? e($dlResiliation) : '—' ?></div></div>
       <div class="detail-item"><div class="k">Commentaire</div><div class="v"><?= $dossier['commentaire'] ? nl2br(e($dossier['commentaire'])) : '—' ?></div></div>
             <?php if ($dossier['motif_annulation']): ?>
             <div class="detail-item detail-item--wide"><div class="k">Motif d'annulation</div><div class="v"><?= e($dossier['motif_annulation']) ?></div></div>
@@ -312,7 +314,7 @@ require __DIR__ . '/includes/header.php';
         <input type="number" class="form-control" name="hyear" min="2000" max="2100" value="<?= $histYear > 0 ? $histYear : '' ?>" placeholder="—" style="width:100px;">
       </div>
       <button type="submit" class="btn btn-light">Filtrer</button>
-      <a class="btn btn-outline btn-sm" href="dossier_view.php?id=<?= (int) $id ?>#historique">Réinitialiser</a>
+      <a class="btn btn-outline btn-sm btn-reset" href="dossier_view.php?id=<?= (int) $id ?>#historique" title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></a>
     </form>
 
     <?php if (!$historique): ?>
