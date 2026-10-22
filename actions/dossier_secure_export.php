@@ -150,8 +150,8 @@ $rows = [[
     'Age assuré principal', 'Adresse', 'CP', 'Ville', 'Type de signature',
     'CA-mois', 'CA-annuel', "Date d'effet", 'Produit', 'Compagnie',
     'Etat du dossier', 'Date validation', 'Courrier', 'Commentaire dossier',
-    'Etat du contrat', "Date d'annulation", 'Contrôle Qualité', "Date d'injection",
-    'Mutuelle à résilier', 'Date de résiliation', 'Type de résiliation',
+    'Etat du contrat', "Date d'annulation", "Motif d'annulation", 'Contrôle Qualité', "Date d'injection",
+    'Mutuelle à résilier', 'Date de résiliation', 'Type de résiliation', 'DL résiliation',
 ]];
 
 foreach ($dossiers as $d) {
@@ -184,11 +184,13 @@ foreach ($dossiers as $d) {
         $d['commentaire'] ?? '',
         $d['etat_contrat'] ?? '',
         format_date((string) ($d['date_contrat_non_actif'] ?? '')),
+        $d['motif_annulation'] ?? '',
         $d['controle_qualite'] ?? '',
         format_date((string) ($d['date_injection'] ?? '')),
         $d['mutuelle_a_resilier'] ?? '',
         format_date((string) ($d['date_resiliation'] ?? '')),
         $d['type_resiliation'] ?? '',
+        dl_resiliation($d['date_resiliation'] ?? null, $d['type_resiliation'] ?? null, $d['dl_resiliation'] ?? null) ?? '',
     ];
 }
 

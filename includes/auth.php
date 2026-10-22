@@ -22,6 +22,11 @@ function start_secure_session(): void
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['SERVER_PORT'] ?? '') === '443');
 
+    @ini_set('session.use_strict_mode', '1');
+    @ini_set('session.use_only_cookies', '1');
+    @ini_set('session.cookie_httponly', '1');
+    @ini_set('session.cookie_samesite', 'Lax');
+
     $sessionLifetime = defined('SESSION_LIFETIME') ? (int) SESSION_LIFETIME : 7200;
     if (isset($_SESSION['user_preferences']['session_lifetime'])) {
         $sessionLifetime = max(900, min(21600, (int) $_SESSION['user_preferences']['session_lifetime']));

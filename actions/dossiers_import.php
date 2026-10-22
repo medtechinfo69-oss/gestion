@@ -379,7 +379,12 @@ if (!in_array($extension, ['xlsx', 'csv'], true)) {
 // Allow callers to request import that skips business rules (dates/annulation/auto-validation).
 // Only administrators can bypass import business rules.
 $skipBusinessRules = false;
-if (is_admin() && (!empty($_POST['skipBusinessRules']) || !empty($_POST['skip_business_rules']) || (isset($_REQUEST['skipBusinessRules']) && $_REQUEST['skipBusinessRules'] === 'true'))) {
+$skipBusinessRulesParam = $_POST['skipBusinessRules'] ?? ($_GET['skipBusinessRules'] ?? null);
+if (is_admin() && (
+    !empty($_POST['skipBusinessRules'])
+    || !empty($_POST['skip_business_rules'])
+    || ($skipBusinessRulesParam !== null && filter_var($skipBusinessRulesParam, FILTER_VALIDATE_BOOLEAN) === true)
+)) {
     $skipBusinessRules = true;
 }
 
@@ -656,7 +661,7 @@ try {
             'mutuelle_a_resilier' => import_cell($row, $indexes, ['Mutuelle à résilier', 'Mutuelle a resilier']),
             'date_resiliation' => import_date_value(import_cell($row, $indexes, ['Date de résiliation', 'Date resiliation'])),
             'type_resiliation' => import_cell($row, $indexes, ['Type de résiliation', 'Type resiliation']),
-            'dl_resiliation' => import_date_value(import_cell($row, $indexes, ['DL résiliation (manuelle)', 'DL resiliation', 'DL résiliation', 'DL resiliation'])),
+            'dl_resiliation' => import_date_value(import_cell($row, $indexes, ['DL résiliation', 'DL resiliation (manuelle)', 'DL resiliation', 'DL resiliation'])),
         ];
 
         $result = validate_dossier_input($post, $db, null, true);

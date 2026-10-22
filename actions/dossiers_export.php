@@ -154,7 +154,7 @@ $columns = [
     'mutuelle_a_resilier'  => 'Mutuelle à résilier',
     'date_resiliation'     => 'Date de résiliation',
     'type_resiliation'     => 'Type de résiliation',
-    'dl_resiliation'       => 'DL résiliation (manuelle)',
+    'dl_resiliation'       => 'DL résiliation',
 ];
 if ($hideSupervisorColumns) {
     foreach (['produit', 'compagnie', 'mail', 'telfix', 'portable', 'nombre_personnes', 'date_naissance_assure', 'age_assure_principal', 'adresse', 'cp', 'ville'] as $hiddenColumn) {
@@ -173,7 +173,9 @@ foreach ($dossiers as $rowNumber => $dossier) {
     $cells = '';
     foreach (array_keys($columns) as $index => $key) {
         $value = $dossier[$key] ?? '';
-        if (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif', 'date_injection', 'date_resiliation', 'dl_resiliation'], true)) {
+        if ($key === 'dl_resiliation') {
+            $value = dl_resiliation($dossier['date_resiliation'] ?? null, $dossier['type_resiliation'] ?? null, $dossier['dl_resiliation'] ?? null) ?? '';
+        } elseif (in_array($key, ['date_vente', 'date_effet', 'date_dossier_complet', 'date_contrat_non_actif', 'date_injection', 'date_resiliation'], true)) {
             $value = format_date((string) $value);
         } elseif ($key === 'courrier') {
             $value = implode(', ', courrier_values((string) $value));

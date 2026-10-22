@@ -85,7 +85,10 @@ $db = Database::getConnection();
 // requêtes AJAX vers le dossier actions/ ; une requête vers la page elle-même
 // passe toujours. Même sécurité que l'endpoint classique (rôles + CSRF).
 // ---------------------------------------------------------------------------
-if (isset($_REQUEST['chat_api'])
+$chatApi = $_GET['chat_api'] ?? ($_POST['chat_api'] ?? null);
+$chatApi = is_string($chatApi) ? trim($chatApi) : '';
+if ($chatApi !== ''
+    && preg_match('/^[a-z_]+$/', $chatApi) === 1
     && is_logged_in()
     && in_array($_SESSION['user']['role'] ?? '', login_allowed_roles(), true)) {
     // Réponse 100 % JSON : en dev (display_errors=1), tout warning échoé
@@ -93,6 +96,6 @@ if (isset($_REQUEST['chat_api'])
     while (ob_get_level() > 0) { @ob_end_clean(); }
     @ini_set('display_errors', '0');
     require_once __DIR__ . '/chat_api_handler.php';
-    chat_api_handle($db, (string) $_REQUEST['chat_api']);
+    chat_api_handle($db, $chatApi);
     exit;
 }
