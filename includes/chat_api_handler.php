@@ -43,6 +43,7 @@ function chat_api_handle(PDO $db, string $action): void
     users_schema_ensure($db); // répare un éventuel ancien schéma de la table users
     chat_touch_presence($db, $meId);
     chat_maybe_purge($db); // purge des messages > 2 ans (1 fois sur ~200 appels)
+    $previews = chat_unread_previews($db, $meId);
 
     switch ($action) {
         case 'status':
@@ -55,6 +56,8 @@ function chat_api_handle(PDO $db, string $action): void
                     'role' => $c['role'],
                     'online' => (bool) $c['is_online'],
                     'unread' => (int) $c['unread'],
+                    // Aperçu du dernier message non lu (popup notification).
+                    'preview' => isset($previews[(int) $c['id']]) ? $previews[(int) $c['id']]['text'] : '',
                 ];
             }
             $payload = ['ok' => true, 'me' => $meId, 'contacts' => $contacts];

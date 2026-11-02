@@ -401,6 +401,76 @@ try {
     opacity: .6;
     border: 1px solid #e53935;
   }
+
+  /* ---- Bouton son / muet ---- */
+  #chatMute {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px;
+    opacity: .9;
+  }
+
+  #chatMute:hover { opacity: 1; }
+  #chatHead { display: flex; align-items: center; }
+  .chat-head > strong { flex: 1; }
+
+  /* ---- Badge animé quand de nouveaux messages arrivent ---- */
+  @keyframes chatBadgePop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+
+  #chatBadge.chat-badge-pop { animation: chatBadgePop .35s ease; }
+
+  /* Contacts avec messages non lus : fond teinté (mise en évidence). */
+  .chat-contact.has-unread { background: #fff4f4; }
+  .chat-contact.has-unread:hover { background: #ffeded; }
+  .chat-contact.has-unread .cc-name { color: #b71c1c; }
+
+  [data-theme='dark'] .chat-contact.has-unread { background: rgba(229, 57, 53, .12); }
+
+  /* ---- Popup « nouveau message » (toast) ---- */
+  @keyframes chatToastIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes chatToastOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  .chat-toast {
+    position: fixed;
+    right: 20px;
+    bottom: 88px;
+    z-index: 10000;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-left: 4px solid #e53935;
+    border-radius: 10px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, .22);
+    padding: 10px 14px;
+    max-width: 300px;
+    cursor: pointer;
+    font-family: inherit;
+    animation: chatToastIn .25s ease;
+  }
+
+  .chat-toast.chat-toast-out { animation: chatToastOut .3s ease forwards; }
+
+  .chat-toast .ct-title { font-weight: 700; font-size: .88rem; margin-bottom: 3px; }
+  .chat-toast .ct-sender { font-size: .82rem; color: #1a73e8; font-weight: 600; }
+  .chat-toast .ct-text { font-size: .8rem; color: #555; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+
+  [data-theme='dark'] .chat-toast { background: #16243d; border-color: #223354; }
+  [data-theme='dark'] .chat-toast .ct-text { color: #b9c4d6; }
 </style>
 
 <div id="chatWidget">
@@ -416,6 +486,7 @@ try {
   <div id="chatPanel" role="dialog" aria-label="Chat interne">
     <div class="chat-head">
       <strong>Messages</strong>
+      <button type="button" id="chatMute" aria-label="Couper le son des notifications" title="Son des notifications">&#128266;</button>
       <button type="button" id="chatClose" aria-label="Fermer">&times;</button>
     </div>
 
@@ -485,7 +556,142 @@ try {
       peer = 0, lastId = 0, statusTimer = null, msgTimer = null, retryTimer = null,
       readUntil = 0, lastMineId = 0, lastDiag = null, apiFail = false;
 
+    /* ============ SYNCHRO RAPIDE (style Messenger) ============
+      Rythme adaptatif : 2 s en conversation ouverte, 5 s sur le reste
+      quand l'onglet est ACTIF ; ralenti automatiquement (20 s) quand
+      l'onglet est caché pour ne pas charger inutilement le serveur.
+      Complété par : diffusion instantanée locale (BroadcastChannel),
+      burst de 3 rafraîchissements après chaque envoi, et synchronisation
+      immédiate sur retour sur l'onglet / focus / reprise réseau. */
+    var FAST_CONV_MS = 2000,   // conversation ouverte, onglet actif
+        FAST_IDLE_MS = 5000,   // pas de conversation ouverte, onglet actif
+        SLOW_HIDDEN_MS = 20000, // onglet en arrière-plan
+        burstLeft = 0;
+
+    /** Intervalle courant selon l'état (conversation / visibilité). */
+    function currentDelay() {
+      if (document.hidden) return SLOW_HIDDEN_MS;
+      return peer > 0 ? FAST_CONV_MS : FAST_IDLE_MS;
+    }
+
+    /** (Re)programme le chronomètre de statut avec le bon rythme. */
+    function rescheduleStatus() {
+      clearInterval(statusTimer);
+      statusTimer = setInterval(refreshStatus, currentDelay());
+    }
+
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    /* ============ NOTIFICATIONS (LOCAL, sans service externe) ============
+       Son : WebAudio (aucun fichier, aucune API payante). Muet persistant
+       via localStorage. Titre onglet + badge animé + popup + Notification
+       API. Anti-doublon : on ne signale que les AUGMENTATIONS de non-lus. */
+    var baseTitle = document.title;
+    var notifState = {}; // id contact -> unread déjà signalé
+    var chatNotifAC = null;
+
+    function muted() {
+      try { return localStorage.getItem('chatMuted') === '1'; } catch (e) { return false; }
+    }
+    function setMuted(v) {
+      try { localStorage.setItem('chatMuted', v ? '1' : '0'); } catch (e) {}
+      var m = document.getElementById('chatMute');
+      if (m) { m.innerHTML = v ? '&#128263;' : '&#128266;'; m.title = v ? 'Activer le son' : 'Couper le son'; }
+    }
+    var muteBtn = document.getElementById('chatMute');
+    if (muteBtn) {
+      setMuted(muted());
+      muteBtn.addEventListener('click', function () { setMuted(!muted()); });
+    }
+
+    /** Bip de notification : deux notes courtes, générées localement. */
+    function playSound() {
+      if (muted()) return;
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        chatNotifAC = chatNotifAC || new AC();
+        if (chatNotifAC.state === 'suspended') chatNotifAC.resume();
+        var t = chatNotifAC.currentTime;
+        [[880, 0], [1174.7, .15]].forEach(function (n) {
+          var o = chatNotifAC.createOscillator(), g = chatNotifAC.createGain();
+          o.type = 'sine'; o.frequency.value = n[0];
+          g.gain.setValueAtTime(0.0001, t + n[1]);
+          g.gain.exponentialRampToValueAtTime(.18, t + n[1] + .02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + n[1] + .18);
+          o.connect(g); g.connect(chatNotifAC.destination);
+          o.start(t + n[1]); o.stop(t + n[1] + .2);
+        });
+      } catch (e) { /* audio indisponible : silencieux */ }
+    }
+
+    /** Titre de l'onglet : (n) Nouveau(x) message(s) — titre d'origine. */
+    function updateTitle(n) {
+      document.title = n > 0 ? '(' + n + ') ' + (n > 1 ? 'Nouveaux messages' : 'Nouveau message') + ' — ' + baseTitle : baseTitle;
+    }
+
+    /** Total des non-lus (recalcul local après une lecture). */
+    function totalUnread() {
+      var n = 0; for (var k in contacts) { if (contacts[k].unread) n += contacts[k].unread; } return n;
+    }
+
+    /** Popup toast locale (anti-doublon géré par l'appelant). */
+    function showToast(sender, preview, contactId) {
+      var old = document.querySelector('.chat-toast');
+      if (old) old.remove();
+      var t = document.createElement('div');
+      t.className = 'chat-toast';
+      t.innerHTML = '<div class="ct-title">\uD83D\uDD14 Vous avez un nouveau message !</div>' +
+        '<div class="ct-sender"></div>' + (preview ? '<div class="ct-text"></div>' : '');
+      t.querySelector('.ct-sender').textContent = sender;
+      if (preview) t.querySelector('.ct-text').textContent = preview;
+      t.addEventListener('click', function () {
+        t.remove();
+        if (!panel.classList.contains('open')) btn.click();
+        if (typeof openConv === 'function') openConv(contactId);
+      });
+      document.body.appendChild(t);
+      setTimeout(function () {
+        t.classList.add('chat-toast-out');
+        setTimeout(function () { if (t.parentNode) t.remove(); }, 350);
+      }, 6000);
+    }
+
+    /** Notification bureau native (si permission accordée). */
+    function desktopNotify(sender, preview) {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      try {
+        var n = new Notification('\uD83D\uDD14 Nouveau message — ' + sender,
+          { body: preview || 'Ouvrez le chat pour lire le message.', tag: 'chat-new-msg' });
+        n.onclick = function () { try { window.focus(); n.close(); } catch (e2) {} };
+        setTimeout(function () { try { n.close(); } catch (e3) {} }, 8000);
+      } catch (e) { /* sans service worker : on ignore */ }
+    }
+
+    /**
+     * Compare les non-lus AVANT/APRÈS : ne sonne/toaste que pour une
+     * AUGMENTATION (pas au 1er chargement, pas de doublon ensuite).
+     */
+    function notifyNewMessages(newContacts) {
+      var total = 0, fresh = null;
+      newContacts.forEach(function (c) {
+        total += c.unread;
+        var before = notifState[c.id] || 0;
+        if (c.unread > before) { fresh = c; }
+        notifState[c.id] = c.unread;
+      });
+      updateTitle(total);
+      if (!fresh) return;
+      playSound();
+      var bdg = document.getElementById('chatBadge');
+      if (bdg) {
+        bdg.classList.remove('chat-badge-pop');
+        void bdg.offsetWidth; // relance l'animation CSS
+        bdg.classList.add('chat-badge-pop');
+      }
+      showToast(fresh.name, fresh.preview || '', fresh.id);
+      desktopNotify(fresh.name, fresh.preview || '');
+    }
 
     // Coche simple (envoyé) / double coche bleue (vu) — style Messenger.
     var TICK_ONE = '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
@@ -549,8 +755,15 @@ try {
         presence.classList.toggle('online', online);
         if (unread > 0) { badge.style.display = 'flex'; badge.textContent = unread > 99 ? '99+' : unread; }
         else { badge.style.display = 'none'; }
+        notifyNewMessages(d.contacts);
         if (!convOpen()) renderList();
         else updateUnreadInList();
+        // Burst actif : enchaîne les rafraîchissements rapprochés
+        // (juste après un envoi) tant que le compteur n'est pas épuisé.
+        if (burstLeft > 0) {
+          burstLeft--;
+          setTimeout(refreshStatus, 700);
+        }
       }, function () {
         apiFail = true; lastDiag = null;
         presence.classList.remove('online');
@@ -621,7 +834,7 @@ try {
       arr.sort(function (a, b) { return (b.online - a.online) || (b.unread - a.unread) || a.name.localeCompare(b.name); });
       if (!arr.length) html = '<div class="chat-empty">' + esc(emptyListMessage()) + '</div>';
       arr.forEach(function (c) {
-        html += '<div class="chat-contact' + (c.id === peer ? ' active' : '') + '" data-id="' + c.id + '">' +
+        html += '<div class="chat-contact' + (c.id === peer ? ' active' : '') + (c.unread ? ' has-unread' : '') + '" data-id="' + c.id + '">' +
           '<div class="chat-avatar">' + esc((c.name || '?').charAt(0).toUpperCase()) +
           '<span class="chat-dot' + (c.online ? ' online' : '') + '"></span></div>' +
           '<div class="cc-info"><div class="cc-name">' + esc(c.name) + '</div>' +
@@ -639,6 +852,7 @@ try {
       listEl.querySelectorAll('.chat-contact').forEach(function (el) {
         var c = contacts[parseInt(el.dataset.id, 10)];
         if (!c) return;
+        el.classList.toggle('has-unread', !!c.unread);
         var b = el.querySelector('.cc-badge');
         if (c.unread) { b.style.display = 'flex'; b.textContent = c.unread; } else { b.style.display = 'none'; }
       });
@@ -666,7 +880,8 @@ try {
         msgsEl.scrollTop = msgsEl.scrollHeight;
       });
       clearInterval(msgTimer);
-      msgTimer = setInterval(pollMessages, 8000); // rythme doux : compatible hébergement gratuit
+      msgTimer = setInterval(pollMessages, 2000); // quasi temps réel (onglet actif)
+      rescheduleStatus(); // conversation ouverte = statut aussi accéléré
       input.focus();
     }
 
@@ -780,6 +995,7 @@ try {
       convEl.classList.remove('open');
       listEl.style.display = '';
       renderList();
+      rescheduleStatus(); // retour au rythme "liste" (5 s)
     }
 
     document.getElementById('chatBack').addEventListener('click', closeConv);
@@ -867,7 +1083,13 @@ try {
         // le sondage la remplace ensuite par le rendu serveur (horodatage).
         appendOptimistic(text, serverId);
         pollMessages();
-        if (contacts[peer]) { contacts[peer].unread = 0; updateUnreadInList(); }
+        // Burst : 3 rafraîchissements rapprochés (~0,7 s d'écart) pour
+        // que le destinataire voie la bulle « vu » et le badge à jour
+        // quasi instantanément, comme sur un vrai messenger.
+        burstLeft = 3;
+        refreshStatus();
+        broadcastSync({ t: 'sent', peer: peer });
+        if (contacts[peer]) { contacts[peer].unread = 0; notifState[peer] = 0; updateUnreadInList(); updateTitle(totalUnread()); }
       }, function (err) {
         sendBtn.disabled = false;
         alert(err);
@@ -875,9 +1097,57 @@ try {
     });
 
     // Liste affichée IMMÉDIATEMENT (contacts rendus par PHP), puis
-    // rafraîchissement AJAX à rythme doux (20 s) : compatible InfinityFree.
+    // rafraîchissement adaptatif : 2 s en conversation, 5 s sinon
+    // (onglet actif), 20 s onglet caché. Style messenger.
     renderList();
     refreshStatus();
-    statusTimer = setInterval(refreshStatus, 20000);
+    rescheduleStatus();
+
+    /* ---- Diffusion instantanée ENTRE ONGLETS du même navigateur ----
+       Un envoi (ou une lecture) dans l'onglet A synchronise aussitôt
+       l'onglet B : aucune attente du prochain tour de polling. */
+    var bc = null;
+    try { bc = ('BroadcastChannel' in window) ? new BroadcastChannel('chat-sync') : null; } catch (e) { bc = null; }
+    function broadcastSync(data) { try { if (bc) bc.postMessage(data); } catch (e) {} }
+    if (bc) {
+      bc.onmessage = function () {
+        refreshStatus();
+        if (convOpen()) pollMessages();
+      };
+    }
+
+    /* ---- Synchronisation immédiate aux événements de visibilité ----
+       Retour sur l'onglet, focus de la fenêtre ou retour réseau :
+       on rafraîchit TOUT DE SUITE (zéro attente), puis on recadre le
+       rythme adaptatif selon l'état courant. */
+    function instantSync() {
+      refreshStatus();
+      if (convOpen()) pollMessages();
+      rescheduleStatus();
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) instantSync(); else rescheduleStatus();
+    });
+    window.addEventListener('focus', instantSync);
+    window.addEventListener('online', instantSync);
+
+    // Ouvrir une conversation = lecture : badge/titre/local remis à zéro.
+    var _openConv = openConv;
+    openConv = function (id) {
+      _openConv(id);
+      if (contacts[id]) { contacts[id].unread = 0; notifState[id] = 0; updateUnreadInList(); updateTitle(totalUnread()); }
+      // Le destinataire doit voir « vu » tout de suite : burst + diffusion.
+      burstLeft = 3;
+      refreshStatus();
+      broadcastSync({ t: 'read' });
+    };
+
+    // Permission bureau demandée au 1er clic (geste utilisateur requis).
+    if ('Notification' in window && Notification.permission === 'default') {
+      document.addEventListener('click', function askPerm() {
+        document.removeEventListener('click', askPerm);
+        try { Notification.requestPermission(); } catch (e) { /* ignore */ }
+      }, { once: true });
+    }
   })();
 </script>

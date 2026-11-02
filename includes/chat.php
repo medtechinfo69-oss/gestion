@@ -564,6 +564,37 @@ function chat_get_contacts(PDO $db, int $meId, ?string $meRole = null): array
 }
 
 /**
+ * Aperçu du DERNIER message NON LU de chaque correspondant (pour la popup
+ * « nouveau message »). Une seule requête : le dernier message non lu par
+ * expéditeur, puis déchiffrement + troncature côté serveur (rien de brut
+ * n'atteint le navigateur). Repli silencieux : sans aperçu, la popup
+ * affiche juste le nom de l'expéditeur.
+ */
+function chat_unread_previews(PDO $db, int $meId): array
+{
+    try {
+        $stmt = $db->prepare(
+            "SELECT m.sender_id, m.message, m.created_at
+              FROM chat_messages m
+              JOIN (SELECT sender_id, MAX(id) AS mid FROM chat_messages
+                     WHERE receiver_id = :me AND is_read = 0 GROUP BY sender_id) t
+                ON t.mid = m.id"
+        );
+        $stmt->execute(['me' => $meId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $txt = trim(chat_decrypt((string) $r['message']));
+            if (mb_strlen($txt) > 80) $txt = mb_substr($txt, 0, 80) . '…';
+            $out[(int) $r['sender_id']] = ['text' => $txt, 'time' => (string) $r['created_at']];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('chat_unread_previews: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
  * Petit diagnostic renvoyé avec le statut du chat (admins uniquement) :
  * répartition des comptes par rôle/état + état du schéma et des tables.
  * Sert à afficher DANS le widget la vraie raison d'une liste vide.

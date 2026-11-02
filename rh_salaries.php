@@ -270,8 +270,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
   $inserts = [];
   $createdEmployees = [];
   $noRateEmployees = [];
+  // Période d'importation : TOUJOURS le mois/année de la carte « Salaires
+  // mensuels ». Le formulaire poste explicitement le mois sélectionné ; sans
+  // ce champ on retombe sur le mois affiché. Aucun autre mois n'est déduit
+  // (ni date du jour, ni contenu du fichier).
   $mTarget = $month;
+  if (isset($_POST['import_month']) && (int) $_POST['import_month'] >= 1 && (int) $_POST['import_month'] <= 12) {
+    $mTarget = (int) $_POST['import_month'];
+  } elseif (isset($_GET['month']) && (int) $_GET['month'] >= 1 && (int) $_GET['month'] <= 12) {
+    $mTarget = (int) $_GET['month'];
+  }
   $yTarget = $year;
+  if (isset($_POST['import_year']) && (int) $_POST['import_year'] >= 2000 && (int) $_POST['import_year'] <= 2100) {
+    $yTarget = (int) $_POST['import_year'];
+  } elseif (isset($_GET['year']) && (int) $_GET['year'] >= 2000 && (int) $_GET['year'] <= 2100) {
+    $yTarget = (int) $_GET['year'];
+  }
+  // Le mois/année effectivement utilisé par la page (messages, redirection).
+  $month = $mTarget;
+  $year = $yTarget;
 
   // Index des employés par matricule NORMALISÉ : « 1 », « 01 » et « 1 - »
   // retombent sur la même entrée (voir salary_import_code_key).
@@ -710,16 +727,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
   redirect_salary_page($mTarget, $yTarget);
 }
 
-$periodFilter = ($_GET['filter_period'] ?? '') === '1';
 $q = trim((string) ($_GET['q'] ?? ''));
 
-$sql = 'SELECT sr.*, e.full_name, e.employee_code, e.pseudo, e.position FROM salary_records sr JOIN employees e ON e.id = sr.employee_id WHERE 1=1';
-$args = [];
-if ($periodFilter) {
-  $sql .= ' AND sr.month=:m AND sr.year=:y';
-  $args['m'] = $month;
-  $args['y'] = $year;
-}
+// Filtrage mensuel TOUJOURS actif : le mois sélectionné affiche uniquement ses
+// propres bulletins. Avant, il fallait le paramètre filter_period=1 : un lien
+// direct (ou une redirection après import) affichait toutes les périodes
+// mélangées.
+$sql = 'SELECT sr.*, e.full_name, e.employee_code, e.pseudo, e.position FROM salary_records sr JOIN employees e ON e.id = sr.employee_id WHERE sr.month=:m AND sr.year=:y';
+$args = ['m' => $month, 'y' => $year];
 if ($q !== '') {
   // Meme contrainte que dans rh_employees.php : avec ATTR_EMULATE_PREPARES = false,
   // un marqueur nomme REUTILISE (:q sur plusieurs colonnes) provoque un
@@ -749,6 +764,10 @@ foreach ($rows as $r) {
   $totalSalaries += (float) $r['calculated_salary'];
   $totalHours += (float) $r['total_hours'];
 }
+
+// Nombre d'employés DU MOIS : calculé uniquement sur les bulletins de la
+// période sélectionnée (jamais depuis rh_employees.php).
+$monthEmployees = count($rows);
 
 $allEmployees = $pdo->query('SELECT id, employee_code, full_name, position, hourly_rate FROM employees WHERE status="Active" ORDER BY full_name')->fetchAll();
 
@@ -884,15 +903,27 @@ require __DIR__ . '/includes/header.php';
     </div>
     <span class="salary-import-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg></span>
   </div>
-  <form method="post" action="rh_salaries.php?month=<?= (int) $displayMonth ?>&year=<?= (int) $displayYear ?>" enctype="multipart/form-data" class="salary-import-form">
+  <form method="post" action="rh_salaries.php?month=<?= (int) $displayMonth ?>&year=<?= (int) $displayYear ?>" enctype="multipart/form-data" class="salary-import-form" id="salaryImportForm">
     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
     <input type="hidden" name="action" value="import_salaries">
+    <input type="hidden" name="import_month" id="salaryImportMonth" value="<?= (int) $displayMonth ?>">
+    <input type="hidden" name="import_year" id="salaryImportYear" value="<?= (int) $displayYear ?>">
     <label class="salary-dropzone" for="salaryImportFile" data-salary-dropzone>
       <input type="file" id="salaryImportFile" name="import_file" accept=".xlsx" required data-salary-file>
       <span class="salary-dropzone-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg></span>
       <span class="salary-dropzone-copy"><strong data-salary-file-name>Choisir un fichier XLSX</strong><small>ou déposez-le ici · <?= (int) (max_import_size_bytes($pdo) / 1024 / 1024) ?> Mo maximum</small></span>
       <span class="salary-dropzone-action">Parcourir</span>
     </label>
+    <div class="salary-import-period">
+      <span class="salary-import-period-label">Importer dans la période</span>
+      <select id="salaryImportMonthSelect" class="form-control">
+        <?php for ($i = 1; $i <= 12; $i++): ?>
+          <option value="<?= $i ?>" <?= $displayMonth === $i ? 'selected' : '' ?>><?= e($months[$i]) ?></option>
+        <?php endfor; ?>
+      </select>
+      <input type="number" id="salaryImportYearInput" class="form-control" min="2000" max="2100" step="1" value="<?= e($displayYear) ?>" aria-label="Année d'importation">
+      <span class="salary-import-period-hint">Les lignes du fichier sont enregistrées sous le mois choisi dans la carte « Salaires mensuels ».</span>
+    </div>
     <div class="salary-import-footer">
       <p><b>En-têtes acceptées :</b> Matricule, Nom, Prénom, Pseudo, Jr Normalement Travaillé, ABS Non Justifiée en jours, ABS Non Justifiée en heures, J Payé, H Payée, Nb Retards, Heures Sup, N Départ, Régime horaire.</p>
       <button type="submit" class="btn btn-primary btn-sm">Importer le fichier</button>
@@ -909,8 +940,7 @@ require __DIR__ . '/includes/header.php';
     </div>
   <div class="salary-filter-body">
     <div class="filter-card">
-      <form method="get" action="rh_salaries.php" class="salary-filter-form">
-        <input type="hidden" name="filter_period" value="1">
+      <form method="get" action="rh_salaries.php" class="salary-filter-form" id="salaryFilterForm">
         <div class="sf-field sf-search">
           <label class="form-label" for="rh-sal-q">Recherche</label>
           <input type="text" id="rh-sal-q" name="q" class="form-control" value="<?= e($q) ?>" placeholder="Nom ou matricule">
@@ -929,7 +959,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="sf-actions">
           <button type="submit" class="btn btn-light">Filtrer</button>
-          <?php if ($periodFilter || $q !== ''): ?>
+          <?php if ($q !== ''): ?>
             <a class="btn btn-outline btn-reset" href="rh_salaries.php" title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></a>
           <?php endif; ?>
         </div>
@@ -977,7 +1007,7 @@ require __DIR__ . '/includes/header.php';
 <div class="content-card salary-list-card">
   <div class="card-head">
     <h2>Bulletins du mois</h2>
-    <span class="muted"><?= count($rows) ?> salarié(s)</span>
+    <span class="muted"><?= count($rows) ?> salarié(s) · <?= e($months[$displayMonth]) ?> <?= e($displayYear) ?></span>
   </div>
   <?php if ($isAdmin && $rows): ?>
   <div class="bulk-actions-bar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;gap:12px;flex-wrap:wrap;">
@@ -1117,6 +1147,65 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Synchronisation de la période : le mois/année choisi dans la carte
+  // « Salaires mensuels » est la SEULE source de vérité. Il est répliqué dans
+  // le panneau d'import (champs cachés import_month / import_year) et dans le
+  // formulaire de filtre, pour que import, liste et tableau de bord parlent
+  // toujours du même mois.
+  var filterForm = document.getElementById('salaryFilterForm');
+  var filterMonth = document.getElementById('rh-sal-month');
+  var filterYear = document.getElementById('rh-sal-year');
+  var importMonthSelect = document.getElementById('salaryImportMonthSelect');
+  var importYearInput = document.getElementById('salaryImportYearInput');
+  var importMonthHidden = document.getElementById('salaryImportMonth');
+  var importYearHidden = document.getElementById('salaryImportYear');
+
+  function syncFromFilter() {
+    if (!filterMonth || !filterYear) return;
+    if (importMonthSelect) importMonthSelect.value = filterMonth.value;
+    if (importYearInput) importYearInput.value = filterYear.value;
+    if (importMonthHidden) importMonthHidden.value = filterMonth.value;
+    if (importYearHidden) importYearHidden.value = filterYear.value;
+  }
+
+  if (filterMonth) filterMonth.addEventListener('change', syncFromFilter);
+  if (filterYear) filterYear.addEventListener('input', syncFromFilter);
+
+  if (importMonthSelect) {
+    importMonthSelect.addEventListener('change', function() {
+      if (importMonthHidden) importMonthHidden.value = importMonthSelect.value;
+      if (filterMonth) filterMonth.value = importMonthSelect.value;
+    });
+  }
+  if (importYearInput) {
+    importYearInput.addEventListener('input', function() {
+      if (importYearHidden) importYearHidden.value = importYearInput.value;
+      if (filterYear) filterYear.value = importYearInput.value;
+    });
+  }
+
+  // Avant l'envoi, on force la période du panneau d'import sur celle
+  // actuellement affichée dans la carte, puis on réaffiche ce même mois.
+  var importForm = document.getElementById('salaryImportForm');
+  if (importForm) {
+    importForm.addEventListener('submit', function() {
+      if (filterMonth) {
+        if (importMonthHidden) importMonthHidden.value = filterMonth.value;
+        if (importMonthSelect) importMonthSelect.value = filterMonth.value;
+      }
+      if (filterYear) {
+        if (importYearHidden) importYearHidden.value = filterYear.value;
+        if (importYearInput) importYearInput.value = filterYear.value;
+      }
+    });
+  }
+
+  syncFromFilter();
+});
+</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

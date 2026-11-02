@@ -27,6 +27,13 @@ $stmt = $db->prepare('SELECT COALESCE(SUM(calculated_salary),0) total, COALESCE(
 $stmt->execute(['m' => $month, 'y' => $year]);
 $monthStats = $stmt->fetch();
 
+// Total employés DU MOIS SÉLECTIONNÉ : uniquement les employés qui ont un
+// bulletin de salaire sur ce mois (mêmes enregistrements que rh_salaries.php).
+// Le total de rh_employees.php n'est plus utilisé pour cette carte.
+$stmt = $db->prepare('SELECT COUNT(DISTINCT employee_id) FROM salary_records WHERE month=:m AND year=:y');
+$stmt->execute(['m' => $month, 'y' => $year]);
+$totalEmployeesMonth = (int) $stmt->fetchColumn();
+
 $salaryByMonth = array_fill(1, 12, 0);
 $hoursByMonth = array_fill(1, 12, 0);
 $stmt = $db->prepare('SELECT month, COALESCE(SUM(calculated_salary),0) salary, COALESCE(SUM(total_hours),0) hours FROM salary_records WHERE year=:y GROUP BY month ORDER BY month');
@@ -65,7 +72,8 @@ require __DIR__ . '/includes/header.php';
     <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16.5 18.5v-1a3.5 3.5 0 0 0-3.5-3.5H9A3.5 3.5 0 0 0 5.5 17.5v1"/><circle cx="12" cy="8" r="3.2"/><path d="M18.5 10.2a2.7 2.7 0 0 1 0 5.4"/><path d="M5.5 10.2a2.7 2.7 0 0 0 0 5.4"/></svg></div>
     <div class="stat-content">
       <span class="stat-label">Total employés</span>
-      <strong class="stat-value"><?= (int) $totalEmployees ?></strong>
+      <strong class="stat-value"><?= (int) $totalEmployeesMonth ?></strong>
+      <span class="stat-sub"><?= e($months[$month]) ?> <?= e($year) ?></span>
     </div>
   </div>
   <div class="stat-card stat-card--secondary">
