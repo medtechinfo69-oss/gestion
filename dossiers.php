@@ -175,6 +175,20 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $dossiers = $stmt->fetchAll();
 
+// Dossiers possédant au moins une pièce jointe AUDIO (enregistrement vocal : MP3, WAV, OGG, M4A, AAC, FLAC, WEBM, OPUS, WMA).
+// Sert uniquement à afficher (ou non) l'icône « lecture » non cliquable dans la colonne des actions.
+$audioDossierIds = [];
+try {
+    $audioStmt = $db->prepare("SELECT DISTINCT dossier_id FROM dossier_attachments WHERE type_mime LIKE 'audio/%'");
+    $audioStmt->execute();
+    foreach ($audioStmt->fetchAll(PDO::FETCH_COLUMN) as $aid) {
+        $audioDossierIds[(int) $aid] = true;
+    }
+} catch (Throwable $e) {
+    // Table absente (installation non migrée) : aucune icône affichée, la liste reste fonctionnelle.
+    $audioDossierIds = [];
+}
+
 // Total du CA affiché pour la sélection filtrée (hors annulés)
 $sumStmt = $db->prepare("SELECT COALESCE(SUM(CASE WHEN d.etat_contrat = 'Actif' THEN d.ca_annuel ELSE 0 END),0)
                           FROM dossiers d $whereSql");
@@ -411,6 +425,9 @@ require __DIR__ . '/includes/header.php';
           <td class="nowrap">
             <span class="row-actions">
             <a href="<?= e(APP_URL) ?>/dossier_view.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Voir" aria-label="Voir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></a>
+            <?php if (!empty($audioDossierIds[(int) $d['id']])): ?>
+            <span class="btn btn-outline btn-sm btn-icon-action" title="Enregistrement disponible" aria-label="Enregistrement disponible" style="pointer-events:none;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5.14v14l11-7-11-7z"/></svg></span>
+            <?php endif; ?>
             <?php if ($isAdmin): ?>
             <a href="<?= e(APP_URL) ?>/dossier_form.php?id=<?= (int) $d['id'] ?>" class="btn btn-outline btn-sm btn-icon-action" title="Modifier" aria-label="Modifier"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></a>
             <?php endif; ?>
