@@ -26,6 +26,11 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php
 // Widget de chat flottant (admin <-> superviseur)
 require_once __DIR__ . '/chat_widget.php';
+
+// Sauvegarde quotidienne automatique (21:00 Africa/Tunis) : déclenchée à la
+// volée sur chaque page, y compris quand le PC local est éteint — le serveur
+// hébergé tourne 24h/24. Idempotent : ne fait rien si déjà fait aujourd'hui.
+require_once __DIR__ . '/../actions/backup_autorun.php';
 ?>
 <?php /* defer : le HTML n'est plus bloqué pendant le téléchargement et
          l'exécution des scripts ; l'ordre d'exécution reste garanti.
