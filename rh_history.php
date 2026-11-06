@@ -28,11 +28,14 @@ $pdo = $db;
 $nomColonnes = rh_ensure_name_columns($pdo);
 
 $eid = max(0, (int) ($_GET['employee_id'] ?? 0));
-$month = (int) ($_GET['month'] ?? 0);
+// Par défaut, l'historique est filtré sur le mois en cours (et l'année en
+// cours) au lieu d'afficher toutes les périodes mélangées. Un filtre vide
+// explicite (month= / year=) reste possible pour élargir la vue.
+$month = isset($_GET['month']) ? (int) $_GET['month'] : (int) date('n');
 if ($month < 1 || $month > 12) {
   $month = 0;
 }
-$year = (int) ($_GET['year'] ?? 0);
+$year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
 if ($year < 2000 || $year > 2100) {
   $year = 0;
 }
@@ -223,7 +226,7 @@ require __DIR__ . '/includes/header.php';
         <div class="sf-field sf-month">
           <label class="form-label" for="history-month">Mois</label>
           <select id="history-month" name="month" class="form-select">
-            <option value="" <?= $month === 0 ? 'selected' : '' ?>>Mois</option>
+            <option value="" <?= $month === 0 ? 'selected' : '' ?>>Tous les mois</option>
             <?php foreach ($months as $number => $label): ?>
               <option value="<?= $number ?>" <?= $month === $number ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
@@ -232,7 +235,7 @@ require __DIR__ . '/includes/header.php';
         <div class="sf-field sf-year">
           <label class="form-label" for="history-year">Année</label>
           <select id="history-year" name="year" class="form-select">
-            <option value="" <?= $year === 0 ? 'selected' : '' ?>>Années</option>
+            <option value="" <?= $year === 0 ? 'selected' : '' ?>>Toutes les années</option>
             <?php foreach ($years as $y): ?>
               <option value="<?= (int) $y ?>" <?= $year === (int) $y ? 'selected' : '' ?>><?= (int) $y ?></option>
             <?php endforeach; ?>
